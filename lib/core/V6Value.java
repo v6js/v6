@@ -123,4 +123,95 @@ public record V6Value(int tag, double num, Object ref) {
       return looseEquals(a, new V6Value(TAG_NUM, b.num, null));
     return a.toNumber() == b.toNumber();
   }
+
+  public String typeOf() {
+    return switch (tag) {
+      case TAG_NUM -> "number";
+      case TAG_BOOL -> "boolean";
+      case TAG_STR -> "string";
+      case TAG_UNDEF -> "undefined";
+      default -> "object";
+    };
+  }
+
+  public V6Value getProp(String key) {
+    switch (tag) {
+    case TAG_OBJ:
+      return ((V6Object)ref).get(key);
+    case TAG_STR:
+      String s = (String)ref;
+      if (key.equals("length"))
+        return new V6Value(TAG_NUM, s.length(), null);
+      int idx = V6Object.parseIndex(key);
+      if (idx >= 0)
+        return idx < s.length()
+            ? new V6Value(TAG_STR, 0, String.valueOf(s.charAt(idx)))
+            : new V6Value(TAG_UNDEF, 0, null);
+      return V6String.PROTOTYPE.get(key);
+    case TAG_NUM:
+      return V6Number.PROTOTYPE.get(key);
+    case TAG_BOOL:
+      return V6Boolean.PROTOTYPE.get(key);
+    default:
+      return new V6Value(TAG_UNDEF, 0, null);
+    }
+  }
+
+  public V6Value enumKeys() {
+    if (tag != TAG_OBJ)
+      return new V6Value(TAG_OBJ, 0, new V6Array());
+    return new V6Value(TAG_OBJ, 0, ((V6Object)ref).enumKeys());
+  }
+
+  public void setProp(String key, V6Value value) {
+    if (tag == TAG_OBJ)
+      ((V6Object)ref).set(key, value);
+  }
+
+  public static int toInt32(double d) {
+    if (Double.isNaN(d) || Double.isInfinite(d) || d == 0)
+      return 0;
+    double posInt = Math.signum(d) * Math.floor(Math.abs(d));
+    double int32bit = posInt % 4294967296.0;
+    if (int32bit < 0)
+      int32bit += 4294967296.0;
+    if (int32bit >= 2147483648.0)
+      int32bit -= 4294967296.0;
+    return (int)int32bit;
+  }
+
+  public static V6Value bitAnd(V6Value a, V6Value b) {
+    return new V6Value(TAG_NUM, toInt32(a.toNumber()) & toInt32(b.toNumber()),
+                       null);
+  }
+
+  public static V6Value bitOr(V6Value a, V6Value b) {
+    return new V6Value(TAG_NUM, toInt32(a.toNumber()) | toInt32(b.toNumber()),
+                       null);
+  }
+
+  public static V6Value bitXor(V6Value a, V6Value b) {
+    return new V6Value(TAG_NUM, toInt32(a.toNumber()) ^ toInt32(b.toNumber()),
+                       null);
+  }
+
+  public static V6Value bitNot(V6Value a) {
+    return new V6Value(TAG_NUM, ~toInt32(a.toNumber()), null);
+  }
+
+  public static V6Value shl(V6Value a, V6Value b) {
+    int shift = toInt32(b.toNumber()) & 31;
+    return new V6Value(TAG_NUM, toInt32(a.toNumber()) << shift, null);
+  }
+
+  public static V6Value shr(V6Value a, V6Value b) {
+    int shift = toInt32(b.toNumber()) & 31;
+    return new V6Value(TAG_NUM, toInt32(a.toNumber()) >> shift, null);
+  }
+
+  public static V6Value ushr(V6Value a, V6Value b) {
+    int shift = toInt32(b.toNumber()) & 31;
+    long result = (toInt32(a.toNumber()) >>> shift) & 0xFFFFFFFFL;
+    return new V6Value(TAG_NUM, result, null);
+  }
 }

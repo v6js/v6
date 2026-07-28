@@ -28,6 +28,9 @@ static const keyword keywords[] = {
     {"switch", tok_kw_switch},
     {"case", tok_kw_case},
     {"default", tok_kw_default},
+    {"typeof", tok_kw_typeof},
+    {"in", tok_kw_in},
+    {"of", tok_kw_of},
 };
 
 void lex_init(lexer* lx, const char* src) {
@@ -263,11 +266,35 @@ tok lex_next(lexer* lx) {
       lx->cur++;
       return make(lx, tok_le, start);
     }
+    if (*lx->cur == '<') {
+      lx->cur++;
+      if (*lx->cur == '=') {
+        lx->cur++;
+        return make(lx, tok_shl_eq, start);
+      }
+      return make(lx, tok_shl, start);
+    }
     return make(lx, tok_lt, start);
   case '>':
     if (*lx->cur == '=') {
       lx->cur++;
       return make(lx, tok_ge, start);
+    }
+    if (*lx->cur == '>') {
+      lx->cur++;
+      if (*lx->cur == '>') {
+        lx->cur++;
+        if (*lx->cur == '=') {
+          lx->cur++;
+          return make(lx, tok_ushr_eq, start);
+        }
+        return make(lx, tok_ushr, start);
+      }
+      if (*lx->cur == '=') {
+        lx->cur++;
+        return make(lx, tok_shr_eq, start);
+      }
+      return make(lx, tok_shr, start);
     }
     return make(lx, tok_gt, start);
   case '&':
@@ -275,13 +302,29 @@ tok lex_next(lexer* lx) {
       lx->cur++;
       return make(lx, tok_amp_amp, start);
     }
-    return make(lx, tok_error, start);
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_amp_eq, start);
+    }
+    return make(lx, tok_amp, start);
   case '|':
     if (*lx->cur == '|') {
       lx->cur++;
       return make(lx, tok_pipe_pipe, start);
     }
-    return make(lx, tok_error, start);
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_pipe_eq, start);
+    }
+    return make(lx, tok_pipe, start);
+  case '^':
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_caret_eq, start);
+    }
+    return make(lx, tok_caret, start);
+  case '~':
+    return make(lx, tok_tilde, start);
   default:
     return make(lx, tok_error, start);
   }

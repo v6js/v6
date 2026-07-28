@@ -11,8 +11,11 @@ enum {
   rt_tag_str = 5,
 };
 
-extern const unsigned char v6_runtime_class[];
-extern const size_t v6_runtime_class_len;
+typedef struct {
+  const char* name;
+  const unsigned char* data;
+  size_t len;
+} v6_rt_class;
 
-extern const unsigned char v6_object_class[];
-extern const size_t v6_object_class_len;
+extern const v6_rt_class v6_runtime_classes[];
+extern const size_t v6_runtime_class_count;

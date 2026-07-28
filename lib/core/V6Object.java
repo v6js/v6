@@ -1,20 +1,28 @@
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public final class V6Object {
-  private final Map<String, V6Value> props = new LinkedHashMap<>();
-  private final boolean isArray;
-  private int length = 0;
+public class V6Object {
+  protected final Map<String, V6Value> props = new LinkedHashMap<>();
+  protected int length = 0;
+  private V6Object proto;
 
-  public V6Object(boolean isArray) {
-    this.isArray = isArray;
+  public void setProto(V6Object proto) {
+    this.proto = proto;
+  }
+
+  public V6Object getProto() {
+    return proto;
   }
 
   public V6Value get(String key) {
     if (key.equals("length"))
       return new V6Value(V6Value.TAG_NUM, length, null);
     V6Value v = props.get(key);
-    return v == null ? new V6Value(V6Value.TAG_UNDEF, 0, null) : v;
+    if (v != null)
+      return v;
+    if (proto != null)
+      return proto.get(key);
+    return new V6Value(V6Value.TAG_UNDEF, 0, null);
   }
 
   public void set(String key, V6Value value) {
@@ -28,7 +36,17 @@ public final class V6Object {
     set(Integer.toString(length), value);
   }
 
-  private static int parseIndex(String key) {
+  public V6Array enumKeys() {
+    java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+    for (V6Object o = this; o != null; o = o.proto)
+      seen.addAll(o.props.keySet());
+    V6Array arr = new V6Array();
+    for (String k : seen)
+      arr.push(new V6Value(V6Value.TAG_STR, 0, k));
+    return arr;
+  }
+
+  static int parseIndex(String key) {
     if (key.isEmpty())
       return -1;
     for (int i = 0; i < key.length(); i++)
@@ -43,17 +61,6 @@ public final class V6Object {
 
   @Override
   public String toString() {
-    if (isArray) {
-      StringBuilder sb = new StringBuilder();
-      for (int i = 0; i < length; i++) {
-        if (i > 0)
-          sb.append(",");
-        V6Value v = get(Integer.toString(i));
-        if (v.tag() != V6Value.TAG_UNDEF)
-          sb.append(v.toString());
-      }
-      return sb.toString();
-    }
     StringBuilder sb = new StringBuilder("{");
     boolean first = true;
     for (Map.Entry<String, V6Value> e : props.entrySet()) {

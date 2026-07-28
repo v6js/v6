@@ -77,20 +77,22 @@ int main(int argc, char** argv) {
   cf_free(&cf);
 
   if (out_path) {
-    jar_entry entries[3];
+    size_t n = v6_runtime_class_count;
+    jar_entry* entries = malloc((n + 1) * sizeof(jar_entry));
     entries[0].name = "Main.class";
     entries[0].data = out.data;
     entries[0].len = out.len;
-    entries[1].name = "V6Value.class";
-    entries[1].data = v6_runtime_class;
-    entries[1].len = v6_runtime_class_len;
-    entries[2].name = "V6Object.class";
-    entries[2].data = v6_object_class;
-    entries[2].len = v6_object_class_len;
+    for (size_t i = 0; i < n; i++) {
+      char* name = malloc(strlen(v6_runtime_classes[i].name) + 7);
+      sprintf(name, "%s.class", v6_runtime_classes[i].name);
+      entries[i + 1].name = name;
+      entries[i + 1].data = v6_runtime_classes[i].data;
+      entries[i + 1].len = v6_runtime_classes[i].len;
+    }
 
     buf jar;
     buf_init(&jar);
-    jar_write(&jar, entries, 3, "Main");
+    jar_write(&jar, entries, n + 1, "Main");
     buf_free(&out);
 
     FILE* outf = fopen(out_path, "wb");

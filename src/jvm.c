@@ -6,6 +6,7 @@
 #include <jni.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -93,59 +94,38 @@ v6_jvm* v6_jvm_create(void) {
 
 int v6_jvm_load_runtime(v6_jvm* jvm) {
   JNIEnv* env = jvm->env;
+  jclass value_cls = NULL;
 
-  jclass cls =
-      (*env)->DefineClass(env, "V6Value", NULL, (const jbyte*)v6_runtime_class,
-                          (jsize)v6_runtime_class_len);
-  if (!cls)
+  for (size_t i = 0; i < v6_runtime_class_count; i++) {
+    jclass cls = (*env)->DefineClass(env, v6_runtime_classes[i].name, NULL,
+                                     (const jbyte*)v6_runtime_classes[i].data,
+                                     (jsize)v6_runtime_classes[i].len);
+    if (!cls)
+      return -1;
+    if (strcmp(v6_runtime_classes[i].name, "V6Value") == 0)
+      value_cls = cls;
+  }
+
+  if (!value_cls)
     return -1;
 
   jmethodID ctor =
-      (*env)->GetMethodID(env, cls, "<init>", "(IDLjava/lang/Object;)V");
+      (*env)->GetMethodID(env, value_cls, "<init>", "(IDLjava/lang/Object;)V");
   if (!ctor)
     return -1;
 
-  jobject probe = (*env)->NewObject(env, cls, ctor, 0, 0.0, NULL);
+  jobject probe = (*env)->NewObject(env, value_cls, ctor, 0, 0.0, NULL);
   if (!probe)
     return -1;
 
-  jmethodID tag_m = (*env)->GetMethodID(env, cls, "tag", "()I");
+  jmethodID tag_m = (*env)->GetMethodID(env, value_cls, "tag", "()I");
   if (!tag_m)
     return -1;
 
   if ((*env)->CallIntMethod(env, probe, tag_m) != 0)
     return -1;
 
-  jclass obj_cls =
-      (*env)->DefineClass(env, "V6Object", NULL, (const jbyte*)v6_object_class,
-                          (jsize)v6_object_class_len);
-  if (!obj_cls)
-    return -1;
-
-  jmethodID obj_ctor = (*env)->GetMethodID(env, obj_cls, "<init>", "(Z)V");
-  if (!obj_ctor)
-    return -1;
-
-  jobject obj_probe = (*env)->NewObject(env, obj_cls, obj_ctor, JNI_FALSE);
-  if (!obj_probe)
-    return -1;
-
-  jmethodID set_m = (*env)->GetMethodID(env, obj_cls, "set",
-                                        "(Ljava/lang/String;LV6Value;)V");
-  jmethodID get_m =
-      (*env)->GetMethodID(env, obj_cls, "get", "(Ljava/lang/String;)LV6Value;");
-  if (!set_m || !get_m)
-    return -1;
-
-  jstring key = (*env)->NewStringUTF(env, "k");
-  (*env)->CallVoidMethod(env, obj_probe, set_m, key, probe);
-  jobject got = (*env)->CallObjectMethod(env, obj_probe, get_m, key);
-  if (!got)
-    return -1;
-  if ((*env)->CallIntMethod(env, got, tag_m) != 0)
-    return -1;
-
-  jvm->value_class = (jclass)(*env)->NewGlobalRef(env, cls);
+  jvm->value_class = (jclass)(*env)->NewGlobalRef(env, value_cls);
   return jvm->value_class ? 0 : -1;
 }
 

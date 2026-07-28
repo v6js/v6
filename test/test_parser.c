@@ -116,7 +116,7 @@ int test_compile_program(void) {
   cf_init(&cf, "Main", "java/lang/Object");
   compile_result rc = compile_program("print(1 + 2 * 3);", &cf);
   v6_check(&fails, rc.ok);
-  v6_check(&fails, cf.method_len == 2);
+  v6_check(&fails, cf.method_len == 8);
   cf_free(&cf);
 
   class_file cf2;
@@ -136,7 +136,7 @@ int test_compile_program(void) {
   compile_result rc4 = compile_program(
       "function add(a, b) { return a + b; } print(add(2, 3));", &cf4);
   v6_check(&fails, rc4.ok);
-  v6_check(&fails, cf4.method_len == 3);
+  v6_check(&fails, cf4.method_len == 9);
   cf_free(&cf4);
 
   class_file cf5;
@@ -207,6 +207,79 @@ int test_compile_program(void) {
   compile_result rc14 = compile_program("break;", &cf14);
   v6_check(&fails, !rc14.ok);
   cf_free(&cf14);
+
+  class_file cf15;
+  cf_init(&cf15, "Main", "java/lang/Object");
+  compile_result rc15 = compile_program(
+      "var a = 1, b = 2, c = 3; print(a); print(b); print(c);", &cf15);
+  v6_check(&fails, rc15.ok);
+  cf_free(&cf15);
+
+  class_file cf16;
+  cf_init(&cf16, "Main", "java/lang/Object");
+  compile_result rc16 =
+      compile_program("function add(x, y) { return x + y; }"
+                      "var a = add(1, 2), b = 3; print(a); print(b);",
+                      &cf16);
+  v6_check(&fails, rc16.ok);
+  cf_free(&cf16);
+
+  class_file cf17;
+  cf_init(&cf17, "Main", "java/lang/Object");
+  compile_result rc17 = compile_program(
+      "print(typeof 1); print(typeof \"s\"); print(typeof true); "
+      "print(typeof undefined); print(typeof null); print(typeof {});",
+      &cf17);
+  v6_check(&fails, rc17.ok);
+  cf_free(&cf17);
+
+  class_file cf18;
+  cf_init(&cf18, "Main", "java/lang/Object");
+  compile_result rc18 = compile_program(
+      "var x = 5; x &= 3; print(x); print(5 | 2); print(5 ^ 1); print(~5); "
+      "print(1 << 4); print(256 >> 4); print(-1 >>> 28);",
+      &cf18);
+  v6_check(&fails, rc18.ok);
+  cf_free(&cf18);
+
+  class_file cf19;
+  cf_init(&cf19, "Main", "java/lang/Object");
+  compile_result rc19 = compile_program(
+      "var s = \"hello\"; print(s[0]); print(s[10]); print(s.length);", &cf19);
+  v6_check(&fails, rc19.ok);
+  cf_free(&cf19);
+
+  class_file cf20;
+  cf_init(&cf20, "Main", "java/lang/Object");
+  compile_result rc20 = compile_program(
+      "var o = { a: 1, b: 2 };"
+      "for (var k in o) { print(k); print(o[k]); }"
+      "for (let k2 in o) { if (k2 == \"a\") continue; print(k2); }"
+      "for (var k3 in o) { if (k3 == \"b\") break; print(k3); }",
+      &cf20);
+  v6_check(&fails, rc20.ok);
+  cf_free(&cf20);
+
+  class_file cf21;
+  cf_init(&cf21, "Main", "java/lang/Object");
+  compile_result rc21 =
+      compile_program("var arr = [1, 2, 3];"
+                      "for (var x of arr) { print(x); }"
+                      "for (let c of \"ab\") { print(c); }"
+                      "for (var y of arr) { if (y == 2) continue; print(y); }"
+                      "for (var z of arr) { if (z == 2) break; print(z); }",
+                      &cf21);
+  v6_check(&fails, rc21.ok);
+  cf_free(&cf21);
+
+  class_file cf22;
+  cf_init(&cf22, "Main", "java/lang/Object");
+  compile_result rc22 =
+      compile_program("print(abs(-5)); print(floor(3.7)); print(ceil(3.2)); "
+                      "print(sqrt(16)); print(max(3, 7)); print(min(3, 7));",
+                      &cf22);
+  v6_check(&fails, rc22.ok);
+  cf_free(&cf22);
 
   return fails;
 }
