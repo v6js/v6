@@ -1,6 +1,8 @@
 #include "v6/bytecode.h"
+#include "v6/jar.h"
 #include "v6/jvm.h"
 #include "v6/parser.h"
+#include "v6/runtime.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,7 +30,7 @@ static char* read_file(const char* path) {
 }
 
 static void usage(const char* prog) {
-  fprintf(stderr, "usage: %s <script.js> [-o <output.class>]\n", prog);
+  fprintf(stderr, "usage: %s <script.js> [-o <output.jar>]\n", prog);
 }
 
 int main(int argc, char** argv) {
@@ -75,16 +77,29 @@ int main(int argc, char** argv) {
   cf_free(&cf);
 
   if (out_path) {
+    jar_entry entries[2];
+    entries[0].name = "Main.class";
+    entries[0].data = out.data;
+    entries[0].len = out.len;
+    entries[1].name = "V6Value.class";
+    entries[1].data = v6_runtime_class;
+    entries[1].len = v6_runtime_class_len;
+
+    buf jar;
+    buf_init(&jar);
+    jar_write(&jar, entries, 2, "Main");
+    buf_free(&out);
+
     FILE* outf = fopen(out_path, "wb");
     if (!outf) {
       fprintf(stderr, "error: cannot write %s\n", out_path);
-      buf_free(&out);
+      buf_free(&jar);
       return 1;
     }
-    fwrite(out.data, 1, out.len, outf);
+    fwrite(jar.data, 1, jar.len, outf);
     fclose(outf);
-    printf("wrote %s (%zu bytes)\n", out_path, out.len);
-    buf_free(&out);
+    printf("wrote %s (%zu bytes)\n", out_path, jar.len);
+    buf_free(&jar);
     return 0;
   }
 

@@ -177,7 +177,7 @@ void op_patch2(method* m, size_t at, uint16_t v) {
 void cf_emit(class_file* cf, buf* out) {
   buf_u32(out, 0xcafebabeu);
   buf_u16(out, 0);
-  buf_u16(out, 52);
+  buf_u16(out, 49);
   buf_u16(out, (uint16_t)(cf->cp_count + 1));
   buf_bytes(out, cf->cp.data, cf->cp.len);
   buf_u16(out, cf->access);

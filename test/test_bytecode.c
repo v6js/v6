@@ -31,7 +31,7 @@ int test_bytecode(void) {
 
   v6_check(&fails, rd32(out.data) == 0xcafebabeu);
   v6_check(&fails, rd16(out.data + 4) == 0);
-  v6_check(&fails, rd16(out.data + 6) == 52);
+  v6_check(&fails, rd16(out.data + 6) == 49);
   v6_check(&fails, rd16(out.data + 8) == (uint16_t)(cf.cp_count + 1));
 
   size_t off = 10;

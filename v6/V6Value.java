@@ -27,4 +27,20 @@ public record V6Value(int tag, double num, Object ref) {
       return Long.toString((long)n);
     return Double.toString(n);
   }
+
+  public boolean truthy() {
+    return switch (tag) {
+      case TAG_NUM -> num != 0 && !Double.isNaN(num);
+      case TAG_BOOL -> num != 0;
+      case TAG_NULL, TAG_UNDEF -> false;
+      case TAG_STR -> !((String)ref).isEmpty();
+      default -> true;
+    };
+  }
+
+  public static V6Value add(V6Value a, V6Value b) {
+    if (a.tag == TAG_STR || b.tag == TAG_STR)
+      return new V6Value(TAG_STR, 0, a.toString() + b.toString());
+    return new V6Value(TAG_NUM, a.num + b.num, null);
+  }
 }

@@ -100,6 +100,26 @@ static void emit_aload(method* m, uint16_t slot) {
   }
 }
 
+static void emit_astore(method* m, uint16_t slot) {
+  switch (slot) {
+  case 0:
+    op_emit(m, op_astore_0);
+    return;
+  case 1:
+    op_emit(m, op_astore_1);
+    return;
+  case 2:
+    op_emit(m, op_astore_2);
+    return;
+  case 3:
+    op_emit(m, op_astore_3);
+    return;
+  default:
+    op_emit1(m, op_astore, (uint8_t)slot);
+    return;
+  }
+}
+
 static void emit_box_const(class_file* cf, method* m, uint8_t tag_op,
                            uint8_t num_op) {
   op_emit2(m, op_new, value_class(cf));
@@ -122,6 +142,11 @@ static void emit_box_tag(compiler* c, uint8_t tag_op) {
 
 static void emit_unbox_num(compiler* c) {
   uint16_t idx = cf_methodref(c->cf, "V6Value", "num", "()D");
+  op_emit2(c->m, op_invokevirtual, idx);
+}
+
+static void emit_truthy(compiler* c) {
+  uint16_t idx = cf_methodref(c->cf, "V6Value", "truthy", "()Z");
   op_emit2(c->m, op_invokevirtual, idx);
 }
 
@@ -168,12 +193,20 @@ static char* dup_tok(tok t) {
   return s;
 }
 
-static int find_param(compiler* c, const char* name, size_t len) {
+static int find_slot(compiler* c, const char* name, size_t len, uint16_t* out) {
   for (int i = 0; i < c->param_count; i++) {
-    if (c->params[i].len == len && memcmp(c->params[i].name, name, len) == 0)
-      return i;
+    if (c->params[i].len == len && memcmp(c->params[i].name, name, len) == 0) {
+      *out = (uint16_t)i;
+      return 1;
+    }
   }
-  return -1;
+  for (int i = c->local_count - 1; i >= 0; i--) {
+    if (c->locals[i].len == len && memcmp(c->locals[i].name, name, len) == 0) {
+      *out = c->locals[i].slot;
+      return 1;
+    }
+  }
+  return 0;
 }
 
 static fn_entry* find_fn(compiler* c, const char* name, size_t len) {
@@ -308,12 +341,23 @@ static void parse_primary(parser* p, compiler* c) {
       parse_call(p, c, name);
       return;
     }
-    int slot = find_param(c, name.start, name.len);
-    if (slot < 0) {
+    if (match(p, tok_assign)) {
+      uint16_t slot;
+      if (!find_slot(c, name.start, name.len, &slot)) {
+        p->had_error = 1;
+        return;
+      }
+      parse_expr(p, c);
+      op_emit(c->m, op_dup);
+      emit_astore(c->m, slot);
+      return;
+    }
+    uint16_t slot;
+    if (!find_slot(c, name.start, name.len, &slot)) {
       p->had_error = 1;
       return;
     }
-    emit_aload(c->m, (uint16_t)slot);
+    emit_aload(c->m, slot);
     return;
   }
 
@@ -334,6 +378,15 @@ static void parse_unary(parser* p, compiler* c) {
     emit_unbox_num(c);
     op_emit(c->m, op_dneg);
     emit_box_tag(c, op_iconst_0);
+    return;
+  }
+  if (match(p, tok_bang)) {
+    parse_unary(p, c);
+    emit_truthy(c);
+    op_emit(c->m, op_iconst_1);
+    op_emit(c->m, op_ixor);
+    op_emit(c->m, op_i2d);
+    emit_box_tag(c, op_iconst_1);
     return;
   }
   parse_primary(p, c);
@@ -358,11 +411,18 @@ static void parse_add(parser* p, compiler* c) {
   while (check(p, tok_plus) || check(p, tok_minus)) {
     tok_kind k = p->cur.kind;
     advance(p);
-    emit_unbox_num(c);
-    parse_mul(p, c);
-    emit_unbox_num(c);
-    op_emit(c->m, k == tok_plus ? op_dadd : op_dsub);
-    emit_box_tag(c, op_iconst_0);
+    if (k == tok_plus) {
+      parse_mul(p, c);
+      uint16_t idx = cf_methodref(c->cf, "V6Value", "add",
+                                  "(LV6Value;LV6Value;)LV6Value;");
+      op_emit2(c->m, op_invokestatic, idx);
+    } else {
+      emit_unbox_num(c);
+      parse_mul(p, c);
+      emit_unbox_num(c);
+      op_emit(c->m, op_dsub);
+      emit_box_tag(c, op_iconst_0);
+    }
   }
 }
 
@@ -404,8 +464,38 @@ static void parse_eq(parser* p, compiler* c) {
   }
 }
 
-static void parse_expr(parser* p, compiler* c) {
+static void parse_and(parser* p, compiler* c) {
   parse_eq(p, c);
+  while (match(p, tok_amp_amp)) {
+    op_emit(c->m, op_dup);
+    emit_truthy(c);
+    size_t is_left_pos = op_pos(c->m);
+    op_emit2(c->m, op_ifeq, 0);
+    op_emit(c->m, op_pop);
+    parse_eq(p, c);
+    size_t end_pos = op_pos(c->m);
+    op_patch2(c->m, (uint16_t)(is_left_pos + 1),
+              (uint16_t)(end_pos - is_left_pos));
+  }
+}
+
+static void parse_or(parser* p, compiler* c) {
+  parse_and(p, c);
+  while (match(p, tok_pipe_pipe)) {
+    op_emit(c->m, op_dup);
+    emit_truthy(c);
+    size_t is_left_pos = op_pos(c->m);
+    op_emit2(c->m, op_ifne, 0);
+    op_emit(c->m, op_pop);
+    parse_and(p, c);
+    size_t end_pos = op_pos(c->m);
+    op_patch2(c->m, (uint16_t)(is_left_pos + 1),
+              (uint16_t)(end_pos - is_left_pos));
+  }
+}
+
+static void parse_expr(parser* p, compiler* c) {
+  parse_or(p, c);
 }
 
 int compile_expr(parser* p, compiler* c) {
@@ -414,6 +504,129 @@ int compile_expr(parser* p, compiler* c) {
 }
 
 static void parse_stmt(parser* p, compiler* c);
+
+static void parse_var_decl(parser* p, compiler* c) {
+  if (!expect(p, tok_ident))
+    return;
+  tok name = p->prev;
+
+  if (match(p, tok_assign))
+    parse_expr(p, c);
+  else
+    emit_box_const(c->cf, c->m, op_iconst_3, op_dconst_0);
+
+  uint16_t slot = c->next_local_slot++;
+  emit_astore(c->m, slot);
+
+  c->locals[c->local_count].name = name.start;
+  c->locals[c->local_count].len = name.len;
+  c->locals[c->local_count].slot = slot;
+  c->local_count++;
+}
+
+static void parse_block(parser* p, compiler* c) {
+  while (!check(p, tok_rbrace) && !check(p, tok_eof))
+    parse_stmt(p, c);
+  expect(p, tok_rbrace);
+}
+
+static void parse_if(parser* p, compiler* c) {
+  expect(p, tok_lparen);
+  parse_expr(p, c);
+  expect(p, tok_rparen);
+  emit_truthy(c);
+
+  size_t else_jump = op_pos(c->m);
+  op_emit2(c->m, op_ifeq, 0);
+
+  parse_stmt(p, c);
+
+  size_t end_jump = op_pos(c->m);
+  op_emit2(c->m, op_goto, 0);
+
+  size_t else_pos = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(else_jump + 1), (uint16_t)(else_pos - else_jump));
+
+  if (match(p, tok_kw_else))
+    parse_stmt(p, c);
+
+  size_t end_pos = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(end_jump + 1), (uint16_t)(end_pos - end_jump));
+}
+
+static void parse_while(parser* p, compiler* c) {
+  size_t start_pos = op_pos(c->m);
+
+  expect(p, tok_lparen);
+  parse_expr(p, c);
+  expect(p, tok_rparen);
+  emit_truthy(c);
+
+  size_t exit_jump = op_pos(c->m);
+  op_emit2(c->m, op_ifeq, 0);
+
+  parse_stmt(p, c);
+
+  size_t back_jump = op_pos(c->m);
+  op_emit2(c->m, op_goto, 0);
+  op_patch2(c->m, (uint16_t)(back_jump + 1), (uint16_t)(start_pos - back_jump));
+
+  size_t end_pos = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(exit_jump + 1), (uint16_t)(end_pos - exit_jump));
+}
+
+static void parse_for(parser* p, compiler* c) {
+  expect(p, tok_lparen);
+
+  if (match(p, tok_kw_var) || match(p, tok_kw_let) || match(p, tok_kw_const)) {
+    parse_var_decl(p, c);
+  } else if (!check(p, tok_semi)) {
+    parse_expr(p, c);
+    op_emit(c->m, op_pop);
+  }
+  expect(p, tok_semi);
+
+  size_t cond_pos = op_pos(c->m);
+  int has_cond = !check(p, tok_semi);
+  size_t exit_jump = 0;
+  if (has_cond) {
+    parse_expr(p, c);
+    emit_truthy(c);
+    exit_jump = op_pos(c->m);
+    op_emit2(c->m, op_ifeq, 0);
+  }
+  expect(p, tok_semi);
+
+  size_t body_jump = op_pos(c->m);
+  op_emit2(c->m, op_goto, 0);
+
+  size_t inc_pos = op_pos(c->m);
+  if (!check(p, tok_rparen)) {
+    parse_expr(p, c);
+    op_emit(c->m, op_pop);
+  }
+  size_t inc_to_cond = op_pos(c->m);
+  op_emit2(c->m, op_goto, 0);
+  op_patch2(c->m, (uint16_t)(inc_to_cond + 1),
+            (uint16_t)(cond_pos - inc_to_cond));
+
+  expect(p, tok_rparen);
+
+  size_t body_pos = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(body_jump + 1), (uint16_t)(body_pos - body_jump));
+
+  parse_stmt(p, c);
+
+  size_t body_to_inc = op_pos(c->m);
+  op_emit2(c->m, op_goto, 0);
+  op_patch2(c->m, (uint16_t)(body_to_inc + 1),
+            (uint16_t)(inc_pos - body_to_inc));
+
+  if (has_cond) {
+    size_t end_pos = op_pos(c->m);
+    op_patch2(c->m, (uint16_t)(exit_jump + 1), (uint16_t)(end_pos - exit_jump));
+  }
+}
 
 static void parse_function_decl(parser* p, compiler* c) {
   if (!expect(p, tok_ident))
@@ -449,7 +662,6 @@ static void parse_function_decl(parser* p, compiler* c) {
 
   method* m = cf_method(c->cf, acc_static, fn_name, desc);
   m->max_stack = 64;
-  m->max_locals = (uint16_t)param_count + 2;
 
   c->fns[c->fn_count].name = fn_name;
   c->fns[c->fn_count].len = name.len;
@@ -459,21 +671,49 @@ static void parse_function_decl(parser* p, compiler* c) {
   compiler fc = *c;
   fc.m = m;
   fc.param_count = param_count;
+  fc.local_count = 0;
   fc.scratch_slot = (uint16_t)param_count;
+  fc.next_local_slot = (uint16_t)param_count + 2;
   for (int i = 0; i < param_count; i++)
     fc.params[i] = params[i];
 
   if (!expect(p, tok_lbrace))
     return;
-  while (!check(p, tok_rbrace) && !check(p, tok_eof))
-    parse_stmt(p, &fc);
-  expect(p, tok_rbrace);
+  parse_block(p, &fc);
 
   emit_box_const(c->cf, m, op_iconst_3, op_dconst_0);
   op_emit(m, op_areturn);
+
+  m->max_locals = fc.next_local_slot;
 }
 
 static void parse_stmt(parser* p, compiler* c) {
+  if (match(p, tok_lbrace)) {
+    parse_block(p, c);
+    return;
+  }
+
+  if (match(p, tok_kw_if)) {
+    parse_if(p, c);
+    return;
+  }
+
+  if (match(p, tok_kw_while)) {
+    parse_while(p, c);
+    return;
+  }
+
+  if (match(p, tok_kw_for)) {
+    parse_for(p, c);
+    return;
+  }
+
+  if (match(p, tok_kw_var) || match(p, tok_kw_let) || match(p, tok_kw_const)) {
+    parse_var_decl(p, c);
+    expect(p, tok_semi);
+    return;
+  }
+
   if (match(p, tok_kw_return)) {
     if (check(p, tok_semi))
       emit_box_const(c->cf, c->m, op_iconst_3, op_dconst_0);
@@ -502,13 +742,14 @@ int compile_program(const char* src, class_file* cf) {
   method* main_m =
       cf_method(cf, acc_public | acc_static, "main", "([Ljava/lang/String;)V");
   main_m->max_stack = 64;
-  main_m->max_locals = 3;
 
   compiler c;
   c.cf = cf;
   c.m = main_m;
   c.param_count = 0;
+  c.local_count = 0;
   c.scratch_slot = 1;
+  c.next_local_slot = 3;
   c.fn_count = 0;
 
   build_print_fn(&c);
@@ -518,6 +759,7 @@ int compile_program(const char* src, class_file* cf) {
   parse_program(&p, &c);
 
   op_emit(main_m, op_return);
+  main_m->max_locals = c.next_local_slot;
 
   return p.had_error ? -1 : 0;
 }

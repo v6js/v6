@@ -5,11 +5,18 @@
 
 #define v6_max_params 16
 #define v6_max_fns 64
+#define v6_max_locals 128
 
 typedef struct param {
   const char* name;
   size_t len;
 } param;
+
+typedef struct local {
+  const char* name;
+  size_t len;
+  uint16_t slot;
+} local;
 
 typedef struct fn_entry {
   const char* name;
@@ -22,7 +29,10 @@ typedef struct compiler {
   method* m;
   param params[v6_max_params];
   int param_count;
+  local locals[v6_max_locals];
+  int local_count;
   uint16_t scratch_slot;
+  uint16_t next_local_slot;
   fn_entry fns[v6_max_fns];
   size_t fn_count;
 } compiler;

@@ -6,7 +6,9 @@ static compiler make_compiler(class_file* cf, method* m) {
   c.cf = cf;
   c.m = m;
   c.param_count = 0;
+  c.local_count = 0;
   c.scratch_slot = 1;
+  c.next_local_slot = 3;
   c.fn_count = 0;
   return c;
 }
