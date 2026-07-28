@@ -1,0 +1,146 @@
+#pragma once
+
+#include "v6/buffer.h"
+
+#include <stddef.h>
+#include <stdint.h>
+
+typedef enum {
+  op_nop = 0x00,
+  op_aconst_null = 0x01,
+  op_iconst_m1 = 0x02,
+  op_iconst_0 = 0x03,
+  op_iconst_1 = 0x04,
+  op_iconst_2 = 0x05,
+  op_iconst_3 = 0x06,
+  op_iconst_4 = 0x07,
+  op_iconst_5 = 0x08,
+  op_dconst_0 = 0x0e,
+  op_dconst_1 = 0x0f,
+  op_bipush = 0x10,
+  op_sipush = 0x11,
+  op_ldc = 0x12,
+  op_ldc_w = 0x13,
+  op_ldc2_w = 0x14,
+  op_iload = 0x15,
+  op_dload = 0x18,
+  op_aload = 0x19,
+  op_iload_0 = 0x1a,
+  op_iload_1 = 0x1b,
+  op_iload_2 = 0x1c,
+  op_iload_3 = 0x1d,
+  op_dload_0 = 0x26,
+  op_dload_1 = 0x27,
+  op_dload_2 = 0x28,
+  op_dload_3 = 0x29,
+  op_aload_0 = 0x2a,
+  op_aload_1 = 0x2b,
+  op_aload_2 = 0x2c,
+  op_aload_3 = 0x2d,
+  op_istore = 0x36,
+  op_dstore = 0x39,
+  op_astore = 0x3a,
+  op_istore_0 = 0x3b,
+  op_istore_1 = 0x3c,
+  op_istore_2 = 0x3d,
+  op_istore_3 = 0x3e,
+  op_dstore_0 = 0x47,
+  op_dstore_1 = 0x48,
+  op_dstore_2 = 0x49,
+  op_dstore_3 = 0x4a,
+  op_astore_0 = 0x4b,
+  op_astore_1 = 0x4c,
+  op_astore_2 = 0x4d,
+  op_astore_3 = 0x4e,
+  op_dup = 0x59,
+  op_pop = 0x57,
+  op_swap = 0x5f,
+  op_iadd = 0x60,
+  op_dadd = 0x63,
+  op_isub = 0x64,
+  op_dsub = 0x67,
+  op_imul = 0x68,
+  op_dmul = 0x6b,
+  op_idiv = 0x6c,
+  op_ddiv = 0x6f,
+  op_dneg = 0x77,
+  op_i2d = 0x87,
+  op_d2i = 0x8e,
+  op_ifeq = 0x99,
+  op_ifne = 0x9a,
+  op_iflt = 0x9b,
+  op_ifge = 0x9c,
+  op_ifgt = 0x9d,
+  op_ifle = 0x9e,
+  op_if_icmpeq = 0x9f,
+  op_if_icmpne = 0xa0,
+  op_dcmpl = 0x97,
+  op_dcmpg = 0x98,
+  op_goto = 0xa7,
+  op_ireturn = 0xac,
+  op_dreturn = 0xaf,
+  op_areturn = 0xb0,
+  op_return = 0xb1,
+  op_getstatic = 0xb2,
+  op_putstatic = 0xb3,
+  op_getfield = 0xb4,
+  op_putfield = 0xb5,
+  op_invokevirtual = 0xb6,
+  op_invokespecial = 0xb7,
+  op_invokestatic = 0xb8,
+  op_invokeinterface = 0xb9,
+  op_new = 0xbb,
+  op_athrow = 0xbf,
+} opcode;
+
+enum {
+  acc_public = 0x0001,
+  acc_static = 0x0008,
+  acc_super = 0x0020,
+};
+
+typedef struct method {
+  uint16_t access;
+  uint16_t name_idx;
+  uint16_t desc_idx;
+  uint16_t max_stack;
+  uint16_t max_locals;
+  buf code;
+} method;
+
+typedef struct class_file {
+  buf cp;
+  uint16_t cp_count;
+  uint16_t access;
+  uint16_t this_idx;
+  uint16_t super_idx;
+  uint16_t code_utf8;
+  method **methods;
+  size_t method_len;
+  size_t method_cap;
+} class_file;
+
+void cf_init(class_file *cf, const char *this_name, const char *super_name);
+void cf_free(class_file *cf);
+
+uint16_t cf_utf8(class_file *cf, const char *s);
+uint16_t cf_class(class_file *cf, const char *name);
+uint16_t cf_name_type(class_file *cf, const char *name, const char *desc);
+uint16_t cf_methodref(class_file *cf, const char *cls, const char *name,
+                       const char *desc);
+uint16_t cf_fieldref(class_file *cf, const char *cls, const char *name,
+                      const char *desc);
+uint16_t cf_string(class_file *cf, const char *s);
+uint16_t cf_integer(class_file *cf, int32_t v);
+uint16_t cf_double(class_file *cf, double v);
+
+method *cf_method(class_file *cf, uint16_t access, const char *name,
+                   const char *desc);
+
+void op_emit(method *m, uint8_t code);
+void op_emit1(method *m, uint8_t code, uint8_t a);
+void op_emit2(method *m, uint8_t code, uint16_t a);
+size_t op_pos(method *m);
+void op_patch2(method *m, size_t at, uint16_t v);
+
+void cf_emit(class_file *cf, buf *out);
