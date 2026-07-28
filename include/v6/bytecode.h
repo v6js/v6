@@ -108,6 +108,12 @@ typedef struct method {
   buf code;
 } method;
 
+typedef struct field {
+  uint16_t access;
+  uint16_t name_idx;
+  uint16_t desc_idx;
+} field;
+
 typedef struct class_file {
   buf cp;
   uint16_t cp_count;
@@ -118,6 +124,9 @@ typedef struct class_file {
   method** methods;
   size_t method_len;
   size_t method_cap;
+  field* fields;
+  size_t field_len;
+  size_t field_cap;
 } class_file;
 
 void cf_init(class_file* cf, const char* this_name, const char* super_name);
@@ -136,6 +145,8 @@ uint16_t cf_double(class_file* cf, double v);
 
 method* cf_method(class_file* cf, uint16_t access, const char* name,
                   const char* desc);
+void cf_field(class_file* cf, uint16_t access, const char* name,
+              const char* desc);
 
 void op_emit(method* m, uint8_t code);
 void op_emit1(method* m, uint8_t code, uint8_t a);

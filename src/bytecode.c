@@ -107,6 +107,9 @@ void cf_init(class_file* cf, const char* this_name, const char* super_name) {
   cf->methods = NULL;
   cf->method_len = 0;
   cf->method_cap = 0;
+  cf->fields = NULL;
+  cf->field_len = 0;
+  cf->field_cap = 0;
 }
 
 void cf_free(class_file* cf) {
@@ -115,6 +118,7 @@ void cf_free(class_file* cf) {
     free(cf->methods[i]);
   }
   free(cf->methods);
+  free(cf->fields);
   buf_free(&cf->cp);
 }
 
@@ -133,6 +137,18 @@ method* cf_method(class_file* cf, uint16_t access, const char* name,
   buf_init(&m->code);
   cf->methods[cf->method_len++] = m;
   return m;
+}
+
+void cf_field(class_file* cf, uint16_t access, const char* name,
+              const char* desc) {
+  if (cf->field_len == cf->field_cap) {
+    cf->field_cap = cf->field_cap ? cf->field_cap * 2 : 4;
+    cf->fields = realloc(cf->fields, cf->field_cap * sizeof(field));
+  }
+  field* f = &cf->fields[cf->field_len++];
+  f->access = access;
+  f->name_idx = cf_utf8(cf, name);
+  f->desc_idx = cf_utf8(cf, desc);
 }
 
 void op_emit(method* m, uint8_t code) {
@@ -168,7 +184,14 @@ void cf_emit(class_file* cf, buf* out) {
   buf_u16(out, cf->this_idx);
   buf_u16(out, cf->super_idx);
   buf_u16(out, 0);
-  buf_u16(out, 0);
+  buf_u16(out, (uint16_t)cf->field_len);
+  for (size_t i = 0; i < cf->field_len; i++) {
+    field* f = &cf->fields[i];
+    buf_u16(out, f->access);
+    buf_u16(out, f->name_idx);
+    buf_u16(out, f->desc_idx);
+    buf_u16(out, 0);
+  }
   buf_u16(out, (uint16_t)cf->method_len);
   for (size_t i = 0; i < cf->method_len; i++) {
     method* m = cf->methods[i];

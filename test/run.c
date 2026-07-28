@@ -5,6 +5,7 @@ int test_buf(void);
 int test_lexer(void);
 int test_bytecode(void);
 int test_parser(void);
+int test_runtime(void);
 
 int main(void) {
   int fails = 0;
@@ -14,6 +15,7 @@ int main(void) {
   fails += test_lexer();
   fails += test_bytecode();
   fails += test_parser();
+  fails += test_runtime();
 
   if (fails) {
     fprintf(stderr, "%d failure(s)\n", fails);

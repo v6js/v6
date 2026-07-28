@@ -18,6 +18,8 @@ int test_bytecode(void) {
   class_file cf;
   cf_init(&cf, "Main", "java/lang/Object");
 
+  cf_field(&cf, acc_public, "count", "I");
+
   method* m = cf_method(&cf, acc_public | acc_static, "main", "()V");
   m->max_stack = 1;
   m->max_locals = 1;
@@ -41,9 +43,20 @@ int test_bytecode(void) {
   v6_check(&fails, rd16(out.data + off + 2) == cf.this_idx);
   v6_check(&fails, rd16(out.data + off + 4) == cf.super_idx);
   v6_check(&fails, rd16(out.data + off + 6) == 0);
-  v6_check(&fails, rd16(out.data + off + 8) == 0);
-  v6_check(&fails, rd16(out.data + off + 10) == (uint16_t)cf.method_len);
-  off += 12;
+  v6_check(&fails, rd16(out.data + off + 8) == (uint16_t)cf.field_len);
+  off += 10;
+
+  for (size_t i = 0; i < cf.field_len; i++) {
+    field* f = &cf.fields[i];
+    v6_check(&fails, rd16(out.data + off) == f->access);
+    v6_check(&fails, rd16(out.data + off + 2) == f->name_idx);
+    v6_check(&fails, rd16(out.data + off + 4) == f->desc_idx);
+    v6_check(&fails, rd16(out.data + off + 6) == 0);
+    off += 8;
+  }
+
+  v6_check(&fails, rd16(out.data + off) == (uint16_t)cf.method_len);
+  off += 2;
 
   v6_check(&fails, rd16(out.data + off) == m->access);
   v6_check(&fails, rd16(out.data + off + 2) == m->name_idx);

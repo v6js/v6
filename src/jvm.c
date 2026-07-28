@@ -3,6 +3,7 @@
 #ifdef V6_HAVE_JNI
 
 #include <jni.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #ifdef _WIN32
@@ -11,13 +12,36 @@ typedef HMODULE v6_lib;
 #define v6_lib_open(p) LoadLibraryA(p)
 #define v6_lib_sym(h, n) GetProcAddress(h, n)
 static const char* v6_jvm_lib_name = "jvm.dll";
+static const char* v6_jvm_lib_rel = "bin/server/jvm.dll";
+#elif defined(__APPLE__)
+#include <dlfcn.h>
+typedef void* v6_lib;
+#define v6_lib_open(p) dlopen(p, RTLD_NOW)
+#define v6_lib_sym(h, n) dlsym(h, n)
+static const char* v6_jvm_lib_name = "libjvm.dylib";
+static const char* v6_jvm_lib_rel = "lib/server/libjvm.dylib";
 #else
 #include <dlfcn.h>
 typedef void* v6_lib;
 #define v6_lib_open(p) dlopen(p, RTLD_NOW)
 #define v6_lib_sym(h, n) dlsym(h, n)
 static const char* v6_jvm_lib_name = "libjvm.so";
+static const char* v6_jvm_lib_rel = "lib/server/libjvm.so";
 #endif
+
+static v6_lib v6_open_jvm_lib(void) {
+  v6_lib lib = v6_lib_open(v6_jvm_lib_name);
+  if (lib)
+    return lib;
+
+  const char* home = getenv("JAVA_HOME");
+  if (!home)
+    return NULL;
+
+  char path[1024];
+  snprintf(path, sizeof(path), "%s/%s", home, v6_jvm_lib_rel);
+  return v6_lib_open(path);
+}
 
 typedef jint(JNICALL* v6_create_vm_fn)(JavaVM**, void**, void*);
 
@@ -32,7 +56,7 @@ int v6_jvm_available(void) {
 }
 
 v6_jvm* v6_jvm_create(void) {
-  v6_lib lib = v6_lib_open(v6_jvm_lib_name);
+  v6_lib lib = v6_open_jvm_lib();
   if (!lib)
     return NULL;
 
