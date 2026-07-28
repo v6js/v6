@@ -23,6 +23,11 @@ static const keyword keywords[] = {
     {"false", tok_kw_false},
     {"null", tok_kw_null},
     {"undefined", tok_kw_undefined},
+    {"break", tok_kw_break},
+    {"continue", tok_kw_continue},
+    {"switch", tok_kw_switch},
+    {"case", tok_kw_case},
+    {"default", tok_kw_default},
 };
 
 void lex_init(lexer* lx, const char* src) {
@@ -76,12 +81,49 @@ static tok make(lexer* lx, tok_kind kind, const char* start) {
 }
 
 static tok lex_num(lexer* lx, const char* start) {
+  if (start[0] == '0' && (*lx->cur == 'x' || *lx->cur == 'X')) {
+    lx->cur++;
+    while (isxdigit((unsigned char)*lx->cur))
+      lx->cur++;
+    tok t = make(lx, tok_num, start);
+    t.num = (double)strtoll(start + 2, NULL, 16);
+    return t;
+  }
+  if (start[0] == '0' && (*lx->cur == 'o' || *lx->cur == 'O')) {
+    lx->cur++;
+    while (*lx->cur >= '0' && *lx->cur <= '7')
+      lx->cur++;
+    tok t = make(lx, tok_num, start);
+    t.num = (double)strtoll(start + 2, NULL, 8);
+    return t;
+  }
+  if (start[0] == '0' && (*lx->cur == 'b' || *lx->cur == 'B')) {
+    lx->cur++;
+    while (*lx->cur == '0' || *lx->cur == '1')
+      lx->cur++;
+    tok t = make(lx, tok_num, start);
+    t.num = (double)strtoll(start + 2, NULL, 2);
+    return t;
+  }
+
   while (isdigit((unsigned char)*lx->cur))
     lx->cur++;
   if (*lx->cur == '.' && isdigit((unsigned char)lx->cur[1])) {
     lx->cur++;
     while (isdigit((unsigned char)*lx->cur))
       lx->cur++;
+  }
+  if (*lx->cur == 'e' || *lx->cur == 'E') {
+    const char* save = lx->cur;
+    lx->cur++;
+    if (*lx->cur == '+' || *lx->cur == '-')
+      lx->cur++;
+    if (isdigit((unsigned char)*lx->cur)) {
+      while (isdigit((unsigned char)*lx->cur))
+        lx->cur++;
+    } else {
+      lx->cur = save;
+    }
   }
   tok t = make(lx, tok_num, start);
   t.num = strtod(start, NULL);
@@ -122,7 +164,8 @@ tok lex_next(lexer* lx) {
 
   if (c == '\0')
     return make(lx, tok_eof, start);
-  if (isdigit((unsigned char)c)) {
+  if (isdigit((unsigned char)c) ||
+      (c == '.' && isdigit((unsigned char)lx->cur[1]))) {
     lx->cur++;
     return lex_num(lx, start);
   }
@@ -154,24 +197,64 @@ tok lex_next(lexer* lx) {
   case '.':
     return make(lx, tok_dot, start);
   case '+':
+    if (*lx->cur == '+') {
+      lx->cur++;
+      return make(lx, tok_plus_plus, start);
+    }
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_plus_eq, start);
+    }
     return make(lx, tok_plus, start);
   case '-':
+    if (*lx->cur == '-') {
+      lx->cur++;
+      return make(lx, tok_minus_minus, start);
+    }
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_minus_eq, start);
+    }
     return make(lx, tok_minus, start);
   case '*':
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_star_eq, start);
+    }
     return make(lx, tok_star, start);
   case '/':
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_slash_eq, start);
+    }
     return make(lx, tok_slash, start);
   case '%':
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_percent_eq, start);
+    }
     return make(lx, tok_percent, start);
+  case '?':
+    return make(lx, tok_question, start);
+  case ':':
+    return make(lx, tok_colon, start);
   case '!':
     if (*lx->cur == '=') {
       lx->cur++;
+      if (*lx->cur == '=') {
+        lx->cur++;
+        return make(lx, tok_neq_strict, start);
+      }
       return make(lx, tok_neq, start);
     }
     return make(lx, tok_bang, start);
   case '=':
     if (*lx->cur == '=') {
       lx->cur++;
+      if (*lx->cur == '=') {
+        lx->cur++;
+        return make(lx, tok_eq_strict, start);
+      }
       return make(lx, tok_eq, start);
     }
     return make(lx, tok_assign, start);

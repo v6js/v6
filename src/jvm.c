@@ -116,6 +116,35 @@ int v6_jvm_load_runtime(v6_jvm* jvm) {
   if ((*env)->CallIntMethod(env, probe, tag_m) != 0)
     return -1;
 
+  jclass obj_cls =
+      (*env)->DefineClass(env, "V6Object", NULL, (const jbyte*)v6_object_class,
+                          (jsize)v6_object_class_len);
+  if (!obj_cls)
+    return -1;
+
+  jmethodID obj_ctor = (*env)->GetMethodID(env, obj_cls, "<init>", "(Z)V");
+  if (!obj_ctor)
+    return -1;
+
+  jobject obj_probe = (*env)->NewObject(env, obj_cls, obj_ctor, JNI_FALSE);
+  if (!obj_probe)
+    return -1;
+
+  jmethodID set_m = (*env)->GetMethodID(env, obj_cls, "set",
+                                        "(Ljava/lang/String;LV6Value;)V");
+  jmethodID get_m =
+      (*env)->GetMethodID(env, obj_cls, "get", "(Ljava/lang/String;)LV6Value;");
+  if (!set_m || !get_m)
+    return -1;
+
+  jstring key = (*env)->NewStringUTF(env, "k");
+  (*env)->CallVoidMethod(env, obj_probe, set_m, key, probe);
+  jobject got = (*env)->CallObjectMethod(env, obj_probe, get_m, key);
+  if (!got)
+    return -1;
+  if ((*env)->CallIntMethod(env, got, tag_m) != 0)
+    return -1;
+
   jvm->value_class = (jclass)(*env)->NewGlobalRef(env, cls);
   return jvm->value_class ? 0 : -1;
 }

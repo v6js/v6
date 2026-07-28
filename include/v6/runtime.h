@@ -13,3 +13,6 @@ enum {
 
 extern const unsigned char v6_runtime_class[];
 extern const size_t v6_runtime_class_len;
+
+extern const unsigned char v6_object_class[];
+extern const size_t v6_object_class_len;

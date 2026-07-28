@@ -47,5 +47,36 @@ int test_lexer(void) {
   t = lex_next(&lx);
   v6_check(&fails, t.kind == tok_eof);
 
+  lexer lx2;
+  lex_init(&lx2, "0x1F 0o17 0b101 1e3 1.5e-2 .5");
+
+  t = lex_next(&lx2);
+  v6_check(&fails, t.kind == tok_num && t.num == 31);
+  t = lex_next(&lx2);
+  v6_check(&fails, t.kind == tok_num && t.num == 15);
+  t = lex_next(&lx2);
+  v6_check(&fails, t.kind == tok_num && t.num == 5);
+  t = lex_next(&lx2);
+  v6_check(&fails, t.kind == tok_num && t.num == 1000);
+  t = lex_next(&lx2);
+  v6_check(&fails, t.kind == tok_num && t.num == 0.015);
+  t = lex_next(&lx2);
+  v6_check(&fails, t.kind == tok_num && t.num == 0.5);
+
+  lexer lx3;
+  lex_init(&lx3, "+= -= *= /= %= ++ -- ? : === !== break continue switch case "
+                 "default");
+
+  static const tok_kind expected[] = {
+      tok_plus_eq,     tok_minus_eq,  tok_star_eq,     tok_slash_eq,
+      tok_percent_eq,  tok_plus_plus, tok_minus_minus, tok_question,
+      tok_colon,       tok_eq_strict, tok_neq_strict,  tok_kw_break,
+      tok_kw_continue, tok_kw_switch, tok_kw_case,     tok_kw_default,
+  };
+  for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); i++) {
+    t = lex_next(&lx3);
+    v6_check(&fails, t.kind == expected[i]);
+  }
+
   return fails;
 }

@@ -91,8 +91,10 @@ typedef enum {
   op_invokestatic = 0xb8,
   op_invokeinterface = 0xb9,
   op_new = 0xbb,
+  op_checkcast = 0xc0,
   op_athrow = 0xbf,
   op_ixor = 0x82,
+  op_dup_x2 = 0x5b,
 } opcode;
 
 enum {

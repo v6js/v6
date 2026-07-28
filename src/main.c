@@ -62,11 +62,11 @@ int main(int argc, char** argv) {
   class_file cf;
   cf_init(&cf, "Main", "java/lang/Object");
 
-  int rc = compile_program(src, &cf);
+  compile_result rc = compile_program(src, &cf);
   free(src);
 
-  if (rc != 0) {
-    fprintf(stderr, "error: failed to parse %s\n", in_path);
+  if (!rc.ok) {
+    fprintf(stderr, "error: %s:%d: %s\n", in_path, rc.line, rc.message);
     cf_free(&cf);
     return 1;
   }
@@ -77,17 +77,20 @@ int main(int argc, char** argv) {
   cf_free(&cf);
 
   if (out_path) {
-    jar_entry entries[2];
+    jar_entry entries[3];
     entries[0].name = "Main.class";
     entries[0].data = out.data;
     entries[0].len = out.len;
     entries[1].name = "V6Value.class";
     entries[1].data = v6_runtime_class;
     entries[1].len = v6_runtime_class_len;
+    entries[2].name = "V6Object.class";
+    entries[2].data = v6_object_class;
+    entries[2].len = v6_object_class_len;
 
     buf jar;
     buf_init(&jar);
-    jar_write(&jar, entries, 2, "Main");
+    jar_write(&jar, entries, 3, "Main");
     buf_free(&out);
 
     FILE* outf = fopen(out_path, "wb");
