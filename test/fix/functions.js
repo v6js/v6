@@ -10,6 +10,6 @@ function hypotSquared(a, b) {
   return square(a) + square(b);
 }
 
-print(add(2, 3));
-print(square(5));
-print(hypotSquared(3, 4));
+console.log(add(2, 3));
+console.log(square(5));
+console.log(hypotSquared(3, 4));

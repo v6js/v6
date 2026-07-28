@@ -2,11 +2,22 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class V6Object {
+  private static final V6Value[] EMPTY_ELEMENTS = new V6Value[0];
+
   protected final Map<String, V6Value> props = new LinkedHashMap<>();
+  protected V6Value[] elements = EMPTY_ELEMENTS;
+  protected int elemCount = 0;
   protected int length = 0;
   private V6Object proto;
   private boolean frozen = false;
   private boolean sealed = false;
+
+  private void ensureCapacity(int min) {
+    if (elements.length >= min)
+      return;
+    int newCap = Math.max(min, elements.length == 0 ? 8 : elements.length * 2);
+    elements = java.util.Arrays.copyOf(elements, newCap);
+  }
 
   public void setProto(V6Object proto) {
     this.proto = proto;
@@ -41,6 +52,9 @@ public class V6Object {
   public V6Value get(String key) {
     if (key.equals("length"))
       return new V6Value(V6Value.TAG_NUM, length, null);
+    int idx = parseIndex(key);
+    if (idx >= 0 && idx < elemCount)
+      return elements[idx];
     V6Value v = props.get(key);
     if (v != null)
       return v;
@@ -52,10 +66,24 @@ public class V6Object {
   public void set(String key, V6Value value) {
     if (frozen)
       return;
-    if (sealed && !props.containsKey(key))
-      return;
-    props.put(key, value);
     int idx = parseIndex(key);
+    boolean isDenseAppend = idx == elemCount;
+    boolean isDenseUpdate = idx >= 0 && idx < elemCount;
+    if (sealed && !props.containsKey(key) && !isDenseUpdate)
+      return;
+    if (isDenseAppend) {
+      ensureCapacity(elemCount + 1);
+      elements[elemCount] = value;
+      elemCount++;
+      if (elemCount > length)
+        length = elemCount;
+      return;
+    }
+    if (isDenseUpdate) {
+      elements[idx] = value;
+      return;
+    }
+    props.put(key, value);
     if (idx >= 0 && idx + 1 > length)
       length = idx + 1;
   }
@@ -68,6 +96,10 @@ public class V6Object {
     if (length == 0)
       return new V6Value(V6Value.TAG_UNDEF, 0, null);
     length--;
+    if (elemCount > length) {
+      elemCount = length;
+      return elements[elemCount];
+    }
     String key = Integer.toString(length);
     V6Value v = props.remove(key);
     return v != null ? v : new V6Value(V6Value.TAG_UNDEF, 0, null);
@@ -241,7 +273,7 @@ public class V6Object {
       for (int i = 0; i < n; i++)
         push(o.get(Integer.toString(i)));
     } else if (v.tag() == V6Value.TAG_STR) {
-      String s = (String)v.ref();
+      CharSequence s = (CharSequence)v.ref();
       for (int i = 0; i < s.length(); i++)
         push(new V6Value(V6Value.TAG_STR, 0, String.valueOf(s.charAt(i))));
     }
@@ -250,6 +282,8 @@ public class V6Object {
   public void spreadFrom(V6Value v) {
     if (v.tag() == V6Value.TAG_OBJ) {
       V6Object o = (V6Object)v.ref();
+      for (int i = 0; i < o.elemCount; i++)
+        set(Integer.toString(i), o.elements[i]);
       for (Map.Entry<String, V6Value> e : o.props.entrySet())
         set(e.getKey(), e.getValue());
     }
@@ -264,8 +298,11 @@ public class V6Object {
 
   public V6Array enumKeys() {
     java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
-    for (V6Object o = this; o != null; o = o.proto)
+    for (V6Object o = this; o != null; o = o.proto) {
+      for (int i = 0; i < o.elemCount; i++)
+        seen.add(Integer.toString(i));
       seen.addAll(o.props.keySet());
+    }
     V6Array arr = new V6Array();
     for (String k : seen)
       arr.push(new V6Value(V6Value.TAG_STR, 0, k));
@@ -289,6 +326,12 @@ public class V6Object {
   public String toString() {
     StringBuilder sb = new StringBuilder("{");
     boolean first = true;
+    for (int i = 0; i < elemCount; i++) {
+      if (!first)
+        sb.append(", ");
+      first = false;
+      sb.append(i).append(": ").append(elements[i].toString());
+    }
     for (Map.Entry<String, V6Value> e : props.entrySet()) {
       if (!first)
         sb.append(", ");

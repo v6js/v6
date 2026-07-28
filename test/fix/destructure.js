@@ -1,35 +1,35 @@
 var arr = [1, 2, 3, 4];
 var [a, b] = arr;
-print(a);
-print(b);
+console.log(a);
+console.log(b);
 
 var [x, , z] = arr;
-print(x);
-print(z);
+console.log(x);
+console.log(z);
 
 var [first, ...rest] = arr;
-print(first);
-print(rest.length);
-print(rest[0]);
-print(rest[1]);
+console.log(first);
+console.log(rest.length);
+console.log(rest[0]);
+console.log(rest[1]);
 
 var [p = 10, q = 20] = [1];
-print(p);
-print(q);
+console.log(p);
+console.log(q);
 
 var obj = { name: "Ada", age: 36 };
 var { name, age } = obj;
-print(name);
-print(age);
+console.log(name);
+console.log(age);
 
 var { name: n2, city = "unknown" } = obj;
-print(n2);
-print(city);
+console.log(n2);
+console.log(city);
 
 function sum3(a, b, c) {
   return a + b + c;
 }
-print(sum3(...[1, 2, 3]));
+console.log(sum3(...[1, 2, 3]));
 
 function total(...nums) {
   var s = 0;
@@ -38,19 +38,19 @@ function total(...nums) {
   }
   return s;
 }
-print(total(1, 2, 3, 4, 5));
-print(total());
+console.log(total(1, 2, 3, 4, 5));
+console.log(total());
 
 var more = [10, 20];
-print(total(1, ...more, 2));
+console.log(total(1, ...more, 2));
 
 var merged = [...arr, 5, 6];
-print(merged.length);
-print(merged[4]);
-print(merged[5]);
+console.log(merged.length);
+console.log(merged[4]);
+console.log(merged[5]);
 
 var o1 = { a: 1, b: 2 };
 var o2 = { ...o1, b: 3, c: 4 };
-print(o2.a);
-print(o2.b);
-print(o2.c);
+console.log(o2.a);
+console.log(o2.b);
+console.log(o2.c);

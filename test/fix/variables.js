@@ -1,11 +1,11 @@
 var x = 10;
 let y = 20;
-print(x + y);
+console.log(x + y);
 
 x = x + 1;
-print(x);
+console.log(x);
 
 const greeting = "hello, " + "world";
-print(greeting);
+console.log(greeting);
 
-print("count: " + 5);
+console.log("count: " + 5);

@@ -1,7 +1,7 @@
 try {
   throw "boom";
 } catch (e) {
-  print("caught: " + e);
+  console.log("caught: " + e);
 }
 
 function risky(x) {
@@ -10,11 +10,11 @@ function risky(x) {
 }
 
 try {
-  print(risky(5));
-  print(risky(-1));
-  print("not reached");
+  console.log(risky(5));
+  console.log(risky(-1));
+  console.log("not reached");
 } catch (e) {
-  print("error: " + e);
+  console.log("error: " + e);
 }
 
 var log = [];
@@ -29,23 +29,23 @@ function withFinally() {
   }
 }
 withFinally();
-print(log.length);
-print(log[0]);
-print(log[1]);
-print(log[2]);
+console.log(log.length);
+console.log(log[0]);
+console.log(log[1]);
+console.log(log[2]);
 
 try {
   try {
     throw "inner";
   } finally {
-    print("inner finally");
+    console.log("inner finally");
   }
 } catch (e) {
-  print("outer caught: " + e);
+  console.log("outer caught: " + e);
 }
 
 try {
-  print("start");
+  console.log("start");
 } finally {
-  print("always runs");
+  console.log("always runs");
 }

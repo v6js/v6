@@ -21,6 +21,7 @@ static compiler make_compiler(class_file* cf, method* m) {
   c.brace_depth = 0;
   c.super_name = NULL;
   c.super_len = 0;
+  c.box_locals = 1;
   return c;
 }
 
@@ -75,7 +76,7 @@ int test_parser(void) {
   int rc4 = compile_expr(&p4, &c4);
   v6_check(&fails, rc4 == 0);
   v6_check(&fails, m4->code.len > 0);
-  v6_check(&fails, m4->code.data[0] == op_new);
+  v6_check(&fails, m4->code.data[0] == op_getstatic);
 
   cf_free(&cf4);
 
@@ -123,7 +124,7 @@ int test_compile_program(void) {
 
   class_file cf;
   cf_init(&cf, "Main", "java/lang/Object");
-  compile_result rc = compile_program("print(1 + 2 * 3);", &cf);
+  compile_result rc = compile_program("console.log(1 + 2 * 3);", &cf);
   v6_check(&fails, rc.ok);
   v6_check(&fails, cf.method_len == 1);
   cf_free(&cf);
@@ -136,72 +137,76 @@ int test_compile_program(void) {
 
   class_file cf3;
   cf_init(&cf3, "Main", "java/lang/Object");
-  compile_result rc3 = compile_program("print(true);", &cf3);
+  compile_result rc3 = compile_program("console.log(true);", &cf3);
   v6_check(&fails, rc3.ok);
   cf_free(&cf3);
 
   class_file cf4;
   cf_init(&cf4, "Main", "java/lang/Object");
   compile_result rc4 = compile_program(
-      "function add(a, b) { return a + b; } print(add(2, 3));", &cf4);
+      "function add(a, b) { return a + b; } console.log(add(2, 3));", &cf4);
   v6_check(&fails, rc4.ok);
   v6_check(&fails, cf4.method_len == 2);
   cf_free(&cf4);
 
   class_file cf5;
   cf_init(&cf5, "Main", "java/lang/Object");
-  compile_result rc5 = compile_program("print(nope(1));", &cf5);
+  compile_result rc5 = compile_program("console.log(nope(1));", &cf5);
   v6_check(&fails, !rc5.ok);
   cf_free(&cf5);
 
   class_file cf6;
   cf_init(&cf6, "Main", "java/lang/Object");
   compile_result rc6 = compile_program(
-      "print(add(2, 3)); function add(a, b) { return a + b; }", &cf6);
+      "console.log(add(2, 3)); function add(a, b) { return a + b; }", &cf6);
   v6_check(&fails, rc6.ok);
   cf_free(&cf6);
 
   class_file cf7;
   cf_init(&cf7, "Main", "java/lang/Object");
-  compile_result rc7 = compile_program("print(1 < 2 ? \"a\" : \"b\");", &cf7);
+  compile_result rc7 =
+      compile_program("console.log(1 < 2 ? \"a\" : \"b\");", &cf7);
   v6_check(&fails, rc7.ok);
   cf_free(&cf7);
 
   class_file cf8;
   cf_init(&cf8, "Main", "java/lang/Object");
   compile_result rc8 =
-      compile_program("var x = 1; x += 2; x++; --x; print(x);", &cf8);
+      compile_program("var x = 1; x += 2; x++; --x; console.log(x);", &cf8);
   v6_check(&fails, rc8.ok);
   cf_free(&cf8);
 
   class_file cf9;
   cf_init(&cf9, "Main", "java/lang/Object");
-  compile_result rc9 = compile_program(
-      "var i = 0; while (i < 3) { if (i == 1) { i++; continue; } print(i); "
-      "i++; }",
-      &cf9);
+  compile_result rc9 = compile_program("var i = 0; while (i < 3) { if (i == 1) "
+                                       "{ i++; continue; } console.log(i); "
+                                       "i++; }",
+                                       &cf9);
   v6_check(&fails, rc9.ok);
   cf_free(&cf9);
 
   class_file cf10;
   cf_init(&cf10, "Main", "java/lang/Object");
-  compile_result rc10 = compile_program(
-      "switch (1) { case 1: print(\"a\"); break; default: print(\"b\"); }",
-      &cf10);
+  compile_result rc10 =
+      compile_program("switch (1) { case 1: console.log(\"a\"); break; "
+                      "default: console.log(\"b\"); }",
+                      &cf10);
   v6_check(&fails, rc10.ok);
   cf_free(&cf10);
 
   class_file cf11;
   cf_init(&cf11, "Main", "java/lang/Object");
   compile_result rc11 = compile_program(
-      "var o = { a: 1 }; o.a = 2; print(o.a); print(o[\"a\"]);", &cf11);
+      "var o = { a: 1 }; o.a = 2; console.log(o.a); console.log(o[\"a\"]);",
+      &cf11);
   v6_check(&fails, rc11.ok);
   cf_free(&cf11);
 
   class_file cf12;
   cf_init(&cf12, "Main", "java/lang/Object");
   compile_result rc12 = compile_program(
-      "var arr = [1, 2, 3]; print(arr[1]); print(arr.length);", &cf12);
+      "var arr = [1, 2, 3]; console.log(arr[1]); console.log(arr.length);",
+      &cf12);
   v6_check(&fails, rc12.ok);
   cf_free(&cf12);
 
@@ -219,42 +224,49 @@ int test_compile_program(void) {
 
   class_file cf15;
   cf_init(&cf15, "Main", "java/lang/Object");
-  compile_result rc15 = compile_program(
-      "var a = 1, b = 2, c = 3; print(a); print(b); print(c);", &cf15);
+  compile_result rc15 =
+      compile_program("var a = 1, b = 2, c = 3; console.log(a); "
+                      "console.log(b); console.log(c);",
+                      &cf15);
   v6_check(&fails, rc15.ok);
   cf_free(&cf15);
 
   class_file cf16;
   cf_init(&cf16, "Main", "java/lang/Object");
-  compile_result rc16 =
-      compile_program("function add(x, y) { return x + y; }"
-                      "var a = add(1, 2), b = 3; print(a); print(b);",
-                      &cf16);
+  compile_result rc16 = compile_program(
+      "function add(x, y) { return x + y; }"
+      "var a = add(1, 2), b = 3; console.log(a); console.log(b);",
+      &cf16);
   v6_check(&fails, rc16.ok);
   cf_free(&cf16);
 
   class_file cf17;
   cf_init(&cf17, "Main", "java/lang/Object");
-  compile_result rc17 = compile_program(
-      "print(typeof 1); print(typeof \"s\"); print(typeof true); "
-      "print(typeof undefined); print(typeof null); print(typeof {});",
-      &cf17);
+  compile_result rc17 =
+      compile_program("console.log(typeof 1); console.log(typeof \"s\"); "
+                      "console.log(typeof true); "
+                      "console.log(typeof undefined); console.log(typeof "
+                      "null); console.log(typeof {});",
+                      &cf17);
   v6_check(&fails, rc17.ok);
   cf_free(&cf17);
 
   class_file cf18;
   cf_init(&cf18, "Main", "java/lang/Object");
   compile_result rc18 = compile_program(
-      "var x = 5; x &= 3; print(x); print(5 | 2); print(5 ^ 1); print(~5); "
-      "print(1 << 4); print(256 >> 4); print(-1 >>> 28);",
+      "var x = 5; x &= 3; console.log(x); console.log(5 | 2); console.log(5 ^ "
+      "1); console.log(~5); "
+      "console.log(1 << 4); console.log(256 >> 4); console.log(-1 >>> 28);",
       &cf18);
   v6_check(&fails, rc18.ok);
   cf_free(&cf18);
 
   class_file cf19;
   cf_init(&cf19, "Main", "java/lang/Object");
-  compile_result rc19 = compile_program(
-      "var s = \"hello\"; print(s[0]); print(s[10]); print(s.length);", &cf19);
+  compile_result rc19 =
+      compile_program("var s = \"hello\"; console.log(s[0]); "
+                      "console.log(s[10]); console.log(s.length);",
+                      &cf19);
   v6_check(&fails, rc19.ok);
   cf_free(&cf19);
 
@@ -262,30 +274,32 @@ int test_compile_program(void) {
   cf_init(&cf20, "Main", "java/lang/Object");
   compile_result rc20 = compile_program(
       "var o = { a: 1, b: 2 };"
-      "for (var k in o) { print(k); print(o[k]); }"
-      "for (let k2 in o) { if (k2 == \"a\") continue; print(k2); }"
-      "for (var k3 in o) { if (k3 == \"b\") break; print(k3); }",
+      "for (var k in o) { console.log(k); console.log(o[k]); }"
+      "for (let k2 in o) { if (k2 == \"a\") continue; console.log(k2); }"
+      "for (var k3 in o) { if (k3 == \"b\") break; console.log(k3); }",
       &cf20);
   v6_check(&fails, rc20.ok);
   cf_free(&cf20);
 
   class_file cf21;
   cf_init(&cf21, "Main", "java/lang/Object");
-  compile_result rc21 =
-      compile_program("var arr = [1, 2, 3];"
-                      "for (var x of arr) { print(x); }"
-                      "for (let c of \"ab\") { print(c); }"
-                      "for (var y of arr) { if (y == 2) continue; print(y); }"
-                      "for (var z of arr) { if (z == 2) break; print(z); }",
-                      &cf21);
+  compile_result rc21 = compile_program(
+      "var arr = [1, 2, 3];"
+      "for (var x of arr) { console.log(x); }"
+      "for (let c of \"ab\") { console.log(c); }"
+      "for (var y of arr) { if (y == 2) continue; console.log(y); }"
+      "for (var z of arr) { if (z == 2) break; console.log(z); }",
+      &cf21);
   v6_check(&fails, rc21.ok);
   cf_free(&cf21);
 
   class_file cf22;
   cf_init(&cf22, "Main", "java/lang/Object");
   compile_result rc22 = compile_program(
-      "print(Math.abs(-5)); print(Math.floor(3.7)); print(Math.ceil(3.2)); "
-      "print(Math.sqrt(16)); print(Math.max(3, 7)); print(Math.min(3, 7));",
+      "console.log(Math.abs(-5)); console.log(Math.floor(3.7)); "
+      "console.log(Math.ceil(3.2)); "
+      "console.log(Math.sqrt(16)); console.log(Math.max(3, 7)); "
+      "console.log(Math.min(3, 7));",
       &cf22);
   v6_check(&fails, rc22.ok);
   cf_free(&cf22);
@@ -299,26 +313,26 @@ int test_compile_program(void) {
                       "  return inc;"
                       "}"
                       "var c1 = makeCounter();"
-                      "print(c1()); print(c1());",
+                      "console.log(c1()); console.log(c1());",
                       &cf23);
   v6_check(&fails, rc23.ok);
   cf_free(&cf23);
 
   class_file cf24;
   cf_init(&cf24, "Main", "java/lang/Object");
-  compile_result rc24 =
-      compile_program("var add = function(a, b) { return a + b; };"
-                      "var mul = (a, b) => a * b;"
-                      "var sq = x => x * x;"
-                      "print(add(2, 3)); print(mul(4, 5)); print(sq(6));",
-                      &cf24);
+  compile_result rc24 = compile_program(
+      "var add = function(a, b) { return a + b; };"
+      "var mul = (a, b) => a * b;"
+      "var sq = x => x * x;"
+      "console.log(add(2, 3)); console.log(mul(4, 5)); console.log(sq(6));",
+      &cf24);
   v6_check(&fails, rc24.ok);
   cf_free(&cf24);
 
   class_file cf25;
   cf_init(&cf25, "Main", "java/lang/Object");
   compile_result rc25 =
-      compile_program("print(recFact(5));"
+      compile_program("console.log(recFact(5));"
                       "function recFact(n) { if (n <= 1) return 1; return n * "
                       "recFact(n - 1); }",
                       &cf25);
@@ -338,7 +352,7 @@ int test_compile_program(void) {
                       "  speak() { return super.speak() + \" (woof)\"; }"
                       "}"
                       "var d = new Dog(\"Fido\");"
-                      "print(d.speak()); print(Animal.kind());",
+                      "console.log(d.speak()); console.log(Animal.kind());",
                       &cf26);
   v6_check(&fails, rc26.ok);
   cf_free(&cf26);
@@ -346,11 +360,11 @@ int test_compile_program(void) {
   class_file cf27;
   cf_init(&cf27, "Main", "java/lang/Object");
   compile_result rc27 = compile_program(
-      "try { throw \"boom\"; } catch (e) { print(\"caught: \" + e); }"
-      "try { print(\"a\"); } finally { print(\"b\"); }"
+      "try { throw \"boom\"; } catch (e) { console.log(\"caught: \" + e); }"
+      "try { console.log(\"a\"); } finally { console.log(\"b\"); }"
       "try {"
-      "  try { throw \"x\"; } finally { print(\"inner\"); }"
-      "} catch (e) { print(\"outer: \" + e); }",
+      "  try { throw \"x\"; } finally { console.log(\"inner\"); }"
+      "} catch (e) { console.log(\"outer: \" + e); }",
       &cf27);
   v6_check(&fails, rc27.ok);
   cf_free(&cf27);
@@ -358,9 +372,9 @@ int test_compile_program(void) {
   class_file cf28;
   cf_init(&cf28, "Main", "java/lang/Object");
   compile_result rc28 = compile_program("var name = \"world\";"
-                                        "print(`hello ${name}`);"
-                                        "print(`sum=${1 + 2}`);"
-                                        "print(`plain`);",
+                                        "console.log(`hello ${name}`);"
+                                        "console.log(`sum=${1 + 2}`);"
+                                        "console.log(`plain`);",
                                         &cf28);
   v6_check(&fails, rc28.ok);
   cf_free(&cf28);
@@ -369,18 +383,18 @@ int test_compile_program(void) {
   cf_init(&cf29, "Main", "java/lang/Object");
   compile_result rc29 = compile_program(
       "var [a, , b, ...rest] = [1, 2, 3, 4, 5];"
-      "print(a); print(b); print(rest.length);"
+      "console.log(a); console.log(b); console.log(rest.length);"
       "var { x, y: y2 = 9 } = { x: 1 };"
-      "print(x); print(y2);"
+      "console.log(x); console.log(y2);"
       "function total(...nums) {"
       "  var s = 0;"
       "  for (var i = 0; i < nums.length; i = i + 1) s = s + nums[i];"
       "  return s;"
       "}"
-      "print(total(...[1, 2, 3], 4));"
+      "console.log(total(...[1, 2, 3], 4));"
       "var merged = [...[1, 2], 3];"
       "var o = { ...{ a: 1 }, b: 2 };"
-      "print(merged.length); print(o.a); print(o.b);",
+      "console.log(merged.length); console.log(o.a); console.log(o.b);",
       &cf29);
   v6_check(&fails, rc29.ok);
   cf_free(&cf29);
@@ -389,13 +403,13 @@ int test_compile_program(void) {
   cf_init(&cf30, "Main", "java/lang/Object");
   compile_result rc30 =
       compile_program("var arr = [3, 1, 2];"
-                      "print(arr.map(function(x) { return x * 2; })[0]);"
-                      "print(arr.sort()[0]);"
-                      "print(Object.keys({ a: 1, b: 2 }).length);"
-                      "print(Array.isArray(arr));"
-                      "print(Array.of(1, 2).length);"
-                      "print(btoa(\"hi\"));"
-                      "print(atob(btoa(\"hi\")));",
+                      "console.log(arr.map(function(x) { return x * 2; })[0]);"
+                      "console.log(arr.sort()[0]);"
+                      "console.log(Object.keys({ a: 1, b: 2 }).length);"
+                      "console.log(Array.isArray(arr));"
+                      "console.log(Array.of(1, 2).length);"
+                      "console.log(btoa(\"hi\"));"
+                      "console.log(atob(btoa(\"hi\")));",
                       &cf30);
   v6_check(&fails, rc30.ok);
   cf_free(&cf30);

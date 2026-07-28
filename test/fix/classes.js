@@ -11,8 +11,8 @@ class Animal {
 }
 
 var a = new Animal("Rex");
-print(a.speak());
-print(Animal.kind());
+console.log(a.speak());
+console.log(Animal.kind());
 
 class Dog extends Animal {
   constructor(name, breed) {
@@ -25,6 +25,6 @@ class Dog extends Animal {
 }
 
 var d = new Dog("Fido", "Lab");
-print(d.speak());
-print(d.name);
-print(d.breed);
+console.log(d.speak());
+console.log(d.name);
+console.log(d.breed);

@@ -1,27 +1,27 @@
 var x = 10;
 x += 5;
-print(x);
+console.log(x);
 x -= 3;
-print(x);
+console.log(x);
 x *= 2;
-print(x);
+console.log(x);
 x /= 4;
-print(x);
+console.log(x);
 x %= 4;
-print(x);
+console.log(x);
 
 var k = 0;
-print(k++);
-print(k);
-print(++k);
-print(k);
+console.log(k++);
+console.log(k);
+console.log(++k);
+console.log(k);
 
-print(1 < 2 ? "less" : "not less");
-print(5 > 10 ? "gt" : "not gt");
+console.log(1 < 2 ? "less" : "not less");
+console.log(5 > 10 ? "gt" : "not gt");
 
-print("5" - 2);
-print("5" * "2");
-print(true + true);
-print(1 + "1");
-print("abc" < "abd");
-print(10 % 3);
+console.log("5" - 2);
+console.log("5" * "2");
+console.log(true + true);
+console.log(1 + "1");
+console.log("abc" < "abd");
+console.log(10 % 3);

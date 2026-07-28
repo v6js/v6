@@ -1,5 +1,5 @@
 var s = "hello";
-print(s[0]);
-print(s[4]);
-print(s[10]);
-print(s.length);
+console.log(s[0]);
+console.log(s[4]);
+console.log(s[10]);
+console.log(s.length);

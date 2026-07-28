@@ -1,12 +1,12 @@
 public final class V6Iterator {
   private final V6Object arr;
-  private final String str;
+  private final CharSequence str;
   private int idx = 0;
   private final int len;
 
   public V6Iterator(V6Value v) {
     if (v.tag() == V6Value.TAG_STR) {
-      str = (String)v.ref();
+      str = (CharSequence)v.ref();
       arr = null;
       len = str.length();
     } else if (v.tag() == V6Value.TAG_OBJ) {

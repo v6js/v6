@@ -1,19 +1,19 @@
 var name = "world";
-print(`hello ${name}`);
-print(`1 + 2 = ${1 + 2}`);
+console.log(`hello ${name}`);
+console.log(`1 + 2 = ${1 + 2}`);
 
 var x = 3, y = 4;
-print(`sum=${x + y} product=${x * y}`);
+console.log(`sum=${x + y} product=${x * y}`);
 
-print(`no interpolation here`);
-print(``);
+console.log(`no interpolation here`);
+console.log(``);
 
 function greet(who) {
   return `hi, ${who}!`;
 }
-print(greet("Ada"));
+console.log(greet("Ada"));
 
 var obj = { a: 1 };
-print(`obj.a is ${obj.a}`);
+console.log(`obj.a is ${obj.a}`);
 
-print(`nested: ${1 + (2 * 3)}`);
+console.log(`nested: ${1 + (2 * 3)}`);

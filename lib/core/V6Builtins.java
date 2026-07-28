@@ -34,10 +34,27 @@ public final class V6Builtins {
     return v.tag() == V6Value.TAG_OBJ ? (V6Object)v.ref() : null;
   }
 
-  public static final V6Value PRINT = fn((thisArg, args) -> {
-    System.out.println(V6Value.argAt(args, 0).toString());
+  public static final V6Value CONSOLE_LOG = fn((thisArg, args) -> {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < args.length; i++) {
+      if (i > 0)
+        sb.append(' ');
+      sb.append(args[i].toString());
+    }
+    System.out.println(sb.toString());
     return UNDEF;
   });
+
+  private static V6Object consoleObject() {
+    V6Object o = new V6Object();
+    o.set("log", CONSOLE_LOG);
+    o.set("error", CONSOLE_LOG);
+    o.set("warn", CONSOLE_LOG);
+    o.set("info", CONSOLE_LOG);
+    return o;
+  }
+
+  public static final V6Value CONSOLE = objValue(consoleObject());
 
   public static final V6Value ABS = fn1(Math::abs);
   public static final V6Value FLOOR = fn1(Math::floor);

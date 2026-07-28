@@ -1,29 +1,29 @@
 switch (2) {
   case 1:
-    print("one");
+    console.log("one");
     break;
   case 2:
-    print("two");
+    console.log("two");
   case 3:
-    print("two-or-three fallthrough");
+    console.log("two-or-three fallthrough");
     break;
   default:
-    print("default");
+    console.log("default");
 }
 
 switch (99) {
   case 1:
-    print("nope");
+    console.log("nope");
     break;
   default:
-    print("default hit");
+    console.log("default hit");
 }
 
 switch ("b") {
   case "a":
-    print("a");
+    console.log("a");
     break;
   case "b":
-    print("b");
+    console.log("b");
     break;
 }

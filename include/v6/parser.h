@@ -23,6 +23,8 @@ typedef struct local {
   int is_var;
   int is_const;
   int dead;
+  int direct_fn;
+  const char* fn_method_name;
 } local;
 
 typedef struct upvalue {
@@ -59,6 +61,7 @@ typedef struct compiler {
   int brace_depth;
   const char* super_name;
   size_t super_len;
+  int box_locals;
 } compiler;
 
 typedef struct parser {

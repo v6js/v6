@@ -1,24 +1,24 @@
 const pi = 3;
-print(pi);
+console.log(pi);
 
 {
   let scoped = "inner";
-  print(scoped);
+  console.log(scoped);
 }
 
 {
   var leaked = 42;
 }
-print(leaked);
+console.log(leaked);
 
 let outer = 1;
 {
   let outer = 2;
-  print(outer);
+  console.log(outer);
 }
-print(outer);
+console.log(outer);
 
-print(hoisted());
+console.log(hoisted());
 
 function hoisted() {
   return "works before declaration";

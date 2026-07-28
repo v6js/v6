@@ -7,6 +7,11 @@ public record V6Value(int tag, double num, Object ref) {
   public static final int TAG_STR = 5;
   public static final int TAG_FUNC = 6;
 
+  public static final V6Value UNDEF = new V6Value(TAG_UNDEF, 0, null);
+  public static final V6Value NUL = new V6Value(TAG_NULL, 0, null);
+  public static final V6Value TRUE = new V6Value(TAG_BOOL, 1, null);
+  public static final V6Value FALSE = new V6Value(TAG_BOOL, 0, null);
+
   @Override
   public String toString() {
     return switch (tag) {
@@ -14,7 +19,7 @@ public record V6Value(int tag, double num, Object ref) {
       case TAG_BOOL -> num != 0 ? "true" : "false";
       case TAG_NULL -> "null";
       case TAG_UNDEF -> "undefined";
-      case TAG_STR -> (String) ref;
+      case TAG_STR -> ref.toString();
       case TAG_FUNC -> "function () { [v6 code] }";
       default -> String.valueOf(ref);
     };
@@ -25,9 +30,14 @@ public record V6Value(int tag, double num, Object ref) {
       return "NaN";
     if (Double.isInfinite(n))
       return n > 0 ? "Infinity" : "-Infinity";
-    if (n == Math.rint(n))
-      return Long.toString((long)n);
-    return Double.toString(n);
+    if (n == 0)
+      return "0";
+    double abs = Math.abs(n);
+    if (n == Math.rint(n) && abs < 1e21)
+      return new java.math.BigDecimal(n).toBigInteger().toString();
+    if (abs >= 1e21 || abs < 1e-6)
+      return Double.toString(n);
+    return new java.math.BigDecimal(Double.toString(n)).toPlainString();
   }
 
   public boolean truthy() {
@@ -35,7 +45,7 @@ public record V6Value(int tag, double num, Object ref) {
       case TAG_NUM -> num != 0 && !Double.isNaN(num);
       case TAG_BOOL -> num != 0;
       case TAG_NULL, TAG_UNDEF -> false;
-      case TAG_STR -> !((String)ref).isEmpty();
+      case TAG_STR -> ((CharSequence)ref).length() != 0;
       default -> true;
     };
   }
@@ -45,7 +55,7 @@ public record V6Value(int tag, double num, Object ref) {
       case TAG_NUM, TAG_BOOL -> num;
       case TAG_NULL -> 0;
       case TAG_UNDEF -> Double.NaN;
-      case TAG_STR -> parseNumericString((String)ref);
+      case TAG_STR -> parseNumericString(ref.toString());
       default -> Double.NaN;
     };
   }
@@ -71,33 +81,37 @@ public record V6Value(int tag, double num, Object ref) {
     }
   }
 
+  private CharSequence asCharSeq() {
+    return tag == TAG_STR ? (CharSequence)ref : toString();
+  }
+
   public static V6Value add(V6Value a, V6Value b) {
     if (a.tag == TAG_STR || b.tag == TAG_STR)
-      return new V6Value(TAG_STR, 0, a.toString() + b.toString());
+      return new V6Value(TAG_STR, 0, new V6Rope(a.asCharSeq(), b.asCharSeq()));
     return new V6Value(TAG_NUM, a.toNumber() + b.toNumber(), null);
   }
 
   public static boolean lt(V6Value a, V6Value b) {
     if (a.tag == TAG_STR && b.tag == TAG_STR)
-      return ((String)a.ref).compareTo((String)b.ref) < 0;
+      return a.ref.toString().compareTo(b.ref.toString()) < 0;
     return a.toNumber() < b.toNumber();
   }
 
   public static boolean le(V6Value a, V6Value b) {
     if (a.tag == TAG_STR && b.tag == TAG_STR)
-      return ((String)a.ref).compareTo((String)b.ref) <= 0;
+      return a.ref.toString().compareTo(b.ref.toString()) <= 0;
     return a.toNumber() <= b.toNumber();
   }
 
   public static boolean gt(V6Value a, V6Value b) {
     if (a.tag == TAG_STR && b.tag == TAG_STR)
-      return ((String)a.ref).compareTo((String)b.ref) > 0;
+      return a.ref.toString().compareTo(b.ref.toString()) > 0;
     return a.toNumber() > b.toNumber();
   }
 
   public static boolean ge(V6Value a, V6Value b) {
     if (a.tag == TAG_STR && b.tag == TAG_STR)
-      return ((String)a.ref).compareTo((String)b.ref) >= 0;
+      return a.ref.toString().compareTo(b.ref.toString()) >= 0;
     return a.toNumber() >= b.toNumber();
   }
 
@@ -106,7 +120,7 @@ public record V6Value(int tag, double num, Object ref) {
       return false;
     return switch (a.tag) {
       case TAG_NUM, TAG_BOOL -> a.num == b.num;
-      case TAG_STR -> a.ref.equals(b.ref);
+      case TAG_STR -> a.ref.toString().equals(b.ref.toString());
       case TAG_NULL, TAG_UNDEF -> true;
       default -> a.ref == b.ref;
     };
@@ -185,7 +199,7 @@ public record V6Value(int tag, double num, Object ref) {
     case TAG_OBJ:
       return ((V6Object)ref).get(key);
     case TAG_STR:
-      String s = (String)ref;
+      CharSequence s = (CharSequence)ref;
       if (key.equals("length"))
         return new V6Value(TAG_NUM, s.length(), null);
       int idx = V6Object.parseIndex(key);

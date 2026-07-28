@@ -8,7 +8,7 @@ STD := -std=c11
 WARN := -Wall -Wextra
 INC := -Iinclude
 DEPFLAGS := -MMD -MP
-CFLAGS ?= $(STD) $(WARN) $(INC) $(DEPFLAGS) -g -O0
+CFLAGS ?= $(STD) $(WARN) $(INC) $(DEPFLAGS)
 
 ifeq ($(OS),Windows_NT)
   EXE := .exe
@@ -41,7 +41,17 @@ else
   LDLIBS :=
 endif
 
-BUILD := build
+BUILD_TYPE ?= debug
+
+ifeq ($(BUILD_TYPE),release)
+  BUILD := build/release
+  CFLAGS += -O3 -DNDEBUG -flto
+  LDFLAGS += -flto -fuse-ld=lld
+else
+  BUILD := build
+  CFLAGS += -g -O0
+endif
+
 OBJ := $(BUILD)/obj
 BIN := $(BUILD)/bin
 GEN := $(BUILD)/gen
@@ -60,21 +70,27 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/core/V6String.java lib/core/V6Number.java lib/core/V6Boolean.java \
                 lib/core/V6Iterator.java lib/core/V6Ref.java lib/core/V6Callable.java \
                 lib/core/V6Closure.java lib/core/V6Builtins.java lib/core/V6Class.java \
-                lib/core/V6Throw.java
+                lib/core/V6Throw.java lib/core/V6Rope.java
 RT_CLASS_FILES := $(patsubst lib/core/%.java,$(GEN)/%.class,$(RT_JAVA_SRCS))
 RT_TABLE_C := $(GEN)/runtime_classes.c
 
 FMT_FILES := $(wildcard src/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java)
 
-.PHONY: all test fmt clean dirs
+.PHONY: all test fmt clean dirs release bench
 
 all: $(V6_BIN)
 
+release:
+	$(MAKE) BUILD_TYPE=release all
+
+bench: release
+	bash bench/run.sh
+
 $(V6_BIN): $(RT_OBJS) $(OBJ)/main.o $(OBJ)/runtime_classes.o | dirs
-	$(CC) $(RT_OBJS) $(OBJ)/main.o $(OBJ)/runtime_classes.o -o $@ $(LDLIBS)
+	$(CC) $(LDFLAGS) $(RT_OBJS) $(OBJ)/main.o $(OBJ)/runtime_classes.o -o $@ $(LDLIBS)
 
 $(TEST_BIN): $(RT_OBJS) $(TEST_OBJS) $(OBJ)/runtime_classes.o | dirs
-	$(CC) $(RT_OBJS) $(TEST_OBJS) $(OBJ)/runtime_classes.o -o $@ $(LDLIBS)
+	$(CC) $(LDFLAGS) $(RT_OBJS) $(TEST_OBJS) $(OBJ)/runtime_classes.o -o $@ $(LDLIBS)
 
 test: $(TEST_BIN)
 	$(TEST_BIN)
@@ -107,6 +123,6 @@ fmt:
 	clang-format -i $(FMT_FILES)
 
 clean:
-	rm -rf $(BUILD)
+	rm -rf build
 
 -include $(wildcard $(OBJ)/*.d)

@@ -7,14 +7,14 @@ while (i < 10) {
   if (i == 8) {
     break;
   }
-  print(i);
+  console.log(i);
   i = i + 1;
 }
 
 for (var j = 0; j < 5; j++) {
   if (j == 2) continue;
   if (j == 4) break;
-  print("j=" + j);
+  console.log("j=" + j);
 }
 
 function sumTo(n) {
@@ -27,5 +27,5 @@ function sumTo(n) {
   return total;
 }
 
-print(sumTo(10));
-print(sumTo(100));
+console.log(sumTo(10));
+console.log(sumTo(100));
