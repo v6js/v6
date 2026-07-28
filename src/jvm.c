@@ -120,6 +120,37 @@ int v6_jvm_load_runtime(v6_jvm* jvm) {
   return jvm->value_class ? 0 : -1;
 }
 
+int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len) {
+  JNIEnv* env = jvm->env;
+
+  jclass cls = (*env)->DefineClass(env, "Main", NULL, (const jbyte*)class_bytes,
+                                   (jsize)len);
+  if (!cls)
+    return -1;
+
+  jmethodID main_m =
+      (*env)->GetStaticMethodID(env, cls, "main", "([Ljava/lang/String;)V");
+  if (!main_m)
+    return -1;
+
+  jclass str_cls = (*env)->FindClass(env, "java/lang/String");
+  if (!str_cls)
+    return -1;
+
+  jobjectArray args = (*env)->NewObjectArray(env, 0, str_cls, NULL);
+  if (!args)
+    return -1;
+
+  (*env)->CallStaticVoidMethod(env, cls, main_m, args);
+  if ((*env)->ExceptionCheck(env)) {
+    (*env)->ExceptionDescribe(env);
+    (*env)->ExceptionClear(env);
+    return -1;
+  }
+
+  return 0;
+}
+
 void v6_jvm_destroy(v6_jvm* jvm) {
   if (!jvm)
     return;
@@ -147,6 +178,13 @@ v6_jvm* v6_jvm_create(void) {
 
 int v6_jvm_load_runtime(v6_jvm* jvm) {
   (void)jvm;
+  return -1;
+}
+
+int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len) {
+  (void)jvm;
+  (void)class_bytes;
+  (void)len;
   return -1;
 }
 

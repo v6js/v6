@@ -1,4 +1,5 @@
 #include "v6/bytecode.h"
+#include "v6/jvm.h"
 #include "v6/parser.h"
 
 #include <stdio.h>
@@ -32,7 +33,7 @@ static void usage(const char* prog) {
 
 int main(int argc, char** argv) {
   const char* in_path = NULL;
-  const char* out_path = "Main.class";
+  const char* out_path = NULL;
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
@@ -71,20 +72,50 @@ int main(int argc, char** argv) {
   buf out;
   buf_init(&out);
   cf_emit(&cf, &out);
+  cf_free(&cf);
 
-  FILE* outf = fopen(out_path, "wb");
-  if (!outf) {
-    fprintf(stderr, "error: cannot write %s\n", out_path);
+  if (out_path) {
+    FILE* outf = fopen(out_path, "wb");
+    if (!outf) {
+      fprintf(stderr, "error: cannot write %s\n", out_path);
+      buf_free(&out);
+      return 1;
+    }
+    fwrite(out.data, 1, out.len, outf);
+    fclose(outf);
+    printf("wrote %s (%zu bytes)\n", out_path, out.len);
     buf_free(&out);
-    cf_free(&cf);
+    return 0;
+  }
+
+  if (!v6_jvm_available()) {
+    fprintf(stderr, "error: no JVM available (built without JAVA_HOME?)\n");
+    buf_free(&out);
     return 1;
   }
-  fwrite(out.data, 1, out.len, outf);
-  fclose(outf);
 
-  printf("wrote %s (%zu bytes)\n", out_path, out.len);
+  v6_jvm* jvm = v6_jvm_create();
+  if (!jvm) {
+    fprintf(stderr, "error: failed to create JVM\n");
+    buf_free(&out);
+    return 1;
+  }
 
+  if (v6_jvm_load_runtime(jvm) != 0) {
+    fprintf(stderr, "error: failed to load runtime\n");
+    v6_jvm_destroy(jvm);
+    buf_free(&out);
+    return 1;
+  }
+
+  int run_rc = v6_jvm_run(jvm, out.data, out.len);
   buf_free(&out);
-  cf_free(&cf);
+  v6_jvm_destroy(jvm);
+
+  if (run_rc != 0) {
+    fprintf(stderr, "error: program failed\n");
+    return 1;
+  }
+
   return 0;
 }

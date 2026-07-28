@@ -63,6 +63,7 @@ typedef enum {
   op_dmul = 0x6b,
   op_idiv = 0x6c,
   op_ddiv = 0x6f,
+  op_drem = 0x73,
   op_dneg = 0x77,
   op_i2d = 0x87,
   op_d2i = 0x8e,
@@ -91,6 +92,7 @@ typedef enum {
   op_invokeinterface = 0xb9,
   op_new = 0xbb,
   op_athrow = 0xbf,
+  op_ixor = 0x82,
 } opcode;
 
 enum {
