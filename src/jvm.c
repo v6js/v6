@@ -1,4 +1,5 @@
 #include "v6/jvm.h"
+#include "v6/runtime.h"
 
 #ifdef V6_HAVE_JNI
 
@@ -49,6 +50,7 @@ struct v6_jvm {
   JavaVM* vm;
   JNIEnv* env;
   v6_lib lib;
+  jclass value_class;
 };
 
 int v6_jvm_available(void) {
@@ -73,6 +75,7 @@ v6_jvm* v6_jvm_create(void) {
   if (!jvm)
     return NULL;
   jvm->lib = lib;
+  jvm->value_class = NULL;
 
   JavaVMInitArgs args;
   args.version = JNI_VERSION_1_8;
@@ -88,9 +91,40 @@ v6_jvm* v6_jvm_create(void) {
   return jvm;
 }
 
+int v6_jvm_load_runtime(v6_jvm* jvm) {
+  JNIEnv* env = jvm->env;
+
+  jclass cls =
+      (*env)->DefineClass(env, "V6Value", NULL, (const jbyte*)v6_runtime_class,
+                          (jsize)v6_runtime_class_len);
+  if (!cls)
+    return -1;
+
+  jmethodID ctor =
+      (*env)->GetMethodID(env, cls, "<init>", "(IDLjava/lang/Object;)V");
+  if (!ctor)
+    return -1;
+
+  jobject probe = (*env)->NewObject(env, cls, ctor, 0, 0.0, NULL);
+  if (!probe)
+    return -1;
+
+  jmethodID tag_m = (*env)->GetMethodID(env, cls, "tag", "()I");
+  if (!tag_m)
+    return -1;
+
+  if ((*env)->CallIntMethod(env, probe, tag_m) != 0)
+    return -1;
+
+  jvm->value_class = (jclass)(*env)->NewGlobalRef(env, cls);
+  return jvm->value_class ? 0 : -1;
+}
+
 void v6_jvm_destroy(v6_jvm* jvm) {
   if (!jvm)
     return;
+  if (jvm->value_class)
+    (*jvm->env)->DeleteGlobalRef(jvm->env, jvm->value_class);
   (*jvm->vm)->DestroyJavaVM(jvm->vm);
   free(jvm);
 }
@@ -109,6 +143,11 @@ int v6_jvm_available(void) {
 
 v6_jvm* v6_jvm_create(void) {
   return NULL;
+}
+
+int v6_jvm_load_runtime(v6_jvm* jvm) {
+  (void)jvm;
+  return -1;
 }
 
 void v6_jvm_destroy(v6_jvm* jvm) {

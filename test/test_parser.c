@@ -58,3 +58,43 @@ int test_parser(void) {
 
   return fails;
 }
+
+int test_compile_program(void) {
+  int fails = 0;
+
+  class_file cf;
+  cf_init(&cf, "Main", "java/lang/Object");
+
+  int rc = compile_program("1 + 2 * 3", &cf);
+  v6_check(&fails, rc == 0);
+  v6_check(&fails, cf.method_len == 1);
+
+  if (rc == 0 && cf.method_len == 1) {
+    method* m = cf.methods[0];
+    v6_check(&fails, m->code.len == 32);
+    if (m->code.len == 32) {
+      v6_check(&fails, m->code.data[0] == op_getstatic);
+      v6_check(&fails, m->code.data[3] == op_ldc2_w);
+      v6_check(&fails, m->code.data[14] == op_dstore_1);
+      v6_check(&fails, m->code.data[15] == op_new);
+      v6_check(&fails, m->code.data[18] == op_dup);
+      v6_check(&fails, m->code.data[19] == op_iconst_0);
+      v6_check(&fails, m->code.data[20] == op_dload_1);
+      v6_check(&fails, m->code.data[21] == op_aconst_null);
+      v6_check(&fails, m->code.data[22] == op_invokespecial);
+      v6_check(&fails, m->code.data[25] == op_invokevirtual);
+      v6_check(&fails, m->code.data[28] == op_invokevirtual);
+      v6_check(&fails, m->code.data[31] == op_return);
+    }
+  }
+
+  cf_free(&cf);
+
+  class_file cf2;
+  cf_init(&cf2, "Main", "java/lang/Object");
+  int rc2 = compile_program("(1 + 2", &cf2);
+  v6_check(&fails, rc2 != 0);
+  cf_free(&cf2);
+
+  return fails;
+}

@@ -78,7 +78,7 @@ int compile_program(const char* src, class_file* cf) {
   method* m =
       cf_method(cf, acc_public | acc_static, "main", "([Ljava/lang/String;)V");
   m->max_stack = 8;
-  m->max_locals = 1;
+  m->max_locals = 3;
 
   uint16_t out_idx =
       cf_fieldref(cf, "java/lang/System", "out", "Ljava/io/PrintStream;");
@@ -89,6 +89,21 @@ int compile_program(const char* src, class_file* cf) {
   int rc = compile_expr(&p2, cf, m);
   if (rc != 0)
     return rc;
+
+  op_emit(m, op_dstore_1);
+
+  uint16_t value_idx = cf_class(cf, "V6Value");
+  uint16_t ctor_idx =
+      cf_methodref(cf, "V6Value", "<init>", "(IDLjava/lang/Object;)V");
+  uint16_t num_idx = cf_methodref(cf, "V6Value", "num", "()D");
+
+  op_emit2(m, op_new, value_idx);
+  op_emit(m, op_dup);
+  op_emit(m, op_iconst_0);
+  op_emit(m, op_dload_1);
+  op_emit(m, op_aconst_null);
+  op_emit2(m, op_invokespecial, ctor_idx);
+  op_emit2(m, op_invokevirtual, num_idx);
 
   uint16_t println_idx =
       cf_methodref(cf, "java/io/PrintStream", "println", "(D)V");
