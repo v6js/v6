@@ -5,6 +5,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+enum {
+  V6_TAG_NUM = 0,
+  V6_TAG_BOOL = 1,
+  V6_TAG_NULL = 2,
+  V6_TAG_UNDEF = 3,
+  V6_TAG_OBJ = 4,
+  V6_TAG_STR = 5,
+  V6_TAG_FUNC = 6,
+};
+
 static void advance(parser* p) {
   p->prev = p->cur;
   p->cur = lex_next(&p->lex);
@@ -72,6 +82,53 @@ static int expect(parser* p, tok_kind k) {
   char msg[64];
   snprintf(msg, sizeof(msg), "expected '%s'", tok_name(k));
   error_at(p, msg);
+  return 0;
+}
+
+static int is_keyword_kind(tok_kind k) {
+  switch (k) {
+  case tok_kw_var:
+  case tok_kw_let:
+  case tok_kw_const:
+  case tok_kw_function:
+  case tok_kw_return:
+  case tok_kw_if:
+  case tok_kw_else:
+  case tok_kw_while:
+  case tok_kw_for:
+  case tok_kw_true:
+  case tok_kw_false:
+  case tok_kw_null:
+  case tok_kw_undefined:
+  case tok_kw_break:
+  case tok_kw_continue:
+  case tok_kw_switch:
+  case tok_kw_case:
+  case tok_kw_default:
+  case tok_kw_typeof:
+  case tok_kw_in:
+  case tok_kw_of:
+  case tok_kw_this:
+  case tok_kw_new:
+  case tok_kw_class:
+  case tok_kw_extends:
+  case tok_kw_super:
+  case tok_kw_try:
+  case tok_kw_catch:
+  case tok_kw_finally:
+  case tok_kw_throw:
+  case tok_kw_static:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+static int match_property_name(parser* p) {
+  if (check(p, tok_ident) || is_keyword_kind(p->cur.kind)) {
+    advance(p);
+    return 1;
+  }
   return 0;
 }
 
@@ -198,6 +255,60 @@ static void emit_truthy(compiler* c) {
   op_emit2(c->m, op_invokevirtual, idx);
 }
 
+static void emit_iconst(method* m, int n) {
+  if (n >= -1 && n <= 5) {
+    op_emit(m, (uint8_t)(op_iconst_0 + n));
+    return;
+  }
+  if (n >= -128 && n <= 127) {
+    op_emit1(m, op_bipush, (uint8_t)n);
+    return;
+  }
+  op_emit2(m, op_sipush, (uint16_t)n);
+}
+
+static uint16_t ref_class(class_file* cf) {
+  return cf_class(cf, "V6Ref");
+}
+
+static uint16_t ref_ctor(class_file* cf) {
+  return cf_methodref(cf, "V6Ref", "<init>", "(LV6Value;)V");
+}
+
+static uint16_t ref_field(class_file* cf) {
+  return cf_fieldref(cf, "V6Ref", "value", "LV6Value;");
+}
+
+static void emit_ref_push(compiler* c, int is_upvalue, uint16_t index) {
+  if (!is_upvalue) {
+    emit_aload(c->m, index);
+    return;
+  }
+  emit_aload(c->m, 0);
+  emit_iconst(c->m, (int)index);
+  op_emit(c->m, op_aaload);
+}
+
+static void emit_var_read(compiler* c, int is_upvalue, uint16_t index) {
+  emit_ref_push(c, is_upvalue, index);
+  op_emit2(c->m, op_getfield, ref_field(c->cf));
+}
+
+static void emit_var_write(compiler* c, int is_upvalue, uint16_t index) {
+  emit_ref_push(c, is_upvalue, index);
+  op_emit(c->m, op_swap);
+  op_emit(c->m, op_dup_x1);
+  op_emit2(c->m, op_putfield, ref_field(c->cf));
+}
+
+static void emit_var_declare(compiler* c, uint16_t slot) {
+  op_emit2(c->m, op_new, ref_class(c->cf));
+  op_emit(c->m, op_dup_x1);
+  op_emit(c->m, op_swap);
+  op_emit2(c->m, op_invokespecial, ref_ctor(c->cf));
+  emit_astore(c->m, slot);
+}
+
 static int hex_val(char c) {
   if (c >= '0' && c <= '9')
     return c - '0';
@@ -278,6 +389,47 @@ static char* decode_string(tok t) {
   return buf;
 }
 
+static char* decode_raw_chunk(const char* start, size_t len) {
+  char* buf = malloc(len > 0 ? len : 1);
+  size_t j = 0;
+  for (size_t i = 0; i < len; i++) {
+    char ch = start[i];
+    if (ch == '\\' && i + 1 < len) {
+      i++;
+      char e = start[i];
+      if (e == 'n') {
+        buf[j++] = '\n';
+      } else if (e == 't') {
+        buf[j++] = '\t';
+      } else if (e == 'r') {
+        buf[j++] = '\r';
+      } else if (e == '`') {
+        buf[j++] = '`';
+      } else if (e == '$') {
+        buf[j++] = '$';
+      } else if (e == 'u' && i + 4 < len) {
+        int h0 = hex_val(start[i + 1]);
+        int h1 = hex_val(start[i + 2]);
+        int h2 = hex_val(start[i + 3]);
+        int h3 = hex_val(start[i + 4]);
+        if (h0 >= 0 && h1 >= 0 && h2 >= 0 && h3 >= 0) {
+          uint32_t cp = (uint32_t)((h0 << 12) | (h1 << 8) | (h2 << 4) | h3);
+          j += encode_utf8(cp, buf + j);
+          i += 4;
+        } else {
+          buf[j++] = e;
+        }
+      } else {
+        buf[j++] = e;
+      }
+    } else {
+      buf[j++] = ch;
+    }
+  }
+  buf[j] = '\0';
+  return buf;
+}
+
 static char* dup_tok(tok t) {
   char* s = malloc(t.len + 1);
   memcpy(s, t.start, t.len);
@@ -298,7 +450,7 @@ static local* find_local_entry(compiler* c, const char* name, size_t len) {
 static int find_slot(compiler* c, const char* name, size_t len, uint16_t* out) {
   for (int i = 0; i < c->param_count; i++) {
     if (c->params[i].len == len && memcmp(c->params[i].name, name, len) == 0) {
-      *out = (uint16_t)i;
+      *out = c->params[i].slot;
       return 1;
     }
   }
@@ -321,127 +473,137 @@ static void add_local(compiler* c, tok name, uint16_t slot, int is_var,
   c->local_count++;
 }
 
-static fn_entry* find_fn(compiler* c, const char* name, size_t len) {
-  for (size_t i = 0; i < c->fn_count; i++) {
-    if (c->fns[i].len == len && memcmp(c->fns[i].name, name, len) == 0)
-      return &c->fns[i];
+typedef enum { var_local, var_upvalue, var_not_found } var_kind;
+
+typedef struct {
+  var_kind kind;
+  uint16_t index;
+} var_ref;
+
+static var_ref resolve_var(compiler* c, const char* name, size_t len) {
+  uint16_t slot;
+  if (find_slot(c, name, len, &slot)) {
+    var_ref vr;
+    vr.kind = var_local;
+    vr.index = slot;
+    return vr;
   }
-  return NULL;
-}
-
-static void build_descriptor(char* buf, int param_count) {
-  char* p = buf;
-  *p++ = '(';
-  for (int i = 0; i < param_count; i++) {
-    memcpy(p, "LV6Value;", 9);
-    p += 9;
+  if (!c->parent) {
+    var_ref vr;
+    vr.kind = var_not_found;
+    vr.index = 0;
+    return vr;
   }
-  *p++ = ')';
-  memcpy(p, "LV6Value;", 9);
-  p += 9;
-  *p = '\0';
+  for (int i = 0; i < c->upvalue_count; i++) {
+    if (c->upvalues[i].len == len &&
+        memcmp(c->upvalues[i].name, name, len) == 0) {
+      var_ref vr;
+      vr.kind = var_upvalue;
+      vr.index = (uint16_t)i;
+      return vr;
+    }
+  }
+  var_ref pref = resolve_var(c->parent, name, len);
+  if (pref.kind == var_not_found)
+    return pref;
+  upvalue* uv = &c->upvalues[c->upvalue_count];
+  uv->name = name;
+  uv->len = len;
+  uv->from_parent_local = pref.kind == var_local;
+  uv->parent_index = pref.index;
+  var_ref vr;
+  vr.kind = var_upvalue;
+  vr.index = (uint16_t)c->upvalue_count;
+  c->upvalue_count++;
+  return vr;
 }
 
-static void build_print_fn(compiler* c) {
-  method* m = cf_method(c->cf, acc_static, "print", "(LV6Value;)LV6Value;");
-  m->max_stack = 8;
-  m->max_locals = 1;
-
-  uint16_t out_idx =
-      cf_fieldref(c->cf, "java/lang/System", "out", "Ljava/io/PrintStream;");
-  uint16_t tostring_idx =
-      cf_methodref(c->cf, "V6Value", "toString", "()Ljava/lang/String;");
-  uint16_t println_idx = cf_methodref(c->cf, "java/io/PrintStream", "println",
-                                      "(Ljava/lang/String;)V");
-
-  op_emit2(m, op_getstatic, out_idx);
-  op_emit(m, op_aload_0);
-  op_emit2(m, op_invokevirtual, tostring_idx);
-  op_emit2(m, op_invokevirtual, println_idx);
-  emit_box_const(c->cf, m, op_iconst_3, op_dconst_0);
-  op_emit(m, op_areturn);
-
-  c->fns[c->fn_count].name = "print";
-  c->fns[c->fn_count].len = 5;
-  c->fns[c->fn_count].param_count = 1;
-  c->fn_count++;
+static void emit_var_read_ref(compiler* c, var_ref vr) {
+  emit_var_read(c, vr.kind == var_upvalue, vr.index);
 }
 
-static void build_math_fn1(compiler* c, const char* name,
-                           const char* math_name) {
-  method* m = cf_method(c->cf, acc_static, name, "(LV6Value;)LV6Value;");
-  m->max_stack = 8;
-  m->max_locals = 3;
-
-  uint16_t tonum_idx = cf_methodref(c->cf, "V6Value", "toNumber", "()D");
-  uint16_t math_idx = cf_methodref(c->cf, "java/lang/Math", math_name, "(D)D");
-
-  op_emit(m, op_aload_0);
-  op_emit2(m, op_invokevirtual, tonum_idx);
-  op_emit2(m, op_invokestatic, math_idx);
-  emit_box_tag_m(c->cf, m, 1, op_iconst_0);
-  op_emit(m, op_areturn);
-
-  c->fns[c->fn_count].name = name;
-  c->fns[c->fn_count].len = strlen(name);
-  c->fns[c->fn_count].param_count = 1;
-  c->fn_count++;
-}
-
-static void build_math_fn2(compiler* c, const char* name,
-                           const char* math_name) {
-  method* m =
-      cf_method(c->cf, acc_static, name, "(LV6Value;LV6Value;)LV6Value;");
-  m->max_stack = 8;
-  m->max_locals = 4;
-
-  uint16_t tonum_idx = cf_methodref(c->cf, "V6Value", "toNumber", "()D");
-  uint16_t math_idx = cf_methodref(c->cf, "java/lang/Math", math_name, "(DD)D");
-
-  op_emit(m, op_aload_0);
-  op_emit2(m, op_invokevirtual, tonum_idx);
-  op_emit(m, op_aload_1);
-  op_emit2(m, op_invokevirtual, tonum_idx);
-  op_emit2(m, op_invokestatic, math_idx);
-  emit_box_tag_m(c->cf, m, 2, op_iconst_0);
-  op_emit(m, op_areturn);
-
-  c->fns[c->fn_count].name = name;
-  c->fns[c->fn_count].len = strlen(name);
-  c->fns[c->fn_count].param_count = 2;
-  c->fn_count++;
+static void emit_var_write_ref(compiler* c, var_ref vr) {
+  emit_var_write(c, vr.kind == var_upvalue, vr.index);
 }
 
 static void parse_expr(parser* p, compiler* c);
 static void parse_object_literal(parser* p, compiler* c);
 static void parse_array_literal(parser* p, compiler* c);
 static void parse_primary(parser* p, compiler* c);
+static void compile_closure_value(parser* p, compiler* c, int is_arrow,
+                                  int parens_params);
+
+static int peek_is_arrow(parser* p) {
+  lexer save_lex = p->lex;
+  tok after = lex_next(&p->lex);
+  int is_arrow = after.kind == tok_arrow;
+  p->lex = save_lex;
+  return is_arrow;
+}
+
+static int peek_arrow_after_parens(parser* p) {
+  lexer save_lex = p->lex;
+  tok save_cur = p->cur;
+  tok save_prev = p->prev;
+
+  int depth = 0;
+  tok t = p->cur;
+  for (;;) {
+    if (t.kind == tok_lparen) {
+      depth++;
+    } else if (t.kind == tok_rparen) {
+      depth--;
+      if (depth == 0) {
+        t = lex_next(&p->lex);
+        break;
+      }
+    } else if (t.kind == tok_eof) {
+      break;
+    }
+    t = lex_next(&p->lex);
+  }
+  int is_arrow = t.kind == tok_arrow;
+
+  p->lex = save_lex;
+  p->cur = save_cur;
+  p->prev = save_prev;
+  return is_arrow;
+}
 
 static uint16_t object_class(class_file* cf) {
   return cf_class(cf, "V6Object");
 }
 
-static void emit_box_ref_computed(compiler* c, uint8_t tag_op) {
+static void emit_box_ref_computed(compiler* c, int tag_val) {
   emit_astore(c->m, c->scratch_slot);
   op_emit2(c->m, op_new, value_class(c->cf));
   op_emit(c->m, op_dup);
-  op_emit(c->m, tag_op);
+  emit_iconst(c->m, tag_val);
   op_emit(c->m, op_dconst_0);
   emit_aload(c->m, c->scratch_slot);
   op_emit2(c->m, op_invokespecial, value_ctor(c->cf));
 }
 
 static void emit_box_object_ref(compiler* c) {
-  emit_box_ref_computed(c, op_iconst_4);
+  emit_box_ref_computed(c, V6_TAG_OBJ);
 }
 
 static void parse_object_entry(parser* p, compiler* c) {
+  if (match(p, tok_ellipsis)) {
+    op_emit(c->m, op_dup);
+    parse_expr(p, c);
+    uint16_t spread_idx =
+        cf_methodref(c->cf, "V6Object", "spreadFrom", "(LV6Value;)V");
+    op_emit2(c->m, op_invokevirtual, spread_idx);
+    return;
+  }
+
   char* key;
   if (check(p, tok_str)) {
     tok t = p->cur;
     advance(p);
     key = decode_string(t);
-  } else if (expect(p, tok_ident)) {
+  } else if (match_property_name(p)) {
     key = dup_tok(p->prev);
   } else {
     return;
@@ -490,15 +652,21 @@ static void parse_array_literal(parser* p, compiler* c) {
 
   if (!check(p, tok_rbracket)) {
     uint16_t push_idx = cf_methodref(c->cf, "V6Object", "push", "(LV6Value;)V");
-    op_emit(c->m, op_dup);
-    parse_expr(p, c);
-    op_emit2(c->m, op_invokevirtual, push_idx);
-    while (match(p, tok_comma)) {
+    uint16_t pushall_idx =
+        cf_methodref(c->cf, "V6Object", "pushAll", "(LV6Value;)V");
+    for (;;) {
       if (check(p, tok_rbracket))
         break;
       op_emit(c->m, op_dup);
-      parse_expr(p, c);
-      op_emit2(c->m, op_invokevirtual, push_idx);
+      if (match(p, tok_ellipsis)) {
+        parse_expr(p, c);
+        op_emit2(c->m, op_invokevirtual, pushall_idx);
+      } else {
+        parse_expr(p, c);
+        op_emit2(c->m, op_invokevirtual, push_idx);
+      }
+      if (!match(p, tok_comma))
+        break;
     }
   }
   expect(p, tok_rbracket);
@@ -506,13 +674,65 @@ static void parse_array_literal(parser* p, compiler* c) {
   emit_box_object_ref(c);
 }
 
+static void emit_dup_second_from_top(method* m) {
+  op_emit(m, op_swap);
+  op_emit(m, op_dup_x1);
+  op_emit(m, op_swap);
+}
+
+static void emit_insert_undefined_this(compiler* c) {
+  emit_box_const(c->cf, c->m, op_iconst_3, op_dconst_0);
+  op_emit(c->m, op_swap);
+}
+
+static void emit_args_array(parser* p, compiler* c) {
+  uint16_t arr_cls = cf_class(c->cf, "V6Array");
+  uint16_t arr_ctor = cf_methodref(c->cf, "V6Array", "<init>", "()V");
+  uint16_t push_idx = cf_methodref(c->cf, "V6Object", "push", "(LV6Value;)V");
+  uint16_t pushall_idx =
+      cf_methodref(c->cf, "V6Object", "pushAll", "(LV6Value;)V");
+  uint16_t tovalarr_idx =
+      cf_methodref(c->cf, "V6Object", "toValueArray", "()[LV6Value;");
+
+  op_emit2(c->m, op_new, arr_cls);
+  op_emit(c->m, op_dup);
+  op_emit2(c->m, op_invokespecial, arr_ctor);
+
+  if (!check(p, tok_rparen)) {
+    for (;;) {
+      op_emit(c->m, op_dup);
+      if (match(p, tok_ellipsis)) {
+        parse_expr(p, c);
+        op_emit2(c->m, op_invokevirtual, pushall_idx);
+      } else {
+        parse_expr(p, c);
+        op_emit2(c->m, op_invokevirtual, push_idx);
+      }
+      if (!match(p, tok_comma))
+        break;
+    }
+  }
+  expect(p, tok_rparen);
+  op_emit2(c->m, op_invokevirtual, tovalarr_idx);
+}
+
+static void emit_call_args_and_invoke(parser* p, compiler* c) {
+  op_emit(c->m, op_swap);
+  emit_args_array(p, c);
+  uint16_t call_idx =
+      cf_methodref(c->cf, "V6Value", "call", "(LV6Value;[LV6Value;)LV6Value;");
+  op_emit2(c->m, op_invokevirtual, call_idx);
+}
+
 static void parse_postfix(parser* p, compiler* c) {
   parse_primary(p, c);
   for (;;) {
     if (check(p, tok_dot) || check(p, tok_lbracket)) {
       if (match(p, tok_dot)) {
-        if (!expect(p, tok_ident))
+        if (!match_property_name(p)) {
+          error_at(p, "expected property name");
           return;
+        }
         char* key = dup_tok(p->prev);
         uint16_t key_idx = cf_string(c->cf, key);
         free(key);
@@ -535,46 +755,187 @@ static void parse_postfix(parser* p, compiler* c) {
         return;
       }
 
+      if (check(p, tok_lparen)) {
+        emit_dup_second_from_top(c->m);
+        uint16_t get_idx = cf_methodref(c->cf, "V6Value", "getProp",
+                                        "(Ljava/lang/String;)LV6Value;");
+        op_emit2(c->m, op_invokevirtual, get_idx);
+        advance(p);
+        emit_call_args_and_invoke(p, c);
+        continue;
+      }
+
       uint16_t get_idx = cf_methodref(c->cf, "V6Value", "getProp",
                                       "(Ljava/lang/String;)LV6Value;");
       op_emit2(c->m, op_invokevirtual, get_idx);
+    } else if (check(p, tok_lparen)) {
+      advance(p);
+      emit_insert_undefined_this(c);
+      emit_call_args_and_invoke(p, c);
     } else {
       break;
     }
   }
 }
 
-static void parse_call(parser* p, compiler* c, tok name) {
-  fn_entry* fn = find_fn(c, name.start, name.len);
-  if (!fn) {
-    error_at(p, "call to undeclared function");
-    return;
-  }
+static void emit_string_value(compiler* c, const char* s) {
+  uint16_t str_idx = cf_string(c->cf, s);
+  op_emit2(c->m, op_new, value_class(c->cf));
+  op_emit(c->m, op_dup);
+  op_emit(c->m, op_iconst_5);
+  op_emit(c->m, op_dconst_0);
+  op_emit2(c->m, op_ldc_w, str_idx);
+  op_emit2(c->m, op_invokespecial, value_ctor(c->cf));
+}
 
-  int argc = 0;
-  if (!check(p, tok_rparen)) {
-    parse_expr(p, c);
-    argc++;
-    while (match(p, tok_comma)) {
-      parse_expr(p, c);
-      argc++;
+static void parse_template_literal(parser* p, compiler* c) {
+  tok t = p->cur;
+  advance(p);
+  const char* s = t.start;
+  size_t len = t.len;
+
+  emit_string_value(c, "");
+  uint16_t add_idx =
+      cf_methodref(c->cf, "V6Value", "add", "(LV6Value;LV6Value;)LV6Value;");
+
+  size_t i = 1;
+  size_t chunk_start = 1;
+  while (i < len - 1) {
+    if (s[i] == '\\' && i + 1 < len - 1) {
+      i += 2;
+      continue;
     }
-  }
-  if (!expect(p, tok_rparen))
-    return;
+    if (s[i] == '$' && i + 1 < len - 1 && s[i + 1] == '{') {
+      if (i > chunk_start) {
+        char* dec = decode_raw_chunk(s + chunk_start, i - chunk_start);
+        emit_string_value(c, dec);
+        free(dec);
+        op_emit2(c->m, op_invokestatic, add_idx);
+      }
 
-  if (argc != fn->param_count) {
-    error_at(p, "wrong number of arguments");
+      size_t expr_start = i + 2;
+      int depth = 1;
+      size_t j = expr_start;
+      while (j < len - 1 && depth > 0) {
+        if (s[j] == '{') {
+          depth++;
+        } else if (s[j] == '}') {
+          depth--;
+          if (depth == 0)
+            break;
+        } else if (s[j] == '"' || s[j] == '\'') {
+          char q = s[j];
+          j++;
+          while (j < len - 1 && s[j] != q) {
+            if (s[j] == '\\' && j + 1 < len - 1)
+              j++;
+            j++;
+          }
+        }
+        j++;
+      }
+
+      parser ep;
+      parser_init(&ep, s + expr_start);
+      parse_expr(&ep, c);
+      op_emit2(c->m, op_invokestatic, add_idx);
+
+      i = j + 1;
+      chunk_start = i;
+      continue;
+    }
+    i++;
+  }
+
+  if (i > chunk_start) {
+    char* dec = decode_raw_chunk(s + chunk_start, i - chunk_start);
+    emit_string_value(c, dec);
+    free(dec);
+    op_emit2(c->m, op_invokestatic, add_idx);
+  }
+}
+
+static void parse_new(parser* p, compiler* c) {
+  if (!expect(p, tok_ident))
+    return;
+  tok name = p->prev;
+  var_ref vr = resolve_var(c, name.start, name.len);
+  if (vr.kind == var_not_found) {
+    error_at(p, "undeclared variable");
+    return;
+  }
+  emit_var_read_ref(c, vr);
+
+  if (match(p, tok_lparen)) {
+    emit_args_array(p, c);
+  } else {
+    emit_iconst(c->m, 0);
+    op_emit2(c->m, op_anewarray, value_class(c->cf));
+  }
+
+  uint16_t construct_idx = cf_methodref(c->cf, "V6Value", "construct",
+                                        "(LV6Value;[LV6Value;)LV6Value;");
+  op_emit2(c->m, op_invokestatic, construct_idx);
+}
+
+static void parse_super(parser* p, compiler* c) {
+  if (!c->super_name) {
+    error_at(p, "'super' outside class");
+    return;
+  }
+  var_ref base_vr = resolve_var(c, c->super_name, c->super_len);
+  var_ref this_vr = resolve_var(c, "this", 4);
+  if (base_vr.kind == var_not_found || this_vr.kind == var_not_found) {
+    error_at(p, "'super' outside class");
     return;
   }
 
-  char desc[16 + 9 * v6_max_params];
-  build_descriptor(desc, fn->param_count);
-  uint16_t idx = cf_methodref(c->cf, "Main", fn->name, desc);
-  op_emit2(c->m, op_invokestatic, idx);
+  if (match(p, tok_lparen)) {
+    emit_var_read_ref(c, base_vr);
+    emit_var_read_ref(c, this_vr);
+    emit_args_array(p, c);
+    uint16_t sc_idx = cf_methodref(c->cf, "V6Value", "superConstruct",
+                                   "(LV6Value;LV6Value;[LV6Value;)V");
+    op_emit2(c->m, op_invokestatic, sc_idx);
+    emit_box_const(c->cf, c->m, op_iconst_3, op_dconst_0);
+    return;
+  }
+
+  if (!expect(p, tok_dot))
+    return;
+  if (!match_property_name(p))
+    return;
+  char* key = dup_tok(p->prev);
+  uint16_t key_idx = cf_string(c->cf, key);
+  free(key);
+
+  uint16_t proto_str = cf_string(c->cf, "prototype");
+  uint16_t getprop_idx = cf_methodref(c->cf, "V6Value", "getProp",
+                                      "(Ljava/lang/String;)LV6Value;");
+  emit_var_read_ref(c, base_vr);
+  op_emit2(c->m, op_ldc_w, proto_str);
+  op_emit2(c->m, op_invokevirtual, getprop_idx);
+  op_emit2(c->m, op_ldc_w, key_idx);
+  op_emit2(c->m, op_invokevirtual, getprop_idx);
+  emit_var_read_ref(c, this_vr);
+  op_emit(c->m, op_swap);
+
+  if (!expect(p, tok_lparen))
+    return;
+  emit_call_args_and_invoke(p, c);
 }
 
 static void parse_primary(parser* p, compiler* c) {
+  if (match(p, tok_kw_new)) {
+    parse_new(p, c);
+    return;
+  }
+
+  if (match(p, tok_kw_super)) {
+    parse_super(p, c);
+    return;
+  }
+
   if (match(p, tok_num)) {
     uint16_t idx = cf_double(c->cf, p->prev.num);
     op_emit2(c->m, op_new, value_class(c->cf));
@@ -610,15 +971,13 @@ static void parse_primary(parser* p, compiler* c) {
     tok t = p->cur;
     advance(p);
     char* s = decode_string(t);
-    uint16_t str_idx = cf_string(c->cf, s);
+    emit_string_value(c, s);
     free(s);
+    return;
+  }
 
-    op_emit2(c->m, op_new, value_class(c->cf));
-    op_emit(c->m, op_dup);
-    op_emit(c->m, op_iconst_5);
-    op_emit(c->m, op_dconst_0);
-    op_emit2(c->m, op_ldc_w, str_idx);
-    op_emit2(c->m, op_invokespecial, value_ctor(c->cf));
+  if (check(p, tok_template)) {
+    parse_template_literal(p, c);
     return;
   }
 
@@ -628,8 +987,8 @@ static void parse_primary(parser* p, compiler* c) {
     if (!expect(p, tok_ident))
       return;
     tok name = p->prev;
-    uint16_t slot;
-    if (!find_slot(c, name.start, name.len, &slot)) {
+    var_ref vr = resolve_var(c, name.start, name.len);
+    if (vr.kind == var_not_found) {
       error_at(p, "undeclared variable");
       return;
     }
@@ -638,33 +997,38 @@ static void parse_primary(parser* p, compiler* c) {
       error_at(p, "assignment to constant variable");
       return;
     }
-    emit_aload(c->m, slot);
+    emit_var_read_ref(c, vr);
     emit_to_number(c);
     op_emit(c->m, op_dconst_1);
     op_emit(c->m, is_inc ? op_dadd : op_dsub);
     emit_box_tag(c, op_iconst_0);
-    op_emit(c->m, op_dup);
-    emit_astore(c->m, slot);
+    emit_var_write_ref(c, vr);
+    return;
+  }
+
+  if (match(p, tok_kw_this)) {
+    var_ref vr = resolve_var(c, "this", 4);
+    if (vr.kind == var_not_found)
+      emit_box_const(c->cf, c->m, op_iconst_3, op_dconst_0);
+    else
+      emit_var_read_ref(c, vr);
+    return;
+  }
+
+  if (match(p, tok_kw_function)) {
+    if (check(p, tok_ident))
+      advance(p);
+    compile_closure_value(p, c, 0, 1);
+    return;
+  }
+
+  if (check(p, tok_ident) && peek_is_arrow(p)) {
+    compile_closure_value(p, c, 1, 0);
     return;
   }
 
   if (match(p, tok_ident)) {
     tok name = p->prev;
-
-    if (match(p, tok_lparen)) {
-      parse_call(p, c, name);
-      return;
-    }
-
-    if (check(p, tok_dot) || check(p, tok_lbracket)) {
-      uint16_t slot;
-      if (!find_slot(c, name.start, name.len, &slot)) {
-        error_at(p, "undeclared variable");
-        return;
-      }
-      emit_aload(c->m, slot);
-      return;
-    }
 
     if (check(p, tok_assign) || check(p, tok_plus_eq) ||
         check(p, tok_minus_eq) || check(p, tok_star_eq) ||
@@ -675,8 +1039,8 @@ static void parse_primary(parser* p, compiler* c) {
       tok_kind op = p->cur.kind;
       advance(p);
 
-      uint16_t slot;
-      if (!find_slot(c, name.start, name.len, &slot)) {
+      var_ref vr = resolve_var(c, name.start, name.len);
+      if (vr.kind == var_not_found) {
         error_at(p, "undeclared variable");
         return;
       }
@@ -689,14 +1053,14 @@ static void parse_primary(parser* p, compiler* c) {
       if (op == tok_assign) {
         parse_expr(p, c);
       } else if (op == tok_plus_eq) {
-        emit_aload(c->m, slot);
+        emit_var_read_ref(c, vr);
         parse_expr(p, c);
         uint16_t idx = cf_methodref(c->cf, "V6Value", "add",
                                     "(LV6Value;LV6Value;)LV6Value;");
         op_emit2(c->m, op_invokestatic, idx);
       } else if (op == tok_amp_eq || op == tok_pipe_eq || op == tok_caret_eq ||
                  op == tok_shl_eq || op == tok_shr_eq || op == tok_ushr_eq) {
-        emit_aload(c->m, slot);
+        emit_var_read_ref(c, vr);
         parse_expr(p, c);
         const char* mname = op == tok_amp_eq     ? "bitAnd"
                             : op == tok_pipe_eq  ? "bitOr"
@@ -708,7 +1072,7 @@ static void parse_primary(parser* p, compiler* c) {
                                     "(LV6Value;LV6Value;)LV6Value;");
         op_emit2(c->m, op_invokestatic, idx);
       } else {
-        emit_aload(c->m, slot);
+        emit_var_read_ref(c, vr);
         emit_to_number(c);
         parse_expr(p, c);
         emit_to_number(c);
@@ -721,16 +1085,15 @@ static void parse_primary(parser* p, compiler* c) {
         emit_box_tag(c, op_iconst_0);
       }
 
-      op_emit(c->m, op_dup);
-      emit_astore(c->m, slot);
+      emit_var_write_ref(c, vr);
       return;
     }
 
     if (check(p, tok_plus_plus) || check(p, tok_minus_minus)) {
       int is_inc = check(p, tok_plus_plus);
       advance(p);
-      uint16_t slot;
-      if (!find_slot(c, name.start, name.len, &slot)) {
+      var_ref vr = resolve_var(c, name.start, name.len);
+      if (vr.kind == var_not_found) {
         error_at(p, "undeclared variable");
         return;
       }
@@ -739,22 +1102,28 @@ static void parse_primary(parser* p, compiler* c) {
         error_at(p, "assignment to constant variable");
         return;
       }
-      emit_aload(c->m, slot);
+      emit_var_read_ref(c, vr);
       op_emit(c->m, op_dup);
       emit_to_number(c);
       op_emit(c->m, op_dconst_1);
       op_emit(c->m, is_inc ? op_dadd : op_dsub);
       emit_box_tag(c, op_iconst_0);
-      emit_astore(c->m, slot);
+      emit_var_write_ref(c, vr);
+      op_emit(c->m, op_pop);
       return;
     }
 
-    uint16_t slot;
-    if (!find_slot(c, name.start, name.len, &slot)) {
+    var_ref vr = resolve_var(c, name.start, name.len);
+    if (vr.kind == var_not_found) {
       error_at(p, "undeclared variable");
       return;
     }
-    emit_aload(c->m, slot);
+    emit_var_read_ref(c, vr);
+    return;
+  }
+
+  if (check(p, tok_lparen) && peek_arrow_after_parens(p)) {
+    compile_closure_value(p, c, 1, 1);
     return;
   }
 
@@ -808,7 +1177,7 @@ static void parse_unary(parser* p, compiler* c) {
     uint16_t idx =
         cf_methodref(c->cf, "V6Value", "typeOf", "()Ljava/lang/String;");
     op_emit2(c->m, op_invokevirtual, idx);
-    emit_box_ref_computed(c, op_iconst_5);
+    emit_box_ref_computed(c, V6_TAG_STR);
     return;
   }
   parse_postfix(p, c);
@@ -1003,14 +1372,15 @@ static void prescan_decls(compiler* c, const char* src, int hoist_functions);
 static void parse_one_declarator_named(parser* p, compiler* c, tok_kind kind,
                                        tok name) {
   if (kind == tok_kw_var) {
-    uint16_t slot;
-    if (!find_slot(c, name.start, name.len, &slot)) {
+    var_ref vr = resolve_var(c, name.start, name.len);
+    if (vr.kind == var_not_found) {
       error_at(p, "internal: hoisted var missing");
       return;
     }
     if (match(p, tok_assign)) {
       parse_expr(p, c);
-      emit_astore(c->m, slot);
+      emit_var_write_ref(c, vr);
+      op_emit(c->m, op_pop);
     }
     return;
   }
@@ -1021,11 +1391,151 @@ static void parse_one_declarator_named(parser* p, compiler* c, tok_kind kind,
     emit_box_const(c->cf, c->m, op_iconst_3, op_dconst_0);
 
   uint16_t slot = c->next_local_slot++;
-  emit_astore(c->m, slot);
+  emit_var_declare(c, slot);
   add_local(c, name, slot, 0, kind == tok_kw_const);
 }
 
+static void skip_balanced(parser* p, tok_kind open, tok_kind close) {
+  int depth = 1;
+  while (depth > 0 && !check(p, tok_eof)) {
+    if (check(p, open))
+      depth++;
+    else if (check(p, close))
+      depth--;
+    advance(p);
+  }
+}
+
+static void bind_pattern_target(parser* p, compiler* c, tok_kind kind,
+                                tok name) {
+  if (kind == tok_kw_var) {
+    var_ref vr = resolve_var(c, name.start, name.len);
+    if (vr.kind == var_not_found) {
+      error_at(p, "internal: hoisted var missing");
+      return;
+    }
+    emit_var_write_ref(c, vr);
+    op_emit(c->m, op_pop);
+  } else {
+    uint16_t slot = c->next_local_slot++;
+    emit_var_declare(c, slot);
+    add_local(c, name, slot, 0, kind == tok_kw_const);
+  }
+}
+
+static void emit_pattern_default(parser* p, compiler* c) {
+  if (!match(p, tok_assign))
+    return;
+  op_emit(c->m, op_dup);
+  uint16_t isundef_idx = cf_methodref(c->cf, "V6Value", "isUndefined", "()Z");
+  op_emit2(c->m, op_invokevirtual, isundef_idx);
+  size_t skip_jump = op_pos(c->m);
+  op_emit2(c->m, op_ifeq, 0);
+  op_emit(c->m, op_pop);
+  parse_expr(p, c);
+  size_t after = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(skip_jump + 1), (uint16_t)(after - skip_jump));
+}
+
+static void parse_array_pattern(parser* p, compiler* c, tok_kind kind,
+                                uint16_t src_slot) {
+  uint16_t getprop_idx = cf_methodref(c->cf, "V6Value", "getProp",
+                                      "(Ljava/lang/String;)LV6Value;");
+  int idx = 0;
+  for (;;) {
+    if (check(p, tok_rbracket))
+      break;
+    if (match(p, tok_comma)) {
+      idx++;
+      continue;
+    }
+    if (match(p, tok_ellipsis)) {
+      if (!expect(p, tok_ident))
+        return;
+      tok name = p->prev;
+      uint16_t restfrom_idx =
+          cf_methodref(c->cf, "V6Value", "restFrom", "(I)LV6Array;");
+      emit_aload(c->m, src_slot);
+      emit_iconst(c->m, idx);
+      op_emit2(c->m, op_invokevirtual, restfrom_idx);
+      emit_box_object_ref(c);
+      bind_pattern_target(p, c, kind, name);
+      break;
+    }
+    if (!expect(p, tok_ident))
+      return;
+    tok name = p->prev;
+
+    char idxbuf[16];
+    snprintf(idxbuf, sizeof(idxbuf), "%d", idx);
+    uint16_t key_idx = cf_string(c->cf, idxbuf);
+    emit_aload(c->m, src_slot);
+    op_emit2(c->m, op_ldc_w, key_idx);
+    op_emit2(c->m, op_invokevirtual, getprop_idx);
+
+    emit_pattern_default(p, c);
+    bind_pattern_target(p, c, kind, name);
+    idx++;
+    if (!match(p, tok_comma))
+      break;
+  }
+}
+
+static void parse_object_pattern(parser* p, compiler* c, tok_kind kind,
+                                 uint16_t src_slot) {
+  uint16_t getprop_idx = cf_methodref(c->cf, "V6Value", "getProp",
+                                      "(Ljava/lang/String;)LV6Value;");
+  for (;;) {
+    if (check(p, tok_rbrace))
+      break;
+    if (!expect(p, tok_ident))
+      return;
+    tok key_name = p->prev;
+    tok target_name = key_name;
+    if (match(p, tok_colon)) {
+      if (!expect(p, tok_ident))
+        return;
+      target_name = p->prev;
+    }
+
+    char* keystr = dup_tok(key_name);
+    uint16_t key_idx = cf_string(c->cf, keystr);
+    free(keystr);
+
+    emit_aload(c->m, src_slot);
+    op_emit2(c->m, op_ldc_w, key_idx);
+    op_emit2(c->m, op_invokevirtual, getprop_idx);
+
+    emit_pattern_default(p, c);
+    bind_pattern_target(p, c, kind, target_name);
+    if (!match(p, tok_comma))
+      break;
+  }
+}
+
 static void parse_one_declarator(parser* p, compiler* c, tok_kind kind) {
+  if (check(p, tok_lbracket) || check(p, tok_lbrace)) {
+    int is_array = check(p, tok_lbracket);
+    tok_kind open = is_array ? tok_lbracket : tok_lbrace;
+    tok_kind close = is_array ? tok_rbracket : tok_rbrace;
+    advance(p);
+    const char* pattern_start = p->cur.start;
+    skip_balanced(p, open, close);
+    if (!expect(p, tok_assign))
+      return;
+    parse_expr(p, c);
+    uint16_t src_slot = c->next_local_slot++;
+    emit_astore(c->m, src_slot);
+
+    parser pp;
+    parser_init(&pp, pattern_start);
+    if (is_array)
+      parse_array_pattern(&pp, c, kind, src_slot);
+    else
+      parse_object_pattern(&pp, c, kind, src_slot);
+    return;
+  }
+
   if (!expect(p, tok_ident))
     return;
   parse_one_declarator_named(p, c, kind, p->prev);
@@ -1039,9 +1549,11 @@ static void parse_var_decl(parser* p, compiler* c, tok_kind kind) {
 
 static void parse_block(parser* p, compiler* c) {
   int saved_count = c->local_count;
+  c->brace_depth++;
   while (!check(p, tok_rbrace) && !check(p, tok_eof))
     parse_stmt(p, c);
   expect(p, tok_rbrace);
+  c->brace_depth--;
   for (int i = saved_count; i < c->local_count; i++) {
     if (!c->locals[i].is_var)
       c->locals[i].dead = 1;
@@ -1166,15 +1678,18 @@ static void parse_for_in(parser* p, compiler* c, tok_kind kind, tok name) {
   size_t body_pos = op_pos(c->m);
   op_patch2(c->m, (uint16_t)(body_jump + 1), (uint16_t)(body_pos - body_jump));
 
-  uint16_t var_slot;
+  var_ref var_vr;
+  var_vr.kind = var_local;
+  var_vr.index = 0;
   if (kind == tok_kw_var) {
-    if (!find_slot(c, name.start, name.len, &var_slot)) {
+    var_vr = resolve_var(c, name.start, name.len);
+    if (var_vr.kind == var_not_found) {
       error_at(p, "internal: hoisted var missing");
       return;
     }
   } else {
-    var_slot = c->next_local_slot++;
-    add_local(c, name, var_slot, 0, kind == tok_kw_const);
+    var_vr.index = c->next_local_slot++;
+    add_local(c, name, var_vr.index, 0, kind == tok_kw_const);
   }
 
   uint16_t tostring_idx =
@@ -1183,7 +1698,12 @@ static void parse_for_in(parser* p, compiler* c, tok_kind kind, tok name) {
   emit_aload(c->m, idx_slot);
   op_emit2(c->m, op_invokevirtual, tostring_idx);
   op_emit2(c->m, op_invokevirtual, getprop_idx);
-  emit_astore(c->m, var_slot);
+  if (kind == tok_kw_var) {
+    emit_var_write_ref(c, var_vr);
+    op_emit(c->m, op_pop);
+  } else {
+    emit_var_declare(c, var_vr.index);
+  }
 
   push_loop(c, inc_pos);
   parse_stmt(p, c);
@@ -1220,20 +1740,28 @@ static void parse_for_of(parser* p, compiler* c, tok_kind kind, tok name) {
   size_t exit_jump = op_pos(c->m);
   op_emit2(c->m, op_ifeq, 0);
 
-  uint16_t var_slot;
+  var_ref var_vr;
+  var_vr.kind = var_local;
+  var_vr.index = 0;
   if (kind == tok_kw_var) {
-    if (!find_slot(c, name.start, name.len, &var_slot)) {
+    var_vr = resolve_var(c, name.start, name.len);
+    if (var_vr.kind == var_not_found) {
       error_at(p, "internal: hoisted var missing");
       return;
     }
   } else {
-    var_slot = c->next_local_slot++;
-    add_local(c, name, var_slot, 0, kind == tok_kw_const);
+    var_vr.index = c->next_local_slot++;
+    add_local(c, name, var_vr.index, 0, kind == tok_kw_const);
   }
 
   emit_aload(c->m, iter_slot);
   op_emit2(c->m, op_invokevirtual, next_idx);
-  emit_astore(c->m, var_slot);
+  if (kind == tok_kw_var) {
+    emit_var_write_ref(c, var_vr);
+    op_emit(c->m, op_pop);
+  } else {
+    emit_var_declare(c, var_vr.index);
+  }
 
   push_loop(c, cond_pos);
   parse_stmt(p, c);
@@ -1403,79 +1931,422 @@ static void parse_switch(parser* p, compiler* c) {
   c->break_depth--;
 }
 
+static uint16_t v6ref_arr_class(class_file* cf) {
+  return cf_class(cf, "V6Ref");
+}
+
+static void bind_param(compiler* fc, tok name, int idx) {
+  uint16_t slot = fc->next_local_slot++;
+  emit_aload(fc->m, 2);
+  emit_iconst(fc->m, idx);
+  uint16_t argat_idx =
+      cf_methodref(fc->cf, "V6Value", "argAt", "([LV6Value;I)LV6Value;");
+  op_emit2(fc->m, op_invokestatic, argat_idx);
+  emit_var_declare(fc, slot);
+  fc->params[fc->param_count].name = name.start;
+  fc->params[fc->param_count].len = name.len;
+  fc->params[fc->param_count].slot = slot;
+  fc->param_count++;
+}
+
+static void bind_rest_param(compiler* fc, tok name, int idx) {
+  uint16_t slot = fc->next_local_slot++;
+  emit_aload(fc->m, 2);
+  emit_iconst(fc->m, idx);
+  uint16_t restargs_idx = cf_methodref(fc->cf, "V6Object", "restFromArgs",
+                                       "([LV6Value;I)LV6Array;");
+  op_emit2(fc->m, op_invokestatic, restargs_idx);
+  emit_box_object_ref(fc);
+  emit_var_declare(fc, slot);
+  fc->params[fc->param_count].name = name.start;
+  fc->params[fc->param_count].len = name.len;
+  fc->params[fc->param_count].slot = slot;
+  fc->param_count++;
+}
+
+static void parse_function_params(parser* p, compiler* fc) {
+  expect(p, tok_lparen);
+  int idx = 0;
+  if (!check(p, tok_rparen)) {
+    for (;;) {
+      if (match(p, tok_ellipsis)) {
+        if (!expect(p, tok_ident))
+          break;
+        bind_rest_param(fc, p->prev, idx);
+        break;
+      }
+      if (!expect(p, tok_ident))
+        break;
+      bind_param(fc, p->prev, idx);
+      idx++;
+      if (!match(p, tok_comma))
+        break;
+    }
+  }
+  expect(p, tok_rparen);
+}
+
+static void bind_this(compiler* fc) {
+  uint16_t slot = fc->next_local_slot++;
+  emit_aload(fc->m, 1);
+  emit_var_declare(fc, slot);
+  tok tt;
+  tt.kind = tok_kw_this;
+  tt.start = "this";
+  tt.len = 4;
+  tt.line = 0;
+  tt.num = 0;
+  add_local(fc, tt, slot, 0, 0);
+}
+
+static void compile_closure_value(parser* p, compiler* c, int is_arrow,
+                                  int parens_params) {
+  int id = (*c->lambda_counter)++;
+  char mname[24];
+  snprintf(mname, sizeof(mname), "lambda%d", id);
+
+  method* m = cf_method(c->cf, acc_static, mname,
+                        "([LV6Ref;LV6Value;[LV6Value;)LV6Value;");
+  m->max_stack = 64;
+
+  compiler fc;
+  fc.cf = c->cf;
+  fc.m = m;
+  fc.parent = c;
+  fc.lambda_counter = c->lambda_counter;
+  fc.is_arrow = is_arrow;
+  fc.param_count = 0;
+  fc.local_count = 0;
+  fc.scratch_slot = 3;
+  fc.next_local_slot = 5;
+  fc.upvalue_count = 0;
+  fc.break_depth = 0;
+  fc.continue_depth = 0;
+  fc.catch_depth = 0;
+  fc.brace_depth = -1;
+  fc.super_name = c->super_name;
+  fc.super_len = c->super_len;
+
+  if (parens_params) {
+    parse_function_params(p, &fc);
+  } else if (expect(p, tok_ident)) {
+    bind_param(&fc, p->prev, 0);
+  }
+
+  if (!is_arrow)
+    bind_this(&fc);
+
+  if (is_arrow && !expect(p, tok_arrow))
+    return;
+
+  if (check(p, tok_lbrace)) {
+    advance(p);
+    prescan_decls(&fc, p->cur.start, 1);
+    parse_block(p, &fc);
+    emit_box_const(fc.cf, fc.m, op_iconst_3, op_dconst_0);
+    op_emit(fc.m, op_areturn);
+  } else {
+    parse_expr(p, &fc);
+    op_emit(fc.m, op_areturn);
+  }
+
+  fc.m->max_locals = fc.next_local_slot;
+
+  uint16_t closure_cls = cf_class(c->cf, "V6Closure");
+  uint16_t closure_ctor =
+      cf_methodref(c->cf, "V6Closure", "<init>",
+                   "(Ljava/lang/Class;Ljava/lang/String;[LV6Ref;)V");
+  uint16_t main_cls_idx = cf_class(c->cf, "Main");
+  uint16_t name_str = cf_string(c->cf, mname);
+
+  op_emit2(c->m, op_new, closure_cls);
+  op_emit(c->m, op_dup);
+  op_emit2(c->m, op_ldc_w, main_cls_idx);
+  op_emit2(c->m, op_ldc_w, name_str);
+
+  emit_iconst(c->m, fc.upvalue_count);
+  op_emit2(c->m, op_anewarray, v6ref_arr_class(c->cf));
+  for (int i = 0; i < fc.upvalue_count; i++) {
+    op_emit(c->m, op_dup);
+    emit_iconst(c->m, i);
+    emit_ref_push(c, !fc.upvalues[i].from_parent_local,
+                  fc.upvalues[i].parent_index);
+    op_emit(c->m, op_aastore);
+  }
+  op_emit2(c->m, op_invokespecial, closure_ctor);
+  emit_box_ref_computed(c, V6_TAG_FUNC);
+}
+
+static void skip_function_tokens(parser* p) {
+  if (!expect(p, tok_ident))
+    return;
+  if (!expect(p, tok_lparen))
+    return;
+  int depth = 1;
+  while (depth > 0 && !check(p, tok_eof)) {
+    if (check(p, tok_lparen))
+      depth++;
+    else if (check(p, tok_rparen))
+      depth--;
+    advance(p);
+  }
+  if (!expect(p, tok_lbrace))
+    return;
+  depth = 1;
+  while (depth > 0 && !check(p, tok_eof)) {
+    if (check(p, tok_lbrace))
+      depth++;
+    else if (check(p, tok_rbrace))
+      depth--;
+    advance(p);
+  }
+}
+
 static void parse_function_decl(parser* p, compiler* c) {
+  if (c->brace_depth == 0) {
+    skip_function_tokens(p);
+    return;
+  }
+
+  if (!expect(p, tok_ident))
+    return;
+  tok name = p->prev;
+  uint16_t slot = c->next_local_slot++;
+  emit_box_const(c->cf, c->m, op_iconst_3, op_dconst_0);
+  emit_var_declare(c, slot);
+  add_local(c, name, slot, 0, 0);
+  compile_closure_value(p, c, 0, 1);
+  var_ref vr = resolve_var(c, name.start, name.len);
+  emit_var_write_ref(c, vr);
+  op_emit(c->m, op_pop);
+}
+
+static parser hoist_function_decl(compiler* c, const char* start) {
+  parser fp;
+  parser_init(&fp, start);
+  if (!check(&fp, tok_ident))
+    return fp;
+  tok name = fp.cur;
+  advance(&fp);
+  uint16_t slot = c->next_local_slot++;
+  emit_box_const(c->cf, c->m, op_iconst_3, op_dconst_0);
+  emit_var_declare(c, slot);
+  add_local(c, name, slot, 1, 0);
+  compile_closure_value(&fp, c, 0, 1);
+  var_ref vr = resolve_var(c, name.start, name.len);
+  emit_var_write_ref(c, vr);
+  op_emit(c->m, op_pop);
+  return fp;
+}
+
+static void parse_class_decl(parser* p, compiler* c) {
   if (!expect(p, tok_ident))
     return;
   tok name = p->prev;
 
-  if (!expect(p, tok_lparen))
-    return;
-
-  param params[v6_max_params];
-  int param_count = 0;
-
-  if (!check(p, tok_rparen)) {
-    if (expect(p, tok_ident)) {
-      params[param_count].name = p->prev.start;
-      params[param_count].len = p->prev.len;
-      param_count++;
-    }
-    while (match(p, tok_comma)) {
-      if (expect(p, tok_ident)) {
-        params[param_count].name = p->prev.start;
-        params[param_count].len = p->prev.len;
-        param_count++;
-      }
-    }
+  tok base_name;
+  int has_base = 0;
+  if (match(p, tok_kw_extends)) {
+    if (!expect(p, tok_ident))
+      return;
+    base_name = p->prev;
+    has_base = 1;
   }
-  if (!expect(p, tok_rparen))
-    return;
-
-  fn_entry* fn = find_fn(c, name.start, name.len);
-  method* m;
-
-  if (fn) {
-    char desc[16 + 9 * v6_max_params];
-    build_descriptor(desc, param_count);
-    m = cf_method(c->cf, acc_static, fn->name, desc);
-  } else {
-    char* fn_name = dup_tok(name);
-    char desc[16 + 9 * v6_max_params];
-    build_descriptor(desc, param_count);
-    m = cf_method(c->cf, acc_static, fn_name, desc);
-    c->fns[c->fn_count].name = fn_name;
-    c->fns[c->fn_count].len = name.len;
-    c->fns[c->fn_count].param_count = param_count;
-    c->fn_count++;
-  }
-
-  m->max_stack = 64;
-
-  compiler fc = *c;
-  fc.m = m;
-  fc.param_count = param_count;
-  fc.local_count = 0;
-  fc.scratch_slot = (uint16_t)param_count;
-  fc.next_local_slot = (uint16_t)param_count + 2;
-  fc.break_depth = 0;
-  fc.continue_depth = 0;
-  for (int i = 0; i < param_count; i++)
-    fc.params[i] = params[i];
 
   if (!expect(p, tok_lbrace))
     return;
-  prescan_decls(&fc, p->cur.start, 0);
-  parse_block(p, &fc);
 
-  emit_box_const(c->cf, m, op_iconst_3, op_dconst_0);
-  op_emit(m, op_areturn);
+  uint16_t cls_tmp = c->next_local_slot++;
+  uint16_t proto_tmp = c->next_local_slot++;
 
-  m->max_locals = fc.next_local_slot;
+  uint16_t cls_cls = cf_class(c->cf, "V6Class");
+  uint16_t cls_ctor_idx = cf_methodref(c->cf, "V6Class", "<init>", "()V");
+  op_emit2(c->m, op_new, cls_cls);
+  op_emit(c->m, op_dup);
+  op_emit2(c->m, op_invokespecial, cls_ctor_idx);
+  emit_astore(c->m, cls_tmp);
+
+  uint16_t obj_ctor_idx = cf_methodref(c->cf, "V6Object", "<init>", "()V");
+  op_emit2(c->m, op_new, object_class(c->cf));
+  op_emit(c->m, op_dup);
+  op_emit2(c->m, op_invokespecial, obj_ctor_idx);
+  emit_astore(c->m, proto_tmp);
+
+  const char* saved_super_name = c->super_name;
+  size_t saved_super_len = c->super_len;
+
+  var_ref base_vr;
+  base_vr.kind = var_not_found;
+  base_vr.index = 0;
+  if (has_base) {
+    base_vr = resolve_var(c, base_name.start, base_name.len);
+    if (base_vr.kind == var_not_found) {
+      error_at(p, "undeclared variable");
+      return;
+    }
+    c->super_name = base_name.start;
+    c->super_len = base_name.len;
+
+    uint16_t setproto_idx =
+        cf_methodref(c->cf, "V6Object", "setProtoFromValue", "(LV6Value;)V");
+    uint16_t proto_str = cf_string(c->cf, "prototype");
+    uint16_t getprop_idx = cf_methodref(c->cf, "V6Value", "getProp",
+                                        "(Ljava/lang/String;)LV6Value;");
+    emit_aload(c->m, proto_tmp);
+    emit_var_read_ref(c, base_vr);
+    op_emit2(c->m, op_ldc_w, proto_str);
+    op_emit2(c->m, op_invokevirtual, getprop_idx);
+    op_emit2(c->m, op_invokevirtual, setproto_idx);
+  }
+
+  uint16_t set_idx =
+      cf_methodref(c->cf, "V6Object", "set", "(Ljava/lang/String;LV6Value;)V");
+  uint16_t proto_prop_str = cf_string(c->cf, "prototype");
+  emit_aload(c->m, cls_tmp);
+  op_emit2(c->m, op_ldc_w, proto_prop_str);
+  emit_aload(c->m, proto_tmp);
+  emit_box_object_ref(c);
+  op_emit2(c->m, op_invokevirtual, set_idx);
+
+  while (!check(p, tok_rbrace) && !check(p, tok_eof)) {
+    int is_static = match(p, tok_kw_static);
+    if (!match_property_name(p))
+      break;
+    tok member_name = p->prev;
+    int is_ctor = !is_static && member_name.len == 11 &&
+                  memcmp(member_name.start, "constructor", 11) == 0;
+
+    if (is_ctor) {
+      emit_aload(c->m, cls_tmp);
+      compile_closure_value(p, c, 0, 1);
+      uint16_t ascall_idx =
+          cf_methodref(c->cf, "V6Value", "asCallable", "()LV6Callable;");
+      op_emit2(c->m, op_invokevirtual, ascall_idx);
+      uint16_t ctor_field =
+          cf_fieldref(c->cf, "V6Class", "ctor", "LV6Callable;");
+      op_emit2(c->m, op_putfield, ctor_field);
+    } else {
+      uint16_t target_slot = is_static ? cls_tmp : proto_tmp;
+      char* mkey = dup_tok(member_name);
+      uint16_t mkey_idx = cf_string(c->cf, mkey);
+      free(mkey);
+      emit_aload(c->m, target_slot);
+      op_emit2(c->m, op_ldc_w, mkey_idx);
+      compile_closure_value(p, c, 0, 1);
+      op_emit2(c->m, op_invokevirtual, set_idx);
+    }
+  }
+  expect(p, tok_rbrace);
+
+  c->super_name = saved_super_name;
+  c->super_len = saved_super_len;
+
+  uint16_t slot = c->next_local_slot++;
+  emit_aload(c->m, cls_tmp);
+  emit_box_object_ref(c);
+  emit_var_declare(c, slot);
+  add_local(c, name, slot, 0, 0);
+}
+
+static void parse_try(parser* p, compiler* c) {
+  expect(p, tok_lbrace);
+  size_t try_start = op_pos(c->m);
+  parse_block(p, c);
+  size_t try_end = op_pos(c->m);
+
+  int has_catch = match(p, tok_kw_catch);
+  size_t goto_after_try = 0;
+
+  if (has_catch) {
+    goto_after_try = op_pos(c->m);
+    op_emit2(c->m, op_goto, 0);
+
+    size_t catch_handler_pc = op_pos(c->m);
+    uint16_t throw_cls = cf_class(c->cf, "V6Throw");
+    method_add_exception(c->m, (uint16_t)try_start, (uint16_t)try_end,
+                         (uint16_t)catch_handler_pc, throw_cls);
+
+    int catch_scope_saved = c->local_count;
+    int has_binding = 0;
+    tok err_name;
+    err_name.kind = tok_ident;
+    err_name.start = "";
+    err_name.len = 0;
+    err_name.line = 0;
+    err_name.num = 0;
+
+    expect(p, tok_lparen);
+    if (check(p, tok_ident)) {
+      has_binding = 1;
+      advance(p);
+      err_name = p->prev;
+    }
+    expect(p, tok_rparen);
+
+    uint16_t value_field = cf_fieldref(c->cf, "V6Throw", "value", "LV6Value;");
+    op_emit2(c->m, op_getfield, value_field);
+    if (has_binding) {
+      uint16_t err_slot = c->next_local_slot++;
+      emit_var_declare(c, err_slot);
+      add_local(c, err_name, err_slot, 0, 0);
+    } else {
+      op_emit(c->m, op_pop);
+    }
+
+    expect(p, tok_lbrace);
+    parse_block(p, c);
+
+    for (int i = catch_scope_saved; i < c->local_count; i++) {
+      if (!c->locals[i].is_var)
+        c->locals[i].dead = 1;
+    }
+
+    size_t normal_after = op_pos(c->m);
+    op_patch2(c->m, (uint16_t)(goto_after_try + 1),
+              (uint16_t)(normal_after - goto_after_try));
+  }
+
+  if (match(p, tok_kw_finally)) {
+    size_t guard_start = try_start;
+    size_t guard_end = op_pos(c->m);
+
+    expect(p, tok_lbrace);
+    const char* finally_body_start = p->cur.start;
+    parse_block(p, c);
+
+    size_t skip_guard_jump = op_pos(c->m);
+    op_emit2(c->m, op_goto, 0);
+
+    size_t guard_handler_pc = op_pos(c->m);
+    uint16_t guard_scratch = c->next_local_slot++;
+    emit_astore(c->m, guard_scratch);
+
+    parser fp2;
+    parser_init(&fp2, finally_body_start);
+    parse_block(&fp2, c);
+
+    emit_aload(c->m, guard_scratch);
+    op_emit(c->m, op_athrow);
+
+    size_t after_guard = op_pos(c->m);
+    op_patch2(c->m, (uint16_t)(skip_guard_jump + 1),
+              (uint16_t)(after_guard - skip_guard_jump));
+
+    method_add_exception(c->m, (uint16_t)guard_start, (uint16_t)guard_end,
+                         (uint16_t)guard_handler_pc, 0);
+  } else if (!has_catch) {
+    error_at(p, "expected 'catch' or 'finally'");
+  }
 }
 
 static void parse_stmt(parser* p, compiler* c) {
   if (match(p, tok_lbrace)) {
     parse_block(p, c);
+    return;
+  }
+
+  if (match(p, tok_kw_class)) {
+    parse_class_decl(p, c);
     return;
   }
 
@@ -1524,6 +2395,25 @@ static void parse_stmt(parser* p, compiler* c) {
     return;
   }
 
+  if (match(p, tok_kw_throw)) {
+    parse_expr(p, c);
+    expect(p, tok_semi);
+    uint16_t throw_cls = cf_class(c->cf, "V6Throw");
+    uint16_t throw_ctor =
+        cf_methodref(c->cf, "V6Throw", "<init>", "(LV6Value;)V");
+    op_emit2(c->m, op_new, throw_cls);
+    op_emit(c->m, op_dup_x1);
+    op_emit(c->m, op_swap);
+    op_emit2(c->m, op_invokespecial, throw_ctor);
+    op_emit(c->m, op_athrow);
+    return;
+  }
+
+  if (match(p, tok_kw_try)) {
+    parse_try(p, c);
+    return;
+  }
+
   if (match(p, tok_kw_var) || match(p, tok_kw_let) || match(p, tok_kw_const)) {
     parse_var_decl(p, c, p->prev.kind);
     expect(p, tok_semi);
@@ -1545,6 +2435,76 @@ static void parse_stmt(parser* p, compiler* c) {
   expect(p, tok_semi);
 }
 
+static void prescan_hoist_one(compiler* c, tok name) {
+  uint16_t slot = c->next_local_slot++;
+  emit_box_const(c->cf, c->m, op_iconst_3, op_dconst_0);
+  emit_var_declare(c, slot);
+  add_local(c, name, slot, 1, 0);
+}
+
+static tok prescan_pattern_hoist(compiler* c, lexer* lx, int is_array) {
+  tok_kind close = is_array ? tok_rbracket : tok_rbrace;
+  tok t = lex_next(lx);
+  int want_key = !is_array;
+
+  while (t.kind != close && t.kind != tok_eof) {
+    if (t.kind == tok_comma) {
+      want_key = !is_array;
+      t = lex_next(lx);
+      continue;
+    }
+    if (t.kind == tok_ellipsis) {
+      t = lex_next(lx);
+      continue;
+    }
+    if (t.kind == tok_ident) {
+      if (is_array) {
+        prescan_hoist_one(c, t);
+        t = lex_next(lx);
+      } else if (want_key) {
+        tok key = t;
+        t = lex_next(lx);
+        if (t.kind == tok_colon) {
+          t = lex_next(lx);
+          if (t.kind == tok_ident) {
+            prescan_hoist_one(c, t);
+            t = lex_next(lx);
+          }
+        } else {
+          prescan_hoist_one(c, key);
+        }
+        want_key = 0;
+      } else {
+        t = lex_next(lx);
+      }
+      continue;
+    }
+    if (t.kind == tok_assign) {
+      int edepth = 0;
+      t = lex_next(lx);
+      while (t.kind != tok_eof) {
+        if (t.kind == tok_lparen || t.kind == tok_lbracket ||
+            t.kind == tok_lbrace) {
+          edepth++;
+        } else if (t.kind == tok_rparen || t.kind == tok_rbracket ||
+                   t.kind == tok_rbrace) {
+          if (edepth == 0)
+            break;
+          edepth--;
+        } else if (edepth == 0 && t.kind == tok_comma) {
+          break;
+        }
+        t = lex_next(lx);
+      }
+      continue;
+    }
+    t = lex_next(lx);
+  }
+  if (t.kind == close)
+    t = lex_next(lx);
+  return t;
+}
+
 static void prescan_decls(compiler* c, const char* src, int hoist_functions) {
   lexer lx;
   lex_init(&lx, src);
@@ -1560,13 +2520,38 @@ static void prescan_decls(compiler* c, const char* src, int hoist_functions) {
     } else if (t.kind == tok_kw_var) {
       for (;;) {
         tok name = lex_next(&lx);
+        if (name.kind == tok_lbracket || name.kind == tok_lbrace) {
+          t = prescan_pattern_hoist(c, &lx, name.kind == tok_lbracket);
+          if (t.kind != tok_assign)
+            break;
+          int edepth2 = 0;
+          t = lex_next(&lx);
+          while (t.kind != tok_eof) {
+            if (t.kind == tok_lparen || t.kind == tok_lbracket ||
+                t.kind == tok_lbrace) {
+              edepth2++;
+            } else if (t.kind == tok_rparen || t.kind == tok_rbracket ||
+                       t.kind == tok_rbrace) {
+              if (edepth2 == 0)
+                break;
+              edepth2--;
+            } else if (edepth2 == 0 &&
+                       (t.kind == tok_comma || t.kind == tok_semi)) {
+              break;
+            }
+            t = lex_next(&lx);
+          }
+          if (t.kind != tok_comma)
+            break;
+          continue;
+        }
         if (name.kind != tok_ident) {
           t = name;
           break;
         }
         uint16_t slot = c->next_local_slot++;
         emit_box_const(c->cf, c->m, op_iconst_3, op_dconst_0);
-        emit_astore(c->m, slot);
+        emit_var_declare(c, slot);
         add_local(c, name, slot, 1, 0);
 
         t = lex_next(&lx);
@@ -1594,32 +2579,10 @@ static void prescan_decls(compiler* c, const char* src, int hoist_functions) {
       }
       continue;
     } else if (hoist_functions && depth == 0 && t.kind == tok_kw_function) {
-      tok name = lex_next(&lx);
-      if (name.kind == tok_ident) {
-        lexer save = lx;
-        tok lp = lex_next(&lx);
-        int param_count = 0;
-        if (lp.kind == tok_lparen) {
-          tok pt = lex_next(&lx);
-          if (pt.kind == tok_ident) {
-            param_count++;
-            pt = lex_next(&lx);
-          }
-          while (pt.kind == tok_comma) {
-            pt = lex_next(&lx);
-            if (pt.kind == tok_ident) {
-              param_count++;
-              pt = lex_next(&lx);
-            }
-          }
-        }
-        (void)save;
-        char* fn_name = dup_tok(name);
-        c->fns[c->fn_count].name = fn_name;
-        c->fns[c->fn_count].len = name.len;
-        c->fns[c->fn_count].param_count = param_count;
-        c->fn_count++;
-      }
+      parser fp = hoist_function_decl(c, lx.cur);
+      lx = fp.lex;
+      t = fp.cur;
+      continue;
     }
     t = lex_next(&lx);
   }
@@ -1634,29 +2597,63 @@ static void parse_program(parser* p, compiler* c) {
   }
 }
 
+static void bind_builtin(compiler* c, const char* name, const char* field) {
+  uint16_t slot = c->next_local_slot++;
+  uint16_t fidx = cf_fieldref(c->cf, "V6Builtins", field, "LV6Value;");
+  op_emit2(c->m, op_getstatic, fidx);
+  emit_var_declare(c, slot);
+  tok t;
+  t.kind = tok_ident;
+  t.start = name;
+  t.len = strlen(name);
+  t.line = 0;
+  t.num = 0;
+  add_local(c, t, slot, 1, 0);
+}
+
 compile_result compile_program(const char* src, class_file* cf) {
   method* main_m =
       cf_method(cf, acc_public | acc_static, "main", "([Ljava/lang/String;)V");
   main_m->max_stack = 64;
 
+  int lambda_counter = 0;
+
   compiler c;
   c.cf = cf;
   c.m = main_m;
+  c.parent = NULL;
+  c.lambda_counter = &lambda_counter;
+  c.is_arrow = 0;
   c.param_count = 0;
   c.local_count = 0;
   c.scratch_slot = 1;
   c.next_local_slot = 3;
-  c.fn_count = 0;
+  c.upvalue_count = 0;
   c.break_depth = 0;
   c.continue_depth = 0;
+  c.catch_depth = 0;
+  c.brace_depth = 0;
+  c.super_name = NULL;
+  c.super_len = 0;
 
-  build_print_fn(&c);
-  build_math_fn1(&c, "abs", "abs");
-  build_math_fn1(&c, "floor", "floor");
-  build_math_fn1(&c, "ceil", "ceil");
-  build_math_fn1(&c, "sqrt", "sqrt");
-  build_math_fn2(&c, "max", "max");
-  build_math_fn2(&c, "min", "min");
+  bind_builtin(&c, "print", "PRINT");
+  bind_builtin(&c, "Math", "MATH");
+  bind_builtin(&c, "Object", "OBJECT");
+  bind_builtin(&c, "Array", "ARRAY");
+  bind_builtin(&c, "atob", "ATOB");
+  bind_builtin(&c, "btoa", "BTOA");
+
+  uint16_t this_slot = c.next_local_slot++;
+  emit_box_const(cf, main_m, op_iconst_3, op_dconst_0);
+  emit_var_declare(&c, this_slot);
+  tok this_tok;
+  this_tok.kind = tok_kw_this;
+  this_tok.start = "this";
+  this_tok.len = 4;
+  this_tok.line = 0;
+  this_tok.num = 0;
+  add_local(&c, this_tok, this_slot, 1, 0);
+
   prescan_decls(&c, src, 1);
 
   parser p;

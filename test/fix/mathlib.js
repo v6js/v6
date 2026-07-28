@@ -1,8 +1,8 @@
-print(abs(-5));
-print(abs(5));
-print(floor(3.7));
-print(ceil(3.2));
-print(sqrt(16));
-print(max(3, 7));
-print(min(3, 7));
-print(max(-1, -2));
+print(Math.abs(-5));
+print(Math.abs(5));
+print(Math.floor(3.7));
+print(Math.ceil(3.2));
+print(Math.sqrt(16));
+print(Math.max(3, 7));
+print(Math.min(3, 7));
+print(Math.max(-1, -2));

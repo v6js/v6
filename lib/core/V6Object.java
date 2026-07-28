@@ -5,13 +5,37 @@ public class V6Object {
   protected final Map<String, V6Value> props = new LinkedHashMap<>();
   protected int length = 0;
   private V6Object proto;
+  private boolean frozen = false;
+  private boolean sealed = false;
 
   public void setProto(V6Object proto) {
     this.proto = proto;
   }
 
+  public void setProtoFromValue(V6Value v) {
+    if (v.tag() == V6Value.TAG_OBJ)
+      setProto((V6Object)v.ref());
+  }
+
   public V6Object getProto() {
     return proto;
+  }
+
+  public void freeze() {
+    frozen = true;
+    sealed = true;
+  }
+
+  public boolean isFrozenFlag() {
+    return frozen;
+  }
+
+  public void seal() {
+    sealed = true;
+  }
+
+  public boolean isSealedFlag() {
+    return sealed;
   }
 
   public V6Value get(String key) {
@@ -26,6 +50,10 @@ public class V6Object {
   }
 
   public void set(String key, V6Value value) {
+    if (frozen)
+      return;
+    if (sealed && !props.containsKey(key))
+      return;
     props.put(key, value);
     int idx = parseIndex(key);
     if (idx >= 0 && idx + 1 > length)
@@ -34,6 +62,204 @@ public class V6Object {
 
   public void push(V6Value value) {
     set(Integer.toString(length), value);
+  }
+
+  public V6Value pop() {
+    if (length == 0)
+      return new V6Value(V6Value.TAG_UNDEF, 0, null);
+    length--;
+    String key = Integer.toString(length);
+    V6Value v = props.remove(key);
+    return v != null ? v : new V6Value(V6Value.TAG_UNDEF, 0, null);
+  }
+
+  public V6Value shift() {
+    if (length == 0)
+      return new V6Value(V6Value.TAG_UNDEF, 0, null);
+    V6Value first = get("0");
+    for (int i = 1; i < length; i++)
+      set(Integer.toString(i - 1), get(Integer.toString(i)));
+    length--;
+    props.remove(Integer.toString(length));
+    return first;
+  }
+
+  public int unshift(V6Value[] items) {
+    int n = items.length;
+    for (int i = length - 1; i >= 0; i--)
+      set(Integer.toString(i + n), get(Integer.toString(i)));
+    for (int i = 0; i < n; i++)
+      set(Integer.toString(i), items[i]);
+    return length;
+  }
+
+  public V6Array slice(int start, int end) {
+    if (start < 0)
+      start = Math.max(0, length + start);
+    if (end < 0)
+      end = Math.max(0, length + end);
+    start = Math.min(start, length);
+    end = Math.min(end, length);
+    V6Array result = new V6Array();
+    for (int i = start; i < end; i++)
+      result.push(get(Integer.toString(i)));
+    return result;
+  }
+
+  public int indexOf(V6Value target) {
+    for (int i = 0; i < length; i++)
+      if (V6Value.strictEquals(get(Integer.toString(i)), target))
+        return i;
+    return -1;
+  }
+
+  public String join(String sep) {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < length; i++) {
+      if (i > 0)
+        sb.append(sep);
+      V6Value v = get(Integer.toString(i));
+      if (v.tag() != V6Value.TAG_UNDEF && v.tag() != V6Value.TAG_NULL)
+        sb.append(v.toString());
+    }
+    return sb.toString();
+  }
+
+  public V6Array map(V6Callable fn) {
+    V6Array result = new V6Array();
+    V6Value undef = new V6Value(V6Value.TAG_UNDEF, 0, null);
+    for (int i = 0; i < length; i++) {
+      V6Value el = get(Integer.toString(i));
+      V6Value idx = new V6Value(V6Value.TAG_NUM, i, null);
+      result.push(fn.call(undef, new V6Value[] {el, idx}));
+    }
+    return result;
+  }
+
+  public V6Array filter(V6Callable fn) {
+    V6Array result = new V6Array();
+    V6Value undef = new V6Value(V6Value.TAG_UNDEF, 0, null);
+    for (int i = 0; i < length; i++) {
+      V6Value el = get(Integer.toString(i));
+      V6Value idx = new V6Value(V6Value.TAG_NUM, i, null);
+      if (fn.call(undef, new V6Value[] {el, idx}).truthy())
+        result.push(el);
+    }
+    return result;
+  }
+
+  public void forEach(V6Callable fn) {
+    V6Value undef = new V6Value(V6Value.TAG_UNDEF, 0, null);
+    for (int i = 0; i < length; i++) {
+      V6Value el = get(Integer.toString(i));
+      V6Value idx = new V6Value(V6Value.TAG_NUM, i, null);
+      fn.call(undef, new V6Value[] {el, idx});
+    }
+  }
+
+  public V6Value reduce(V6Callable fn, V6Value[] args) {
+    V6Value undef = new V6Value(V6Value.TAG_UNDEF, 0, null);
+    int start = 0;
+    V6Value acc;
+    if (args.length >= 2) {
+      acc = args[1];
+    } else {
+      if (length == 0)
+        throw new RuntimeException(
+            "Reduce of empty array with no initial value");
+      acc = get("0");
+      start = 1;
+    }
+    for (int i = start; i < length; i++) {
+      V6Value el = get(Integer.toString(i));
+      acc = fn.call(undef, new V6Value[] {
+                               acc, el, new V6Value(V6Value.TAG_NUM, i, null)});
+    }
+    return acc;
+  }
+
+  public V6Array concatValues(V6Value[] items) {
+    V6Array result = new V6Array();
+    for (int i = 0; i < length; i++)
+      result.push(get(Integer.toString(i)));
+    for (V6Value v : items) {
+      if (v.tag() == V6Value.TAG_OBJ && v.ref() instanceof V6Array)
+        result.pushAll(v);
+      else
+        result.push(v);
+    }
+    return result;
+  }
+
+  public V6Object reverseInPlace() {
+    for (int i = 0, j = length - 1; i < j; i++, j--) {
+      V6Value tmp = get(Integer.toString(i));
+      set(Integer.toString(i), get(Integer.toString(j)));
+      set(Integer.toString(j), tmp);
+    }
+    return this;
+  }
+
+  public V6Object sortDefault() {
+    V6Value[] arr = toValueArray();
+    java.util.Arrays.sort(arr, (a, b) -> a.toString().compareTo(b.toString()));
+    for (int i = 0; i < arr.length; i++)
+      set(Integer.toString(i), arr[i]);
+    return this;
+  }
+
+  public V6Object sortWith(V6Callable cmp) {
+    V6Value[] arr = toValueArray();
+    V6Value undef = new V6Value(V6Value.TAG_UNDEF, 0, null);
+    java.util.Arrays.sort(arr, (a, b) -> {
+      double d = cmp.call(undef, new V6Value[] {a, b}).toNumber();
+      return d < 0 ? -1 : (d > 0 ? 1 : 0);
+    });
+    for (int i = 0; i < arr.length; i++)
+      set(Integer.toString(i), arr[i]);
+    return this;
+  }
+
+  public static V6Array restFromArgs(V6Value[] args, int start) {
+    V6Array result = new V6Array();
+    for (int i = start; i < args.length; i++)
+      result.push(args[i]);
+    return result;
+  }
+
+  public V6Array restFrom(int start) {
+    V6Array result = new V6Array();
+    for (int i = start; i < length; i++)
+      result.push(get(Integer.toString(i)));
+    return result;
+  }
+
+  public void pushAll(V6Value v) {
+    if (v.tag() == V6Value.TAG_OBJ) {
+      V6Object o = (V6Object)v.ref();
+      int n = (int)o.get("length").num();
+      for (int i = 0; i < n; i++)
+        push(o.get(Integer.toString(i)));
+    } else if (v.tag() == V6Value.TAG_STR) {
+      String s = (String)v.ref();
+      for (int i = 0; i < s.length(); i++)
+        push(new V6Value(V6Value.TAG_STR, 0, String.valueOf(s.charAt(i))));
+    }
+  }
+
+  public void spreadFrom(V6Value v) {
+    if (v.tag() == V6Value.TAG_OBJ) {
+      V6Object o = (V6Object)v.ref();
+      for (Map.Entry<String, V6Value> e : o.props.entrySet())
+        set(e.getKey(), e.getValue());
+    }
+  }
+
+  public V6Value[] toValueArray() {
+    V6Value[] result = new V6Value[length];
+    for (int i = 0; i < length; i++)
+      result[i] = get(Integer.toString(i));
+    return result;
   }
 
   public V6Array enumKeys() {

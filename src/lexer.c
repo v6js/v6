@@ -31,6 +31,16 @@ static const keyword keywords[] = {
     {"typeof", tok_kw_typeof},
     {"in", tok_kw_in},
     {"of", tok_kw_of},
+    {"this", tok_kw_this},
+    {"new", tok_kw_new},
+    {"class", tok_kw_class},
+    {"extends", tok_kw_extends},
+    {"super", tok_kw_super},
+    {"try", tok_kw_try},
+    {"catch", tok_kw_catch},
+    {"finally", tok_kw_finally},
+    {"throw", tok_kw_throw},
+    {"static", tok_kw_static},
 };
 
 void lex_init(lexer* lx, const char* src) {
@@ -160,6 +170,46 @@ static tok lex_str(lexer* lx, const char* start, char quote) {
   return make(lx, tok_str, start);
 }
 
+static tok lex_template(lexer* lx, const char* start) {
+  lx->cur++;
+  int depth = 0;
+  while (*lx->cur) {
+    if (*lx->cur == '\\' && lx->cur[1]) {
+      lx->cur += 2;
+      continue;
+    }
+    if (depth == 0 && *lx->cur == '`') {
+      lx->cur++;
+      break;
+    }
+    if (depth == 0 && lx->cur[0] == '$' && lx->cur[1] == '{') {
+      lx->cur += 2;
+      depth = 1;
+      continue;
+    }
+    if (depth > 0 && (*lx->cur == '"' || *lx->cur == '\'')) {
+      char q = *lx->cur;
+      lx->cur++;
+      while (*lx->cur && *lx->cur != q) {
+        if (*lx->cur == '\\' && lx->cur[1])
+          lx->cur++;
+        lx->cur++;
+      }
+      if (*lx->cur == q)
+        lx->cur++;
+      continue;
+    }
+    if (depth > 0 && *lx->cur == '{')
+      depth++;
+    else if (depth > 0 && *lx->cur == '}')
+      depth--;
+    if (*lx->cur == '\n')
+      lx->line++;
+    lx->cur++;
+  }
+  return make(lx, tok_template, start);
+}
+
 tok lex_next(lexer* lx) {
   skip_ws(lx);
   const char* start = lx->cur;
@@ -178,6 +228,8 @@ tok lex_next(lexer* lx) {
   }
   if (c == '"' || c == '\'')
     return lex_str(lx, start, c);
+  if (c == '`')
+    return lex_template(lx, start);
 
   lx->cur++;
   switch (c) {
@@ -198,6 +250,10 @@ tok lex_next(lexer* lx) {
   case ',':
     return make(lx, tok_comma, start);
   case '.':
+    if (lx->cur[0] == '.' && lx->cur[1] == '.') {
+      lx->cur += 2;
+      return make(lx, tok_ellipsis, start);
+    }
     return make(lx, tok_dot, start);
   case '+':
     if (*lx->cur == '+') {
@@ -259,6 +315,10 @@ tok lex_next(lexer* lx) {
         return make(lx, tok_eq_strict, start);
       }
       return make(lx, tok_eq, start);
+    }
+    if (*lx->cur == '>') {
+      lx->cur++;
+      return make(lx, tok_arrow, start);
     }
     return make(lx, tok_assign, start);
   case '<':

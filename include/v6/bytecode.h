@@ -22,6 +22,10 @@ typedef enum {
   op_ldc = 0x12,
   op_ldc_w = 0x13,
   op_ldc2_w = 0x14,
+  op_aaload = 0x32,
+  op_aastore = 0x53,
+  op_anewarray = 0xbd,
+  op_arraylength = 0xbe,
   op_iload = 0x15,
   op_dload = 0x18,
   op_aload = 0x19,
@@ -53,6 +57,7 @@ typedef enum {
   op_astore_2 = 0x4d,
   op_astore_3 = 0x4e,
   op_dup = 0x59,
+  op_dup_x1 = 0x5a,
   op_pop = 0x57,
   op_swap = 0x5f,
   op_iadd = 0x60,
@@ -103,6 +108,13 @@ enum {
   acc_super = 0x0020,
 };
 
+typedef struct exc_entry {
+  uint16_t start_pc;
+  uint16_t end_pc;
+  uint16_t handler_pc;
+  uint16_t catch_type;
+} exc_entry;
+
 typedef struct method {
   uint16_t access;
   uint16_t name_idx;
@@ -110,6 +122,9 @@ typedef struct method {
   uint16_t max_stack;
   uint16_t max_locals;
   buf code;
+  exc_entry* exceptions;
+  size_t exception_len;
+  size_t exception_cap;
 } method;
 
 typedef struct field {
@@ -157,5 +172,7 @@ void op_emit1(method* m, uint8_t code, uint8_t a);
 void op_emit2(method* m, uint8_t code, uint16_t a);
 size_t op_pos(method* m);
 void op_patch2(method* m, size_t at, uint16_t v);
+void method_add_exception(method* m, uint16_t start_pc, uint16_t end_pc,
+                          uint16_t handler_pc, uint16_t catch_type);
 
 void cf_emit(class_file* cf, buf* out);

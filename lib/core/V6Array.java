@@ -1,4 +1,8 @@
 public final class V6Array extends V6Object {
+  public V6Array() {
+    setProto(V6Builtins.ARRAY_PROTOTYPE);
+  }
+
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();

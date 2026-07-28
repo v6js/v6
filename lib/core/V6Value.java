@@ -5,6 +5,7 @@ public record V6Value(int tag, double num, Object ref) {
   public static final int TAG_UNDEF = 3;
   public static final int TAG_OBJ = 4;
   public static final int TAG_STR = 5;
+  public static final int TAG_FUNC = 6;
 
   @Override
   public String toString() {
@@ -14,6 +15,7 @@ public record V6Value(int tag, double num, Object ref) {
       case TAG_NULL -> "null";
       case TAG_UNDEF -> "undefined";
       case TAG_STR -> (String) ref;
+      case TAG_FUNC -> "function () { [v6 code] }";
       default -> String.valueOf(ref);
     };
   }
@@ -130,8 +132,52 @@ public record V6Value(int tag, double num, Object ref) {
       case TAG_BOOL -> "boolean";
       case TAG_STR -> "string";
       case TAG_UNDEF -> "undefined";
+      case TAG_FUNC -> "function";
       default -> "object";
     };
+  }
+
+  public V6Value call(V6Value thisArg, V6Value[] args) {
+    if (tag != TAG_FUNC)
+      throw new RuntimeException("not a function");
+    return ((V6Callable)ref).call(thisArg, args);
+  }
+
+  public static V6Value argAt(V6Value[] args, int idx) {
+    return idx < args.length ? args[idx] : new V6Value(TAG_UNDEF, 0, null);
+  }
+
+  public static V6Value construct(V6Value classValue, V6Value[] args) {
+    V6Class cls = (V6Class)classValue.ref;
+    V6Object instance = new V6Object();
+    Object protoRef = cls.get("prototype").ref;
+    if (protoRef instanceof V6Object)
+      instance.setProto((V6Object)protoRef);
+    V6Value instanceValue = new V6Value(TAG_OBJ, 0, instance);
+    if (cls.ctor != null)
+      cls.ctor.call(instanceValue, args);
+    return instanceValue;
+  }
+
+  public static void superConstruct(V6Value classValue, V6Value thisArg,
+                                    V6Value[] args) {
+    V6Class cls = (V6Class)classValue.ref;
+    if (cls.ctor != null)
+      cls.ctor.call(thisArg, args);
+  }
+
+  public V6Callable asCallable() {
+    return (V6Callable)ref;
+  }
+
+  public boolean isUndefined() {
+    return tag == TAG_UNDEF;
+  }
+
+  public V6Array restFrom(int start) {
+    if (tag == TAG_OBJ)
+      return ((V6Object)ref).restFrom(start);
+    return new V6Array();
   }
 
   public V6Value getProp(String key) {

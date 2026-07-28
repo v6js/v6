@@ -77,6 +77,19 @@ typedef enum {
   tok_shl_eq,
   tok_shr_eq,
   tok_ushr_eq,
+  tok_arrow,
+  tok_kw_this,
+  tok_kw_new,
+  tok_kw_class,
+  tok_kw_extends,
+  tok_kw_super,
+  tok_kw_try,
+  tok_kw_catch,
+  tok_kw_finally,
+  tok_kw_throw,
+  tok_kw_static,
+  tok_ellipsis,
+  tok_template,
 } tok_kind;
 
 typedef struct tok {

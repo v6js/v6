@@ -1,17 +1,26 @@
 #include "test.h"
 #include "v6/parser.h"
 
+static int test_lambda_counter;
+
 static compiler make_compiler(class_file* cf, method* m) {
   compiler c;
   c.cf = cf;
   c.m = m;
+  c.parent = NULL;
+  c.lambda_counter = &test_lambda_counter;
+  c.is_arrow = 0;
   c.param_count = 0;
   c.local_count = 0;
   c.scratch_slot = 1;
   c.next_local_slot = 3;
-  c.fn_count = 0;
+  c.upvalue_count = 0;
   c.break_depth = 0;
   c.continue_depth = 0;
+  c.catch_depth = 0;
+  c.brace_depth = 0;
+  c.super_name = NULL;
+  c.super_len = 0;
   return c;
 }
 
@@ -116,7 +125,7 @@ int test_compile_program(void) {
   cf_init(&cf, "Main", "java/lang/Object");
   compile_result rc = compile_program("print(1 + 2 * 3);", &cf);
   v6_check(&fails, rc.ok);
-  v6_check(&fails, cf.method_len == 8);
+  v6_check(&fails, cf.method_len == 1);
   cf_free(&cf);
 
   class_file cf2;
@@ -136,7 +145,7 @@ int test_compile_program(void) {
   compile_result rc4 = compile_program(
       "function add(a, b) { return a + b; } print(add(2, 3));", &cf4);
   v6_check(&fails, rc4.ok);
-  v6_check(&fails, cf4.method_len == 9);
+  v6_check(&fails, cf4.method_len == 2);
   cf_free(&cf4);
 
   class_file cf5;
@@ -274,12 +283,122 @@ int test_compile_program(void) {
 
   class_file cf22;
   cf_init(&cf22, "Main", "java/lang/Object");
-  compile_result rc22 =
-      compile_program("print(abs(-5)); print(floor(3.7)); print(ceil(3.2)); "
-                      "print(sqrt(16)); print(max(3, 7)); print(min(3, 7));",
-                      &cf22);
+  compile_result rc22 = compile_program(
+      "print(Math.abs(-5)); print(Math.floor(3.7)); print(Math.ceil(3.2)); "
+      "print(Math.sqrt(16)); print(Math.max(3, 7)); print(Math.min(3, 7));",
+      &cf22);
   v6_check(&fails, rc22.ok);
   cf_free(&cf22);
+
+  class_file cf23;
+  cf_init(&cf23, "Main", "java/lang/Object");
+  compile_result rc23 =
+      compile_program("function makeCounter() {"
+                      "  var count = 0;"
+                      "  function inc() { count = count + 1; return count; }"
+                      "  return inc;"
+                      "}"
+                      "var c1 = makeCounter();"
+                      "print(c1()); print(c1());",
+                      &cf23);
+  v6_check(&fails, rc23.ok);
+  cf_free(&cf23);
+
+  class_file cf24;
+  cf_init(&cf24, "Main", "java/lang/Object");
+  compile_result rc24 =
+      compile_program("var add = function(a, b) { return a + b; };"
+                      "var mul = (a, b) => a * b;"
+                      "var sq = x => x * x;"
+                      "print(add(2, 3)); print(mul(4, 5)); print(sq(6));",
+                      &cf24);
+  v6_check(&fails, rc24.ok);
+  cf_free(&cf24);
+
+  class_file cf25;
+  cf_init(&cf25, "Main", "java/lang/Object");
+  compile_result rc25 =
+      compile_program("print(recFact(5));"
+                      "function recFact(n) { if (n <= 1) return 1; return n * "
+                      "recFact(n - 1); }",
+                      &cf25);
+  v6_check(&fails, rc25.ok);
+  cf_free(&cf25);
+
+  class_file cf26;
+  cf_init(&cf26, "Main", "java/lang/Object");
+  compile_result rc26 =
+      compile_program("class Animal {"
+                      "  constructor(name) { this.name = name; }"
+                      "  speak() { return this.name + \" speaks\"; }"
+                      "  static kind() { return \"animal\"; }"
+                      "}"
+                      "class Dog extends Animal {"
+                      "  constructor(name) { super(name); }"
+                      "  speak() { return super.speak() + \" (woof)\"; }"
+                      "}"
+                      "var d = new Dog(\"Fido\");"
+                      "print(d.speak()); print(Animal.kind());",
+                      &cf26);
+  v6_check(&fails, rc26.ok);
+  cf_free(&cf26);
+
+  class_file cf27;
+  cf_init(&cf27, "Main", "java/lang/Object");
+  compile_result rc27 = compile_program(
+      "try { throw \"boom\"; } catch (e) { print(\"caught: \" + e); }"
+      "try { print(\"a\"); } finally { print(\"b\"); }"
+      "try {"
+      "  try { throw \"x\"; } finally { print(\"inner\"); }"
+      "} catch (e) { print(\"outer: \" + e); }",
+      &cf27);
+  v6_check(&fails, rc27.ok);
+  cf_free(&cf27);
+
+  class_file cf28;
+  cf_init(&cf28, "Main", "java/lang/Object");
+  compile_result rc28 = compile_program("var name = \"world\";"
+                                        "print(`hello ${name}`);"
+                                        "print(`sum=${1 + 2}`);"
+                                        "print(`plain`);",
+                                        &cf28);
+  v6_check(&fails, rc28.ok);
+  cf_free(&cf28);
+
+  class_file cf29;
+  cf_init(&cf29, "Main", "java/lang/Object");
+  compile_result rc29 = compile_program(
+      "var [a, , b, ...rest] = [1, 2, 3, 4, 5];"
+      "print(a); print(b); print(rest.length);"
+      "var { x, y: y2 = 9 } = { x: 1 };"
+      "print(x); print(y2);"
+      "function total(...nums) {"
+      "  var s = 0;"
+      "  for (var i = 0; i < nums.length; i = i + 1) s = s + nums[i];"
+      "  return s;"
+      "}"
+      "print(total(...[1, 2, 3], 4));"
+      "var merged = [...[1, 2], 3];"
+      "var o = { ...{ a: 1 }, b: 2 };"
+      "print(merged.length); print(o.a); print(o.b);",
+      &cf29);
+  v6_check(&fails, rc29.ok);
+  cf_free(&cf29);
+
+  class_file cf30;
+  cf_init(&cf30, "Main", "java/lang/Object");
+  compile_result rc30 =
+      compile_program("var arr = [3, 1, 2];"
+                      "print(arr.map(function(x) { return x * 2; })[0]);"
+                      "print(arr.sort()[0]);"
+                      "print(Object.keys({ a: 1, b: 2 }).length);"
+                      "print(Array.isArray(arr));"
+                      "print(Array.of(1, 2).length);"
+                      "print(btoa(\"hi\"));"
+                      "print(atob(btoa(\"hi\")));",
+                      &cf30);
+  v6_check(&fails, rc30.ok);
+  cf_free(&cf30);
 
   return fails;
 }

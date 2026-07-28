@@ -115,6 +115,7 @@ void cf_init(class_file* cf, const char* this_name, const char* super_name) {
 void cf_free(class_file* cf) {
   for (size_t i = 0; i < cf->method_len; i++) {
     buf_free(&cf->methods[i]->code);
+    free(cf->methods[i]->exceptions);
     free(cf->methods[i]);
   }
   free(cf->methods);
@@ -135,8 +136,25 @@ method* cf_method(class_file* cf, uint16_t access, const char* name,
   m->max_stack = 0;
   m->max_locals = 0;
   buf_init(&m->code);
+  m->exceptions = NULL;
+  m->exception_len = 0;
+  m->exception_cap = 0;
   cf->methods[cf->method_len++] = m;
   return m;
+}
+
+void method_add_exception(method* m, uint16_t start_pc, uint16_t end_pc,
+                          uint16_t handler_pc, uint16_t catch_type) {
+  if (m->exception_len == m->exception_cap) {
+    m->exception_cap = m->exception_cap ? m->exception_cap * 2 : 4;
+    m->exceptions =
+        realloc(m->exceptions, m->exception_cap * sizeof(exc_entry));
+  }
+  exc_entry* e = &m->exceptions[m->exception_len++];
+  e->start_pc = start_pc;
+  e->end_pc = end_pc;
+  e->handler_pc = handler_pc;
+  e->catch_type = catch_type;
 }
 
 void cf_field(class_file* cf, uint16_t access, const char* name,
@@ -195,7 +213,9 @@ void cf_emit(class_file* cf, buf* out) {
   buf_u16(out, (uint16_t)cf->method_len);
   for (size_t i = 0; i < cf->method_len; i++) {
     method* m = cf->methods[i];
-    uint32_t code_attr_len = 2 + 2 + 4 + (uint32_t)m->code.len + 2 + 2;
+    uint32_t exc_bytes = (uint32_t)m->exception_len * 8;
+    uint32_t code_attr_len =
+        2 + 2 + 4 + (uint32_t)m->code.len + 2 + exc_bytes + 2;
     buf_u16(out, m->access);
     buf_u16(out, m->name_idx);
     buf_u16(out, m->desc_idx);
@@ -206,7 +226,14 @@ void cf_emit(class_file* cf, buf* out) {
     buf_u16(out, m->max_locals);
     buf_u32(out, (uint32_t)m->code.len);
     buf_bytes(out, m->code.data, m->code.len);
-    buf_u16(out, 0);
+    buf_u16(out, (uint16_t)m->exception_len);
+    for (size_t j = 0; j < m->exception_len; j++) {
+      exc_entry* e = &m->exceptions[j];
+      buf_u16(out, e->start_pc);
+      buf_u16(out, e->end_pc);
+      buf_u16(out, e->handler_pc);
+      buf_u16(out, e->catch_type);
+    }
     buf_u16(out, 0);
   }
   buf_u16(out, 0);
