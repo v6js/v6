@@ -10,6 +10,7 @@ CFLAGS ?= $(STD) $(WARN) $(INC) -g -O0
 ifeq ($(OS),Windows_NT)
   EXE := .exe
   PLATFORM := windows
+  CFLAGS += -D_CRT_SECURE_NO_WARNINGS
 else
   EXE :=
   UNAME_S := $(shell uname -s)

@@ -2,12 +2,18 @@
 
 int test_value(void);
 int test_buf(void);
+int test_lexer(void);
+int test_bytecode(void);
+int test_parser(void);
 
 int main(void) {
   int fails = 0;
 
   fails += test_value();
   fails += test_buf();
+  fails += test_lexer();
+  fails += test_bytecode();
+  fails += test_parser();
 
   if (fails) {
     fprintf(stderr, "%d failure(s)\n", fails);

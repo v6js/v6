@@ -49,17 +49,17 @@ typedef enum {
 
 typedef struct tok {
   tok_kind kind;
-  const char *start;
+  const char* start;
   size_t len;
   int line;
   double num;
 } tok;
 
 typedef struct lexer {
-  const char *src;
-  const char *cur;
+  const char* src;
+  const char* cur;
   int line;
 } lexer;
 
-void lex_init(lexer *lx, const char *src);
-tok lex_next(lexer *lx);
+void lex_init(lexer* lx, const char* src);
+tok lex_next(lexer* lx);

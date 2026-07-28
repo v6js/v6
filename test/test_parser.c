@@ -6,7 +6,7 @@ int test_parser(void) {
 
   class_file cf;
   cf_init(&cf, "Main", "java/lang/Object");
-  method *m = cf_method(&cf, acc_public | acc_static, "calc", "()D");
+  method* m = cf_method(&cf, acc_public | acc_static, "calc", "()D");
 
   parser p;
   parser_init(&p, "1 + 2 * 3");
@@ -26,7 +26,7 @@ int test_parser(void) {
 
   class_file cf2;
   cf_init(&cf2, "Main", "java/lang/Object");
-  method *m2 = cf_method(&cf2, acc_public | acc_static, "calc", "()D");
+  method* m2 = cf_method(&cf2, acc_public | acc_static, "calc", "()D");
 
   parser p2;
   parser_init(&p2, "-(1+2)*4");
@@ -47,7 +47,7 @@ int test_parser(void) {
 
   class_file cf3;
   cf_init(&cf3, "Main", "java/lang/Object");
-  method *m3 = cf_method(&cf3, acc_public | acc_static, "calc", "()D");
+  method* m3 = cf_method(&cf3, acc_public | acc_static, "calc", "()D");
 
   parser p3;
   parser_init(&p3, "(1 + 2");

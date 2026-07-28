@@ -10,5 +10,6 @@ typedef struct parser {
   int had_error;
 } parser;
 
-void parser_init(parser *p, const char *src);
-int compile_expr(parser *p, class_file *cf, method *m);
+void parser_init(parser* p, const char* src);
+int compile_expr(parser* p, class_file* cf, method* m);
+int compile_program(const char* src, class_file* cf);

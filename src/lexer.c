@@ -5,21 +5,27 @@
 #include <string.h>
 
 typedef struct {
-  const char *word;
+  const char* word;
   tok_kind kind;
 } keyword;
 
 static const keyword keywords[] = {
-    {"var", tok_kw_var},         {"let", tok_kw_let},
-    {"const", tok_kw_const},     {"function", tok_kw_function},
-    {"return", tok_kw_return},   {"if", tok_kw_if},
-    {"else", tok_kw_else},       {"while", tok_kw_while},
-    {"for", tok_kw_for},         {"true", tok_kw_true},
-    {"false", tok_kw_false},     {"null", tok_kw_null},
+    {"var", tok_kw_var},
+    {"let", tok_kw_let},
+    {"const", tok_kw_const},
+    {"function", tok_kw_function},
+    {"return", tok_kw_return},
+    {"if", tok_kw_if},
+    {"else", tok_kw_else},
+    {"while", tok_kw_while},
+    {"for", tok_kw_for},
+    {"true", tok_kw_true},
+    {"false", tok_kw_false},
+    {"null", tok_kw_null},
     {"undefined", tok_kw_undefined},
 };
 
-void lex_init(lexer *lx, const char *src) {
+void lex_init(lexer* lx, const char* src) {
   lx->src = src;
   lx->cur = src;
   lx->line = 1;
@@ -33,7 +39,7 @@ static int is_ident_part(char c) {
   return isalnum((unsigned char)c) || c == '_' || c == '$';
 }
 
-static void skip_ws(lexer *lx) {
+static void skip_ws(lexer* lx) {
   for (;;) {
     char c = *lx->cur;
     if (c == '\n') {
@@ -42,21 +48,24 @@ static void skip_ws(lexer *lx) {
     } else if (c == ' ' || c == '\t' || c == '\r') {
       lx->cur++;
     } else if (c == '/' && lx->cur[1] == '/') {
-      while (*lx->cur && *lx->cur != '\n') lx->cur++;
+      while (*lx->cur && *lx->cur != '\n')
+        lx->cur++;
     } else if (c == '/' && lx->cur[1] == '*') {
       lx->cur += 2;
       while (*lx->cur && !(lx->cur[0] == '*' && lx->cur[1] == '/')) {
-        if (*lx->cur == '\n') lx->line++;
+        if (*lx->cur == '\n')
+          lx->line++;
         lx->cur++;
       }
-      if (*lx->cur) lx->cur += 2;
+      if (*lx->cur)
+        lx->cur += 2;
     } else {
       break;
     }
   }
 }
 
-static tok make(lexer *lx, tok_kind kind, const char *start) {
+static tok make(lexer* lx, tok_kind kind, const char* start) {
   tok t;
   t.kind = kind;
   t.start = start;
@@ -66,19 +75,22 @@ static tok make(lexer *lx, tok_kind kind, const char *start) {
   return t;
 }
 
-static tok lex_num(lexer *lx, const char *start) {
-  while (isdigit((unsigned char)*lx->cur)) lx->cur++;
+static tok lex_num(lexer* lx, const char* start) {
+  while (isdigit((unsigned char)*lx->cur))
+    lx->cur++;
   if (*lx->cur == '.' && isdigit((unsigned char)lx->cur[1])) {
     lx->cur++;
-    while (isdigit((unsigned char)*lx->cur)) lx->cur++;
+    while (isdigit((unsigned char)*lx->cur))
+      lx->cur++;
   }
   tok t = make(lx, tok_num, start);
   t.num = strtod(start, NULL);
   return t;
 }
 
-static tok lex_ident(lexer *lx, const char *start) {
-  while (is_ident_part(*lx->cur)) lx->cur++;
+static tok lex_ident(lexer* lx, const char* start) {
+  while (is_ident_part(*lx->cur))
+    lx->cur++;
   size_t len = (size_t)(lx->cur - start);
   for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
     size_t klen = strlen(keywords[i].word);
@@ -89,23 +101,27 @@ static tok lex_ident(lexer *lx, const char *start) {
   return make(lx, tok_ident, start);
 }
 
-static tok lex_str(lexer *lx, const char *start, char quote) {
+static tok lex_str(lexer* lx, const char* start, char quote) {
   lx->cur++;
   while (*lx->cur && *lx->cur != quote) {
-    if (*lx->cur == '\\' && lx->cur[1]) lx->cur++;
-    if (*lx->cur == '\n') lx->line++;
+    if (*lx->cur == '\\' && lx->cur[1])
+      lx->cur++;
+    if (*lx->cur == '\n')
+      lx->line++;
     lx->cur++;
   }
-  if (*lx->cur == quote) lx->cur++;
+  if (*lx->cur == quote)
+    lx->cur++;
   return make(lx, tok_str, start);
 }
 
-tok lex_next(lexer *lx) {
+tok lex_next(lexer* lx) {
   skip_ws(lx);
-  const char *start = lx->cur;
+  const char* start = lx->cur;
   char c = *lx->cur;
 
-  if (c == '\0') return make(lx, tok_eof, start);
+  if (c == '\0')
+    return make(lx, tok_eof, start);
   if (isdigit((unsigned char)c)) {
     lx->cur++;
     return lex_num(lx, start);
@@ -114,75 +130,76 @@ tok lex_next(lexer *lx) {
     lx->cur++;
     return lex_ident(lx, start);
   }
-  if (c == '"' || c == '\'') return lex_str(lx, start, c);
+  if (c == '"' || c == '\'')
+    return lex_str(lx, start, c);
 
   lx->cur++;
   switch (c) {
-    case '(':
-      return make(lx, tok_lparen, start);
-    case ')':
-      return make(lx, tok_rparen, start);
-    case '{':
-      return make(lx, tok_lbrace, start);
-    case '}':
-      return make(lx, tok_rbrace, start);
-    case '[':
-      return make(lx, tok_lbracket, start);
-    case ']':
-      return make(lx, tok_rbracket, start);
-    case ';':
-      return make(lx, tok_semi, start);
-    case ',':
-      return make(lx, tok_comma, start);
-    case '.':
-      return make(lx, tok_dot, start);
-    case '+':
-      return make(lx, tok_plus, start);
-    case '-':
-      return make(lx, tok_minus, start);
-    case '*':
-      return make(lx, tok_star, start);
-    case '/':
-      return make(lx, tok_slash, start);
-    case '%':
-      return make(lx, tok_percent, start);
-    case '!':
-      if (*lx->cur == '=') {
-        lx->cur++;
-        return make(lx, tok_neq, start);
-      }
-      return make(lx, tok_bang, start);
-    case '=':
-      if (*lx->cur == '=') {
-        lx->cur++;
-        return make(lx, tok_eq, start);
-      }
-      return make(lx, tok_assign, start);
-    case '<':
-      if (*lx->cur == '=') {
-        lx->cur++;
-        return make(lx, tok_le, start);
-      }
-      return make(lx, tok_lt, start);
-    case '>':
-      if (*lx->cur == '=') {
-        lx->cur++;
-        return make(lx, tok_ge, start);
-      }
-      return make(lx, tok_gt, start);
-    case '&':
-      if (*lx->cur == '&') {
-        lx->cur++;
-        return make(lx, tok_amp_amp, start);
-      }
-      return make(lx, tok_error, start);
-    case '|':
-      if (*lx->cur == '|') {
-        lx->cur++;
-        return make(lx, tok_pipe_pipe, start);
-      }
-      return make(lx, tok_error, start);
-    default:
-      return make(lx, tok_error, start);
+  case '(':
+    return make(lx, tok_lparen, start);
+  case ')':
+    return make(lx, tok_rparen, start);
+  case '{':
+    return make(lx, tok_lbrace, start);
+  case '}':
+    return make(lx, tok_rbrace, start);
+  case '[':
+    return make(lx, tok_lbracket, start);
+  case ']':
+    return make(lx, tok_rbracket, start);
+  case ';':
+    return make(lx, tok_semi, start);
+  case ',':
+    return make(lx, tok_comma, start);
+  case '.':
+    return make(lx, tok_dot, start);
+  case '+':
+    return make(lx, tok_plus, start);
+  case '-':
+    return make(lx, tok_minus, start);
+  case '*':
+    return make(lx, tok_star, start);
+  case '/':
+    return make(lx, tok_slash, start);
+  case '%':
+    return make(lx, tok_percent, start);
+  case '!':
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_neq, start);
+    }
+    return make(lx, tok_bang, start);
+  case '=':
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_eq, start);
+    }
+    return make(lx, tok_assign, start);
+  case '<':
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_le, start);
+    }
+    return make(lx, tok_lt, start);
+  case '>':
+    if (*lx->cur == '=') {
+      lx->cur++;
+      return make(lx, tok_ge, start);
+    }
+    return make(lx, tok_gt, start);
+  case '&':
+    if (*lx->cur == '&') {
+      lx->cur++;
+      return make(lx, tok_amp_amp, start);
+    }
+    return make(lx, tok_error, start);
+  case '|':
+    if (*lx->cur == '|') {
+      lx->cur++;
+      return make(lx, tok_pipe_pipe, start);
+    }
+    return make(lx, tok_error, start);
+  default:
+    return make(lx, tok_error, start);
   }
 }

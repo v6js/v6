@@ -115,32 +115,32 @@ typedef struct class_file {
   uint16_t this_idx;
   uint16_t super_idx;
   uint16_t code_utf8;
-  method **methods;
+  method** methods;
   size_t method_len;
   size_t method_cap;
 } class_file;
 
-void cf_init(class_file *cf, const char *this_name, const char *super_name);
-void cf_free(class_file *cf);
+void cf_init(class_file* cf, const char* this_name, const char* super_name);
+void cf_free(class_file* cf);
 
-uint16_t cf_utf8(class_file *cf, const char *s);
-uint16_t cf_class(class_file *cf, const char *name);
-uint16_t cf_name_type(class_file *cf, const char *name, const char *desc);
-uint16_t cf_methodref(class_file *cf, const char *cls, const char *name,
-                       const char *desc);
-uint16_t cf_fieldref(class_file *cf, const char *cls, const char *name,
-                      const char *desc);
-uint16_t cf_string(class_file *cf, const char *s);
-uint16_t cf_integer(class_file *cf, int32_t v);
-uint16_t cf_double(class_file *cf, double v);
+uint16_t cf_utf8(class_file* cf, const char* s);
+uint16_t cf_class(class_file* cf, const char* name);
+uint16_t cf_name_type(class_file* cf, const char* name, const char* desc);
+uint16_t cf_methodref(class_file* cf, const char* cls, const char* name,
+                      const char* desc);
+uint16_t cf_fieldref(class_file* cf, const char* cls, const char* name,
+                     const char* desc);
+uint16_t cf_string(class_file* cf, const char* s);
+uint16_t cf_integer(class_file* cf, int32_t v);
+uint16_t cf_double(class_file* cf, double v);
 
-method *cf_method(class_file *cf, uint16_t access, const char *name,
-                   const char *desc);
+method* cf_method(class_file* cf, uint16_t access, const char* name,
+                  const char* desc);
 
-void op_emit(method *m, uint8_t code);
-void op_emit1(method *m, uint8_t code, uint8_t a);
-void op_emit2(method *m, uint8_t code, uint16_t a);
-size_t op_pos(method *m);
-void op_patch2(method *m, size_t at, uint16_t v);
+void op_emit(method* m, uint8_t code);
+void op_emit1(method* m, uint8_t code, uint8_t a);
+void op_emit2(method* m, uint8_t code, uint16_t a);
+size_t op_pos(method* m);
+void op_patch2(method* m, size_t at, uint16_t v);
 
-void cf_emit(class_file *cf, buf *out);
+void cf_emit(class_file* cf, buf* out);
