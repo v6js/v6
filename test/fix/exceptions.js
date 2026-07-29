@@ -17,7 +17,7 @@ try {
   console.log("error: " + e);
 }
 
-var log = [];
+let log = [];
 function withFinally() {
   try {
     log[log.length] = "try";

@@ -10,13 +10,13 @@ if (1 > 2) {
   console.log("right");
 }
 
-var i = 0;
+let i = 0;
 while (i < 5) {
   console.log(i);
   i = i + 1;
 }
 
-for (var j = 0; j < 3; j = j + 1) {
+for (let j = 0; j < 3; j = j + 1) {
   console.log(j * 10);
 }
 

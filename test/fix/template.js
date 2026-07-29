@@ -1,8 +1,8 @@
-var name = "world";
+let name = "world";
 console.log(`hello ${name}`);
 console.log(`1 + 2 = ${1 + 2}`);
 
-var x = 3, y = 4;
+let x = 3, y = 4;
 console.log(`sum=${x + y} product=${x * y}`);
 
 console.log(`no interpolation here`);
@@ -13,7 +13,7 @@ function greet(who) {
 }
 console.log(greet("Ada"));
 
-var obj = { a: 1 };
+let obj = { a: 1 };
 console.log(`obj.a is ${obj.a}`);
 
 console.log(`nested: ${1 + (2 * 3)}`);

@@ -1,4 +1,4 @@
-var a = 1, b = 2, c = 3;
+let a = 1, b = 2, c = 3;
 console.log(a);
 console.log(b);
 console.log(c);
@@ -11,13 +11,13 @@ console.log(1 << 4);
 console.log(256 >> 4);
 console.log(-1 >>> 28);
 
-var x = 5;
+let x = 5;
 x &= 3;
 console.log(x);
-var y = 5;
+let y = 5;
 y |= 2;
 console.log(y);
-var z = 1;
+let z = 1;
 z <<= 4;
 console.log(z);
 
