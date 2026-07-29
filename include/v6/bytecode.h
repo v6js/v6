@@ -84,6 +84,8 @@ typedef enum {
   op_dcmpl = 0x97,
   op_dcmpg = 0x98,
   op_goto = 0xa7,
+  op_ifnull = 0xc6,
+  op_ifnonnull = 0xc7,
   op_ireturn = 0xac,
   op_dreturn = 0xaf,
   op_areturn = 0xb0,

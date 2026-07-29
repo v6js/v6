@@ -1,12 +1,13 @@
 import java.util.concurrent.SynchronousQueue;
 
 public final class V6Generator extends V6Object {
-  private static final int RESUME = 0;
-  private static final int THROW = 1;
-  private static final int RETURN = 2;
-  private static final int YIELD = 0;
-  private static final int DONE = 1;
-  private static final int ERROR = 2;
+  static final int RESUME = 0;
+  static final int THROW = 1;
+  static final int RETURN = 2;
+  static final int YIELD = 0;
+  static final int DONE = 1;
+  static final int ERROR = 2;
+  static final int AWAIT_YIELD = 3;
 
   private static final ThreadLocal<V6Generator> CURRENT = new ThreadLocal<>();
 
@@ -73,6 +74,45 @@ public final class V6Generator extends V6Object {
     if (g == null)
       throw new RuntimeException("yield used outside a generator");
     return g.doYield(v);
+  }
+
+  public V6Value doAwait(V6Value v) {
+    try {
+      fromCoroutine.put(new Object[] {AWAIT_YIELD, v});
+      Object[] msg = toCoroutine.take();
+      int kind = (Integer)msg[0];
+      if (kind == THROW)
+        throw new V6Throw((V6Value)msg[1]);
+      if (kind == RETURN)
+        throw new V6GeneratorReturn((V6Value)msg[1]);
+      return (V6Value)msg[1];
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static V6Value currentAwait(V6Value v) {
+    V6Generator g = CURRENT.get();
+    if (g == null)
+      throw new RuntimeException("await used outside an async function");
+    return g.doAwait(v);
+  }
+
+  public Object[] rawStep(int action, V6Value payload) {
+    if (finished)
+      return new Object[] {DONE, new V6Value(V6Value.TAG_UNDEF, 0, null)};
+    ensureStarted();
+    try {
+      toCoroutine.put(new Object[] {action, payload});
+      Object[] res = fromCoroutine.take();
+      int kind = (Integer)res[0];
+      if (kind == YIELD || kind == AWAIT_YIELD)
+        return res;
+      finished = true;
+      return res;
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   private V6Value iterResult(V6Value value, boolean done) {

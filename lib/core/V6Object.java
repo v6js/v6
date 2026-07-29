@@ -14,6 +14,7 @@ public class V6Object {
   private boolean sealed = false;
   private Map<String, V6Callable> getters;
   private Map<String, V6Callable> setters;
+  public V6Value newTarget;
 
   public void defineGetter(String key, V6Callable getter) {
     if (getters == null)

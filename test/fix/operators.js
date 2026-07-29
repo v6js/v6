@@ -71,3 +71,49 @@ class Widget {
   }
 }
 new Widget();
+
+let zeroValue = 0;
+zeroValue ||= 5;
+console.log(zeroValue);
+
+let nonZeroValue = 3;
+nonZeroValue ||= 5;
+console.log(nonZeroValue);
+
+let truthyValue = 1;
+truthyValue &&= 10;
+console.log(truthyValue);
+
+let falsyValue = 0;
+falsyValue &&= 10;
+console.log(falsyValue);
+
+let nullValue = null;
+nullValue ??= 7;
+console.log(nullValue);
+
+let definedZero = 0;
+definedZero ??= 7;
+console.log(definedZero);
+
+let account = { balance: 0, limit: 3, note: null };
+account.balance ||= 5;
+account.limit ||= 5;
+account.note ??= "n/a";
+console.log(account.balance, account.limit, account.note);
+
+let readings = [0, 1, null];
+readings[0] ||= 42;
+readings[1] &&= 42;
+readings[2] ??= 42;
+console.log(readings[0], readings[1], readings[2]);
+
+function bump(n) {
+  return n + 1;
+}
+let guardedTruthy = 1;
+guardedTruthy &&= bump(guardedTruthy);
+console.log(guardedTruthy);
+let guardedFalsy = 0;
+guardedFalsy &&= bump(guardedFalsy);
+console.log(guardedFalsy);

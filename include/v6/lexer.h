@@ -102,6 +102,8 @@ typedef enum {
   tok_kw_await,
   tok_kw_yield,
   tok_regex,
+  tok_amp_amp_eq,
+  tok_pipe_pipe_eq,
 } tok_kind;
 
 typedef struct tok {
@@ -110,6 +112,7 @@ typedef struct tok {
   size_t len;
   int line;
   double num;
+  int is_bigint;
 } tok;
 
 typedef struct lexer {

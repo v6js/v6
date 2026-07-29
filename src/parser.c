@@ -13,6 +13,7 @@ enum {
   V6_TAG_OBJ = 4,
   V6_TAG_STR = 5,
   V6_TAG_FUNC = 6,
+  V6_TAG_BIGINT = 7,
 };
 
 static void advance(parser* p) {
@@ -468,6 +469,13 @@ static char* decode_raw_chunk(const char* start, size_t len) {
   return buf;
 }
 
+static char* raw_chunk_copy(const char* start, size_t len) {
+  char* buf = malloc(len + 1);
+  memcpy(buf, start, len);
+  buf[len] = '\0';
+  return buf;
+}
+
 static char* dup_tok(tok t) {
   char* s = malloc(t.len + 1);
   memcpy(s, t.start, t.len);
@@ -648,6 +656,72 @@ static void parse_array_literal(parser* p, compiler* c);
 static void parse_primary(parser* p, compiler* c);
 static void compile_closure_value(parser* p, compiler* c, int is_arrow,
                                   int parens_params, char* out_lambda_name);
+static void skip_balanced(parser* p, tok_kind open, tok_kind close);
+static void parse_object_pattern(parser* p, compiler* c, tok_kind kind,
+                                 uint16_t src_slot);
+static void emit_tagged_template_call(parser* p, compiler* c);
+
+static int is_logical_assign_op(tok_kind k) {
+  return k == tok_amp_amp_eq || k == tok_pipe_pipe_eq ||
+         k == tok_question_question_eq;
+}
+
+static void emit_logical_assign_ident(parser* p, compiler* c, var_ref vr,
+                                      tok_kind op) {
+  emit_var_read_ref(c, vr);
+  op_emit(c->m, op_dup);
+  if (op == tok_question_question_eq) {
+    uint16_t idx = cf_methodref(c->cf, "V6Value", "isNullish", "()Z");
+    op_emit2(c->m, op_invokevirtual, idx);
+  } else {
+    emit_truthy(c);
+  }
+  size_t else_jump = op_pos(c->m);
+  uint8_t jump_op = (op == tok_pipe_pipe_eq) ? op_ifne : op_ifeq;
+  op_emit2(c->m, jump_op, 0);
+  op_emit(c->m, op_pop);
+  parse_expr(p, c);
+  emit_var_write_ref(c, vr);
+  size_t end_jump = op_pos(c->m);
+  op_emit2(c->m, op_goto, 0);
+  size_t else_pos = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(else_jump + 1), (uint16_t)(else_pos - else_jump));
+  size_t end_pos = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(end_jump + 1), (uint16_t)(end_pos - end_jump));
+}
+
+static void emit_logical_assign_member(parser* p, compiler* c, tok_kind op) {
+  op_emit(c->m, op_dup2);
+  uint16_t getprop_idx = cf_methodref(c->cf, "V6Value", "getProp",
+                                      "(Ljava/lang/String;)LV6Value;");
+  op_emit2(c->m, op_invokevirtual, getprop_idx);
+  op_emit(c->m, op_dup);
+  if (op == tok_question_question_eq) {
+    uint16_t idx = cf_methodref(c->cf, "V6Value", "isNullish", "()Z");
+    op_emit2(c->m, op_invokevirtual, idx);
+  } else {
+    emit_truthy(c);
+  }
+  size_t else_jump = op_pos(c->m);
+  uint8_t jump_op = (op == tok_pipe_pipe_eq) ? op_ifne : op_ifeq;
+  op_emit2(c->m, jump_op, 0);
+  op_emit(c->m, op_pop);
+  parse_expr(p, c);
+  op_emit(c->m, op_dup_x2);
+  uint16_t setprop_idx = cf_methodref(c->cf, "V6Value", "setProp",
+                                      "(Ljava/lang/String;LV6Value;)V");
+  op_emit2(c->m, op_invokevirtual, setprop_idx);
+  size_t end_jump = op_pos(c->m);
+  op_emit2(c->m, op_goto, 0);
+  size_t else_pos = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(else_jump + 1), (uint16_t)(else_pos - else_jump));
+  op_emit(c->m, op_dup_x2);
+  op_emit(c->m, op_pop);
+  op_emit(c->m, op_pop);
+  op_emit(c->m, op_pop);
+  size_t end_pos = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(end_jump + 1), (uint16_t)(end_pos - end_jump));
+}
 
 static int peek_is_arrow(parser* p) {
   lexer save_lex = p->lex;
@@ -736,6 +810,22 @@ static void emit_wrap_async(compiler* c) {
   emit_box_ref_computed(c, V6_TAG_FUNC);
 }
 
+static void emit_wrap_async_generator(compiler* c) {
+  uint16_t ascall_idx =
+      cf_methodref(c->cf, "V6Value", "asCallable", "()LV6Callable;");
+  op_emit2(c->m, op_invokevirtual, ascall_idx);
+  uint16_t tmp_slot = c->next_local_slot++;
+  emit_astore(c->m, tmp_slot);
+  uint16_t asyncgenfn_cls = cf_class(c->cf, "V6AsyncGeneratorFunction");
+  uint16_t asyncgenfn_ctor = cf_methodref(
+      c->cf, "V6AsyncGeneratorFunction", "<init>", "(LV6Callable;)V");
+  op_emit2(c->m, op_new, asyncgenfn_cls);
+  op_emit(c->m, op_dup);
+  emit_aload(c->m, tmp_slot);
+  op_emit2(c->m, op_invokespecial, asyncgenfn_ctor);
+  emit_box_ref_computed(c, V6_TAG_FUNC);
+}
+
 static void parse_object_entry(parser* p, compiler* c) {
   if (match(p, tok_ellipsis)) {
     op_emit(c->m, op_dup);
@@ -746,10 +836,26 @@ static void parse_object_entry(parser* p, compiler* c) {
     return;
   }
 
+  int is_async = 0;
+  if (check(p, tok_kw_async)) {
+    lexer save_lex = p->lex;
+    tok save_cur = p->cur;
+    tok save_prev = p->prev;
+    advance(p);
+    if (check(p, tok_colon) || check(p, tok_lparen) || check(p, tok_comma) ||
+        check(p, tok_rbrace)) {
+      p->lex = save_lex;
+      p->cur = save_cur;
+      p->prev = save_prev;
+    } else {
+      is_async = 1;
+    }
+  }
+
   int is_gen = match(p, tok_star);
 
   int is_getter = 0, is_setter = 0;
-  if (!is_gen && (check(p, tok_kw_get) || check(p, tok_kw_set))) {
+  if (!is_gen && !is_async && (check(p, tok_kw_get) || check(p, tok_kw_set))) {
     tok_kind modifier = p->cur.kind;
     lexer save_lex = p->lex;
     tok save_cur = p->cur;
@@ -836,8 +942,14 @@ static void parse_object_entry(parser* p, compiler* c) {
 
   if (check(p, tok_lparen)) {
     compile_closure_value(p, c, 0, 1, NULL);
-    if (is_gen)
+    if (is_gen && is_async) {
+      error_at(p, "async generator methods are not supported");
+      return;
+    } else if (is_gen) {
       emit_wrap_generator(c);
+    } else if (is_async) {
+      emit_wrap_async(c);
+    }
   } else if (match(p, tok_colon)) {
     parse_expr(p, c);
   } else if (shorthand_ok && !computed) {
@@ -1105,6 +1217,12 @@ static void compile_direct_new(parser* p, compiler* c, var_ref vr,
   op_emit2(c->m, op_invokevirtual, get_idx);
   op_emit2(c->m, op_invokevirtual, setprotoval_idx);
 
+  uint16_t new_target_field =
+      cf_fieldref(c->cf, "V6Object", "newTarget", "LV6Value;");
+  emit_aload(c->m, inst_slot);
+  emit_aload(c->m, cls_val_slot);
+  op_emit2(c->m, op_putfield, new_target_field);
+
   emit_aload(c->m, inst_slot);
   emit_box_object_ref(c);
   uint16_t instval_slot = c->next_local_slot++;
@@ -1252,6 +1370,13 @@ static void parse_postfix(parser* p, compiler* c) {
         goto patch_and_return;
       }
 
+      if (is_logical_assign_op(p->cur.kind)) {
+        tok_kind op = p->cur.kind;
+        advance(p);
+        emit_logical_assign_member(p, c, op);
+        goto patch_and_return;
+      }
+
       if (check(p, tok_plus_eq) || check(p, tok_minus_eq) ||
           check(p, tok_star_eq) || check(p, tok_slash_eq) ||
           check(p, tok_percent_eq) || check(p, tok_amp_eq) ||
@@ -1331,6 +1456,15 @@ static void parse_postfix(parser* p, compiler* c) {
         continue;
       }
 
+      if (check(p, tok_template)) {
+        emit_dup_second_from_top(c->m);
+        uint16_t get_idx = cf_methodref(c->cf, "V6Value", "getProp",
+                                        "(Ljava/lang/String;)LV6Value;");
+        op_emit2(c->m, op_invokevirtual, get_idx);
+        emit_tagged_template_call(p, c);
+        continue;
+      }
+
       uint16_t get_idx = cf_methodref(c->cf, "V6Value", "getProp",
                                       "(Ljava/lang/String;)LV6Value;");
       op_emit2(c->m, op_invokevirtual, get_idx);
@@ -1338,6 +1472,9 @@ static void parse_postfix(parser* p, compiler* c) {
       advance(p);
       emit_insert_undefined_this(c);
       emit_call_args_and_invoke(p, c);
+    } else if (check(p, tok_template)) {
+      emit_insert_undefined_this(c);
+      emit_tagged_template_call(p, c);
     } else {
       break;
     }
@@ -1428,6 +1565,131 @@ static void parse_template_literal(parser* p, compiler* c) {
   }
 }
 
+static void emit_tagged_template_call(parser* p, compiler* c) {
+  uint16_t fn_slot = c->next_local_slot++;
+  uint16_t this_slot = c->next_local_slot++;
+  emit_astore(c->m, fn_slot);
+  emit_astore(c->m, this_slot);
+
+  tok t = p->cur;
+  advance(p);
+  const char* s = t.start;
+  size_t len = t.len;
+
+  uint16_t arr_cls = cf_class(c->cf, "V6Array");
+  uint16_t arr_ctor = cf_methodref(c->cf, "V6Array", "<init>", "()V");
+  uint16_t push_idx = cf_methodref(c->cf, "V6Object", "push", "(LV6Value;)V");
+  uint16_t set_idx =
+      cf_methodref(c->cf, "V6Object", "set", "(Ljava/lang/String;LV6Value;)V");
+  uint16_t tovalarr_idx =
+      cf_methodref(c->cf, "V6Object", "toValueArray", "()[LV6Value;");
+
+  op_emit2(c->m, op_new, arr_cls);
+  op_emit(c->m, op_dup);
+  op_emit2(c->m, op_invokespecial, arr_ctor);
+  uint16_t strings_slot = c->next_local_slot++;
+  emit_astore(c->m, strings_slot);
+
+  op_emit2(c->m, op_new, arr_cls);
+  op_emit(c->m, op_dup);
+  op_emit2(c->m, op_invokespecial, arr_ctor);
+  uint16_t raw_slot = c->next_local_slot++;
+  emit_astore(c->m, raw_slot);
+
+  op_emit2(c->m, op_new, arr_cls);
+  op_emit(c->m, op_dup);
+  op_emit2(c->m, op_invokespecial, arr_ctor);
+  uint16_t callargs_slot = c->next_local_slot++;
+  emit_astore(c->m, callargs_slot);
+
+  emit_aload(c->m, callargs_slot);
+  emit_aload(c->m, strings_slot);
+  emit_box_object_ref(c);
+  op_emit2(c->m, op_invokevirtual, push_idx);
+
+  size_t i = 1;
+  size_t chunk_start = 1;
+  while (i < len - 1) {
+    if (s[i] == '\\' && i + 1 < len - 1) {
+      i += 2;
+      continue;
+    }
+    if (s[i] == '$' && i + 1 < len - 1 && s[i + 1] == '{') {
+      char* dec = decode_raw_chunk(s + chunk_start, i - chunk_start);
+      emit_aload(c->m, strings_slot);
+      emit_string_value(c, dec);
+      free(dec);
+      op_emit2(c->m, op_invokevirtual, push_idx);
+
+      char* raw = raw_chunk_copy(s + chunk_start, i - chunk_start);
+      emit_aload(c->m, raw_slot);
+      emit_string_value(c, raw);
+      free(raw);
+      op_emit2(c->m, op_invokevirtual, push_idx);
+
+      size_t expr_start = i + 2;
+      int depth = 1;
+      size_t j = expr_start;
+      while (j < len - 1 && depth > 0) {
+        if (s[j] == '{') {
+          depth++;
+        } else if (s[j] == '}') {
+          depth--;
+          if (depth == 0)
+            break;
+        } else if (s[j] == '"' || s[j] == '\'') {
+          char q = s[j];
+          j++;
+          while (j < len - 1 && s[j] != q) {
+            if (s[j] == '\\' && j + 1 < len - 1)
+              j++;
+            j++;
+          }
+        }
+        j++;
+      }
+
+      parser ep;
+      parser_init(&ep, s + expr_start);
+      emit_aload(c->m, callargs_slot);
+      parse_expr(&ep, c);
+      op_emit2(c->m, op_invokevirtual, push_idx);
+
+      i = j + 1;
+      chunk_start = i;
+      continue;
+    }
+    i++;
+  }
+
+  char* dec = decode_raw_chunk(s + chunk_start, i - chunk_start);
+  emit_aload(c->m, strings_slot);
+  emit_string_value(c, dec);
+  free(dec);
+  op_emit2(c->m, op_invokevirtual, push_idx);
+
+  char* raw = raw_chunk_copy(s + chunk_start, i - chunk_start);
+  emit_aload(c->m, raw_slot);
+  emit_string_value(c, raw);
+  free(raw);
+  op_emit2(c->m, op_invokevirtual, push_idx);
+
+  uint16_t raw_str = cf_string(c->cf, "raw");
+  emit_aload(c->m, strings_slot);
+  op_emit2(c->m, op_ldc_w, raw_str);
+  emit_aload(c->m, raw_slot);
+  emit_box_object_ref(c);
+  op_emit2(c->m, op_invokevirtual, set_idx);
+
+  emit_aload(c->m, fn_slot);
+  emit_aload(c->m, this_slot);
+  emit_aload(c->m, callargs_slot);
+  op_emit2(c->m, op_invokevirtual, tovalarr_idx);
+  uint16_t call_idx =
+      cf_methodref(c->cf, "V6Value", "call", "(LV6Value;[LV6Value;)LV6Value;");
+  op_emit2(c->m, op_invokevirtual, call_idx);
+}
+
 static void parse_new(parser* p, compiler* c) {
   if (!expect(p, tok_ident))
     return;
@@ -1515,9 +1777,25 @@ static void parse_primary(parser* p, compiler* c) {
       }
       advance(p);
       if (c->class_name) {
-        var_ref vr = resolve_var(c, c->class_name, c->class_name_len);
-        if (vr.kind != var_not_found) {
-          emit_var_read_ref(c, vr);
+        var_ref this_vr = resolve_var(c, "this", 4);
+        if (this_vr.kind != var_not_found) {
+          emit_var_read_ref(c, this_vr);
+          uint16_t ref_idx =
+              cf_methodref(c->cf, "V6Value", "ref", "()Ljava/lang/Object;");
+          op_emit2(c->m, op_invokevirtual, ref_idx);
+          uint16_t obj_cls = cf_class(c->cf, "V6Object");
+          op_emit2(c->m, op_checkcast, obj_cls);
+          uint16_t new_target_field =
+              cf_fieldref(c->cf, "V6Object", "newTarget", "LV6Value;");
+          op_emit2(c->m, op_getfield, new_target_field);
+          op_emit(c->m, op_dup);
+          size_t has_val_jump = op_pos(c->m);
+          op_emit2(c->m, op_ifnonnull, 0);
+          op_emit(c->m, op_pop);
+          emit_undef(c->cf, c->m);
+          size_t has_val_pos = op_pos(c->m);
+          op_patch2(c->m, (uint16_t)(has_val_jump + 1),
+                    (uint16_t)(has_val_pos - has_val_jump));
           return;
         }
       }
@@ -1534,6 +1812,27 @@ static void parse_primary(parser* p, compiler* c) {
   }
 
   if (match(p, tok_num)) {
+    if (p->prev.is_bigint) {
+      size_t digits_len = p->prev.len - 1;
+      char* digits = malloc(digits_len + 1);
+      memcpy(digits, p->prev.start, digits_len);
+      digits[digits_len] = '\0';
+      uint16_t str_idx = cf_string(c->cf, digits);
+      free(digits);
+      uint16_t bigint_cls = cf_class(c->cf, "java/math/BigInteger");
+      uint16_t bigint_ctor = cf_methodref(
+          c->cf, "java/math/BigInteger", "<init>", "(Ljava/lang/String;)V");
+      op_emit2(c->m, op_new, value_class(c->cf));
+      op_emit(c->m, op_dup);
+      emit_iconst(c->m, V6_TAG_BIGINT);
+      op_emit(c->m, op_dconst_0);
+      op_emit2(c->m, op_new, bigint_cls);
+      op_emit(c->m, op_dup);
+      op_emit2(c->m, op_ldc_w, str_idx);
+      op_emit2(c->m, op_invokespecial, bigint_ctor);
+      op_emit2(c->m, op_invokespecial, value_ctor(c->cf));
+      return;
+    }
     uint16_t idx = cf_double(c->cf, p->prev.num);
     op_emit2(c->m, op_new, value_class(c->cf));
     op_emit(c->m, op_dup);
@@ -1655,8 +1954,9 @@ static void parse_primary(parser* p, compiler* c) {
 
   if (match(p, tok_kw_await)) {
     parse_unary(p, c);
-    uint16_t yield_idx = cf_methodref(c->cf, "V6Generator", "currentYield",
-                                      "(LV6Value;)LV6Value;");
+    uint16_t yield_idx = cf_methodref(
+        c->cf, "V6Generator", c->is_async_gen ? "currentAwait" : "currentYield",
+        "(LV6Value;)LV6Value;");
     op_emit2(c->m, op_invokestatic, yield_idx);
     return;
   }
@@ -1725,11 +2025,15 @@ static void parse_primary(parser* p, compiler* c) {
     tok async_save_prev = p->prev;
     advance(p);
     if (match(p, tok_kw_function)) {
-      match(p, tok_star);
+      int is_gen = match(p, tok_star);
       if (check(p, tok_ident))
         advance(p);
+      c->pending_async_gen = is_gen;
       compile_closure_value(p, c, 0, 1, NULL);
-      emit_wrap_async(c);
+      if (is_gen)
+        emit_wrap_async_generator(c);
+      else
+        emit_wrap_async(c);
       return;
     }
     if (check(p, tok_ident) && peek_is_arrow(p)) {
@@ -1766,6 +2070,24 @@ static void parse_primary(parser* p, compiler* c) {
 
   if (match(p, tok_ident)) {
     tok name = p->prev;
+
+    if (is_logical_assign_op(p->cur.kind)) {
+      tok_kind op = p->cur.kind;
+      advance(p);
+
+      var_ref vr = resolve_var(c, name.start, name.len);
+      if (vr.kind == var_not_found) {
+        error_at(p, "undeclared variable");
+        return;
+      }
+      local* le = find_local_entry(c, name.start, name.len);
+      if (le && le->is_const) {
+        error_at(p, "assignment to constant variable");
+        return;
+      }
+      emit_logical_assign_ident(p, c, vr, op);
+      return;
+    }
 
     if (check(p, tok_assign) || check(p, tok_plus_eq) ||
         check(p, tok_minus_eq) || check(p, tok_star_eq) ||
@@ -1872,6 +2194,30 @@ static void parse_primary(parser* p, compiler* c) {
   }
 
   if (match(p, tok_lparen)) {
+    if (check(p, tok_lbrace)) {
+      lexer save_lex = p->lex;
+      tok save_cur = p->cur;
+      tok save_prev = p->prev;
+      advance(p);
+      const char* pattern_start = p->cur.start;
+      skip_balanced(p, tok_lbrace, tok_rbrace);
+      if (check(p, tok_assign)) {
+        advance(p);
+        parse_expr(p, c);
+        op_emit(c->m, op_dup);
+        uint16_t src_slot = c->next_local_slot++;
+        emit_astore(c->m, src_slot);
+        parser pp;
+        parser_init(&pp, pattern_start);
+        parse_object_pattern(&pp, c, tok_kw_var, src_slot);
+        if (!match(p, tok_rparen))
+          error_at(p, "expected ')'");
+        return;
+      }
+      p->lex = save_lex;
+      p->cur = save_cur;
+      p->prev = save_prev;
+    }
     parse_expr(p, c);
     if (!match(p, tok_rparen))
       error_at(p, "expected ')'");
@@ -1895,9 +2241,8 @@ static void parse_primary(parser* p, compiler* c) {
 static void parse_unary(parser* p, compiler* c) {
   if (match(p, tok_minus)) {
     parse_unary(p, c);
-    emit_to_number(c);
-    op_emit(c->m, op_dneg);
-    emit_box_tag(c, op_iconst_0);
+    uint16_t idx = cf_methodref(c->cf, "V6Value", "neg", "(LV6Value;)LV6Value;");
+    op_emit2(c->m, op_invokestatic, idx);
     return;
   }
   if (match(p, tok_bang)) {
@@ -1943,12 +2288,12 @@ static void parse_mul(parser* p, compiler* c) {
   while (check(p, tok_star) || check(p, tok_slash) || check(p, tok_percent)) {
     tok_kind k = p->cur.kind;
     advance(p);
-    emit_to_number(c);
     parse_exp(p, c);
-    emit_to_number(c);
-    uint8_t op = k == tok_star ? op_dmul : (k == tok_slash ? op_ddiv : op_drem);
-    op_emit(c->m, op);
-    emit_box_tag(c, op_iconst_0);
+    const char* mname =
+        k == tok_star ? "mul" : (k == tok_slash ? "div" : "mod");
+    uint16_t idx = cf_methodref(c->cf, "V6Value", mname,
+                                "(LV6Value;LV6Value;)LV6Value;");
+    op_emit2(c->m, op_invokestatic, idx);
   }
 }
 
@@ -1963,11 +2308,10 @@ static void parse_add(parser* p, compiler* c) {
                                   "(LV6Value;LV6Value;)LV6Value;");
       op_emit2(c->m, op_invokestatic, idx);
     } else {
-      emit_to_number(c);
       parse_mul(p, c);
-      emit_to_number(c);
-      op_emit(c->m, op_dsub);
-      emit_box_tag(c, op_iconst_0);
+      uint16_t idx = cf_methodref(c->cf, "V6Value", "sub",
+                                  "(LV6Value;LV6Value;)LV6Value;");
+      op_emit2(c->m, op_invokestatic, idx);
     }
   }
 }
@@ -2174,6 +2518,21 @@ static void parse_one_declarator_named(parser* p, compiler* c, tok_kind kind,
     return;
   }
 
+  if (c->brace_depth == 0) {
+    local* le = find_local_entry(c, name.start, name.len);
+    if (le) {
+      if (match(p, tok_assign)) {
+        parse_expr(p, c);
+        var_ref vr;
+        vr.kind = var_local;
+        vr.index = le->slot;
+        emit_var_write_ref(c, vr);
+        op_emit(c->m, op_pop);
+      }
+      return;
+    }
+  }
+
   if (match(p, tok_assign))
     parse_expr(p, c);
   else
@@ -2223,6 +2582,14 @@ static void bind_pattern_target(parser* p, compiler* c, tok_kind kind,
       error_at(p, "internal: hoisted var missing");
       return;
     }
+    emit_var_write_ref(c, vr);
+    op_emit(c->m, op_pop);
+  } else if (c->brace_depth == 0 &&
+             find_local_entry(c, name.start, name.len)) {
+    local* le = find_local_entry(c, name.start, name.len);
+    var_ref vr;
+    vr.kind = var_local;
+    vr.index = le->slot;
     emit_var_write_ref(c, vr);
     op_emit(c->m, op_pop);
   } else {
@@ -2468,7 +2835,19 @@ static void push_loop(compiler* c, size_t continue_target) {
   c->breaks[c->break_depth].count = 0;
   c->break_depth++;
   c->continues[c->continue_depth] = continue_target;
+  int continue_idx = c->continue_depth;
   c->continue_depth++;
+  for (int i = 0; i < c->pending_label_count; i++) {
+    for (int j = c->label_count - 1; j >= 0; j--) {
+      if (c->label_lens[j] == c->pending_label_lens[i] &&
+          memcmp(c->label_names[j], c->pending_label_names[i],
+                 c->label_lens[j]) == 0 &&
+          c->label_continue_depth[j] == -1) {
+        c->label_continue_depth[j] = continue_idx;
+        break;
+      }
+    }
+  }
 }
 
 static void patch_breaks(compiler* c, size_t end_pos) {
@@ -2653,6 +3032,79 @@ static void parse_for_of(parser* p, compiler* c, tok_kind kind, tok name) {
   size_t end_pos = op_pos(c->m);
   op_patch2(c->m, (uint16_t)(exit_jump + 1), (uint16_t)(end_pos - exit_jump));
   pop_loop(c, end_pos);
+}
+
+static void parse_for_await_of(parser* p, compiler* c, tok_kind kind,
+                               tok name) {
+  uint16_t iterable_slot = c->next_local_slot++;
+  parse_expr(p, c);
+  expect(p, tok_rparen);
+  emit_astore(c->m, iterable_slot);
+
+  uint16_t next_str = cf_string(c->cf, "next");
+  uint16_t value_str = cf_string(c->cf, "value");
+  uint16_t done_str = cf_string(c->cf, "done");
+  uint16_t getprop_idx = cf_methodref(c->cf, "V6Value", "getProp",
+                                      "(Ljava/lang/String;)LV6Value;");
+  uint16_t call_idx =
+      cf_methodref(c->cf, "V6Value", "call", "(LV6Value;[LV6Value;)LV6Value;");
+  uint16_t await_idx = cf_methodref(
+      c->cf, "V6Generator", c->is_async_gen ? "currentAwait" : "currentYield",
+      "(LV6Value;)LV6Value;");
+
+  size_t cond_pos = op_pos(c->m);
+  emit_aload(c->m, iterable_slot);
+  op_emit2(c->m, op_ldc_w, next_str);
+  op_emit2(c->m, op_invokevirtual, getprop_idx);
+  emit_aload(c->m, iterable_slot);
+  emit_iconst(c->m, 0);
+  op_emit2(c->m, op_anewarray, value_class(c->cf));
+  op_emit2(c->m, op_invokevirtual, call_idx);
+  op_emit2(c->m, op_invokestatic, await_idx);
+  uint16_t result_slot = c->next_local_slot++;
+  emit_astore(c->m, result_slot);
+
+  emit_aload(c->m, result_slot);
+  op_emit2(c->m, op_ldc_w, done_str);
+  op_emit2(c->m, op_invokevirtual, getprop_idx);
+  emit_truthy(c);
+  size_t exit_jump = op_pos(c->m);
+  op_emit2(c->m, op_ifne, 0);
+
+  var_ref var_vr;
+  var_vr.kind = var_local;
+  var_vr.index = 0;
+  if (kind == tok_kw_var) {
+    var_vr = resolve_var(c, name.start, name.len);
+    if (var_vr.kind == var_not_found) {
+      error_at(p, "internal: hoisted var missing");
+      return;
+    }
+  } else {
+    var_vr.index = c->next_local_slot++;
+    add_local(c, name, var_vr.index, 0, kind == tok_kw_const);
+  }
+
+  emit_aload(c->m, result_slot);
+  op_emit2(c->m, op_ldc_w, value_str);
+  op_emit2(c->m, op_invokevirtual, getprop_idx);
+  if (kind == tok_kw_var) {
+    emit_var_write_ref(c, var_vr);
+    op_emit(c->m, op_pop);
+  } else {
+    emit_var_declare(c, var_vr.index);
+  }
+
+  push_loop(c, cond_pos);
+  parse_stmt(p, c);
+
+  size_t back_jump = op_pos(c->m);
+  op_emit2(c->m, op_goto, 0);
+  op_patch2(c->m, (uint16_t)(back_jump + 1), (uint16_t)(cond_pos - back_jump));
+
+  size_t end_pos2 = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(exit_jump + 1), (uint16_t)(end_pos2 - exit_jump));
+  pop_loop(c, end_pos2);
 }
 
 static void parse_for_of_pattern(parser* p, compiler* c, tok_kind kind,
@@ -3275,9 +3727,10 @@ bail:
 }
 
 static void parse_for(parser* p, compiler* c) {
+  int is_await = match(p, tok_kw_await);
   expect(p, tok_lparen);
 
-  if (try_compile_raw_for(p, c)) {
+  if (!is_await && try_compile_raw_for(p, c)) {
     return;
   }
 
@@ -3317,7 +3770,9 @@ static void parse_for(parser* p, compiler* c) {
     tok name = p->prev;
     if (match(p, tok_kw_in) || match(p, tok_kw_of)) {
       int is_of = p->prev.kind == tok_kw_of;
-      if (is_of)
+      if (is_of && is_await)
+        parse_for_await_of(p, c, kind, name);
+      else if (is_of)
         parse_for_of(p, c, kind, name);
       else
         parse_for_in(p, c, kind, name);
@@ -3524,6 +3979,55 @@ static void parse_function_params(parser* p, compiler* fc) {
         bind_rest_param(fc, p->prev, idx);
         break;
       }
+      if (check(p, tok_lbracket) || check(p, tok_lbrace)) {
+        int is_array = check(p, tok_lbracket);
+        tok_kind open = is_array ? tok_lbracket : tok_lbrace;
+        tok_kind close = is_array ? tok_rbracket : tok_rbrace;
+        advance(p);
+        const char* pattern_start = p->cur.start;
+        skip_balanced(p, open, close);
+
+        emit_aload(fc->m, 2);
+        emit_iconst(fc->m, idx);
+        uint16_t argat_idx =
+            cf_methodref(fc->cf, "V6Value", "argAt", "([LV6Value;I)LV6Value;");
+        op_emit2(fc->m, op_invokestatic, argat_idx);
+
+        if (match(p, tok_assign)) {
+          op_emit(fc->m, op_dup);
+          uint16_t isundef_idx =
+              cf_methodref(fc->cf, "V6Value", "isUndefined", "()Z");
+          op_emit2(fc->m, op_invokevirtual, isundef_idx);
+          size_t has_val_jump = op_pos(fc->m);
+          op_emit2(fc->m, op_ifeq, 0);
+          op_emit(fc->m, op_pop);
+          parse_expr(p, fc);
+          size_t end_jump = op_pos(fc->m);
+          op_emit2(fc->m, op_goto, 0);
+          size_t has_val_pos = op_pos(fc->m);
+          op_patch2(fc->m, (uint16_t)(has_val_jump + 1),
+                    (uint16_t)(has_val_pos - has_val_jump));
+          size_t end_pos = op_pos(fc->m);
+          op_patch2(fc->m, (uint16_t)(end_jump + 1),
+                    (uint16_t)(end_pos - end_jump));
+        }
+
+        uint16_t src_slot = fc->next_local_slot++;
+        emit_astore(fc->m, src_slot);
+
+        parser pp;
+        parser_init(&pp, pattern_start);
+        if (is_array)
+          parse_array_pattern(&pp, fc, tok_kw_let, src_slot);
+        else
+          parse_object_pattern(&pp, fc, tok_kw_let, src_slot);
+
+        idx++;
+        if (!match(p, tok_comma))
+          break;
+        continue;
+      }
+
       if (!expect(p, tok_ident))
         break;
       tok pname = p->prev;
@@ -3659,6 +4163,12 @@ static void compile_closure_value(parser* p, compiler* c, int is_arrow,
   fc.class_name_len = c->class_name_len;
   fc.pending_field_count = 0;
   fc.box_locals = compile_body_has_closures(p, parens_params, is_arrow);
+  fc.label_count = 0;
+  fc.pending_label_count = 0;
+  fc.finally_depth = 0;
+  fc.is_async_gen = c->pending_async_gen;
+  fc.pending_async_gen = 0;
+  c->pending_async_gen = 0;
 
   if (parens_params) {
     parse_function_params(p, &fc);
@@ -3861,10 +4371,26 @@ static void parse_class_decl(parser* p, compiler* c) {
 
   while (!check(p, tok_rbrace) && !check(p, tok_eof)) {
     int is_static = match(p, tok_kw_static);
+
+    int is_async = 0;
+    if (check(p, tok_kw_async)) {
+      lexer save_lex = p->lex;
+      tok save_cur = p->cur;
+      tok save_prev = p->prev;
+      advance(p);
+      if (check(p, tok_lparen)) {
+        p->lex = save_lex;
+        p->cur = save_cur;
+        p->prev = save_prev;
+      } else {
+        is_async = 1;
+      }
+    }
+
     int is_gen = match(p, tok_star);
 
     int is_getter = 0, is_setter = 0;
-    if (check(p, tok_kw_get) || check(p, tok_kw_set)) {
+    if (!is_async && (check(p, tok_kw_get) || check(p, tok_kw_set))) {
       tok_kind modifier = p->cur.kind;
       lexer save_lex = p->lex;
       tok save_cur = p->cur;
@@ -3880,20 +4406,41 @@ static void parse_class_decl(parser* p, compiler* c) {
       }
     }
 
-    if (!match_property_name(p))
+    int computed = 0;
+    uint16_t computed_key_slot = 0;
+    tok member_name;
+    member_name.start = NULL;
+    member_name.len = 0;
+    if (match(p, tok_lbracket)) {
+      computed = 1;
+      parse_expr(p, c);
+      uint16_t tostring_idx =
+          cf_methodref(c->cf, "V6Value", "toString", "()Ljava/lang/String;");
+      op_emit2(c->m, op_invokevirtual, tostring_idx);
+      if (!expect(p, tok_rbracket))
+        return;
+      computed_key_slot = c->next_local_slot++;
+      emit_astore(c->m, computed_key_slot);
+    } else if (!match_property_name(p)) {
       break;
-    tok member_name = p->prev;
-    int is_ctor = !is_static && !is_getter && !is_setter &&
+    } else {
+      member_name = p->prev;
+    }
+    int is_ctor = !computed && !is_static && !is_getter && !is_setter &&
                   member_name.len == 11 &&
                   memcmp(member_name.start, "constructor", 11) == 0;
 
     if (is_getter || is_setter) {
       uint16_t target_slot = is_static ? cls_tmp : proto_tmp;
-      char* mkey = dup_tok(member_name);
-      uint16_t mkey_idx = cf_string(c->cf, mkey);
-      free(mkey);
       emit_aload(c->m, target_slot);
-      op_emit2(c->m, op_ldc_w, mkey_idx);
+      if (computed) {
+        emit_aload(c->m, computed_key_slot);
+      } else {
+        char* mkey = dup_tok(member_name);
+        uint16_t mkey_idx = cf_string(c->cf, mkey);
+        free(mkey);
+        op_emit2(c->m, op_ldc_w, mkey_idx);
+      }
       compile_closure_value(p, c, 0, 1, NULL);
       uint16_t ascall_idx =
           cf_methodref(c->cf, "V6Value", "asCallable", "()LV6Callable;");
@@ -3918,15 +4465,28 @@ static void parse_class_decl(parser* p, compiler* c) {
       op_emit2(c->m, op_putfield, ctor_field);
     } else if (check(p, tok_lparen)) {
       uint16_t target_slot = is_static ? cls_tmp : proto_tmp;
-      char* mkey = dup_tok(member_name);
-      uint16_t mkey_idx = cf_string(c->cf, mkey);
-      free(mkey);
       emit_aload(c->m, target_slot);
-      op_emit2(c->m, op_ldc_w, mkey_idx);
+      if (computed) {
+        emit_aload(c->m, computed_key_slot);
+      } else {
+        char* mkey = dup_tok(member_name);
+        uint16_t mkey_idx = cf_string(c->cf, mkey);
+        free(mkey);
+        op_emit2(c->m, op_ldc_w, mkey_idx);
+      }
       compile_closure_value(p, c, 0, 1, NULL);
-      if (is_gen)
+      if (is_gen && is_async) {
+        error_at(p, "async generator methods are not supported");
+        return;
+      } else if (is_gen) {
         emit_wrap_generator(c);
+      } else if (is_async) {
+        emit_wrap_async(c);
+      }
       op_emit2(c->m, op_invokevirtual, set_idx);
+    } else if (computed) {
+      error_at(p, "computed field names are not supported");
+      return;
     } else {
       const char* init_src = NULL;
       if (match(p, tok_assign)) {
@@ -4012,6 +4572,68 @@ static void parse_class_decl(parser* p, compiler* c) {
 
 static void parse_try(parser* p, compiler* c) {
   expect(p, tok_lbrace);
+
+  const char* pending_finally_src = NULL;
+  {
+    lexer save_lex = p->lex;
+    tok save_cur = p->cur;
+    tok save_prev = p->prev;
+
+    int depth = 1;
+    while (depth > 0 && !check(p, tok_eof)) {
+      if (check(p, tok_lbrace))
+        depth++;
+      else if (check(p, tok_rbrace))
+        depth--;
+      if (depth > 0)
+        advance(p);
+    }
+    if (check(p, tok_rbrace))
+      advance(p);
+
+    if (check(p, tok_kw_catch)) {
+      advance(p);
+      if (match(p, tok_lparen)) {
+        while (!check(p, tok_rparen) && !check(p, tok_eof))
+          advance(p);
+        match(p, tok_rparen);
+      }
+      if (match(p, tok_lbrace)) {
+        int cdepth = 1;
+        while (cdepth > 0 && !check(p, tok_eof)) {
+          if (check(p, tok_lbrace))
+            cdepth++;
+          else if (check(p, tok_rbrace))
+            cdepth--;
+          if (cdepth > 0)
+            advance(p);
+        }
+        if (check(p, tok_rbrace))
+          advance(p);
+      }
+    }
+
+    if (check(p, tok_kw_finally)) {
+      advance(p);
+      if (match(p, tok_lbrace)) {
+        pending_finally_src = p->cur.start;
+      }
+    }
+
+    p->lex = save_lex;
+    p->cur = save_cur;
+    p->prev = save_prev;
+  }
+
+  int pushed_finally = 0;
+  if (pending_finally_src && c->finally_depth < v6_max_pending_finally) {
+    c->finally_src[c->finally_depth] = pending_finally_src;
+    c->finally_break_depth[c->finally_depth] = c->break_depth;
+    c->finally_continue_depth[c->finally_depth] = c->continue_depth;
+    c->finally_depth++;
+    pushed_finally = 1;
+  }
+
   size_t try_start = op_pos(c->m);
   parse_block(p, c);
   size_t try_end = op_pos(c->m);
@@ -4068,6 +4690,10 @@ static void parse_try(parser* p, compiler* c) {
               (uint16_t)(normal_after - goto_after_try));
   }
 
+  if (pushed_finally) {
+    c->finally_depth--;
+  }
+
   if (match(p, tok_kw_finally)) {
     size_t guard_start = try_start;
     size_t guard_end = op_pos(c->m);
@@ -4098,6 +4724,82 @@ static void parse_try(parser* p, compiler* c) {
                          (uint16_t)guard_handler_pc, 0);
   } else if (!has_catch) {
     error_at(p, "expected 'catch' or 'finally'");
+  }
+}
+
+static void emit_inline_finally_at(compiler* c, int idx) {
+  int saved_depth = c->finally_depth;
+  c->finally_depth = idx;
+  parser fp;
+  parser_init(&fp, c->finally_src[idx]);
+  parse_block(&fp, c);
+  c->finally_depth = saved_depth;
+}
+
+static void emit_all_pending_finally(compiler* c) {
+  for (int i = c->finally_depth - 1; i >= 0; i--) {
+    emit_inline_finally_at(c, i);
+  }
+}
+
+static void emit_pending_finally_for_break(compiler* c, int target_break_idx) {
+  for (int i = c->finally_depth - 1; i >= 0; i--) {
+    if (target_break_idx >= c->finally_break_depth[i])
+      break;
+    emit_inline_finally_at(c, i);
+  }
+}
+
+static void emit_pending_finally_for_continue(compiler* c,
+                                              int target_continue_idx) {
+  for (int i = c->finally_depth - 1; i >= 0; i--) {
+    if (target_continue_idx >= c->finally_continue_depth[i])
+      break;
+    emit_inline_finally_at(c, i);
+  }
+}
+
+static void parse_labeled_stmt(parser* p, compiler* c, tok label) {
+  if (c->break_depth >= v6_max_loops || c->label_count >= v6_max_labels) {
+    error_at(p, "too many nested labels/loops");
+    return;
+  }
+
+  int bidx = c->break_depth;
+  c->breaks[bidx].count = 0;
+  c->break_depth++;
+
+  int lidx = c->label_count;
+  for (int i = 0; i < c->label_count; i++) {
+    if (c->label_lens[i] == label.len &&
+        memcmp(c->label_names[i], label.start, label.len) == 0) {
+      error_at(p, "label already declared in this scope");
+      return;
+    }
+  }
+  c->label_names[lidx] = label.start;
+  c->label_lens[lidx] = label.len;
+  c->label_break_depth[lidx] = bidx;
+  c->label_continue_depth[lidx] = -1;
+  c->label_count++;
+
+  int save_pending = c->pending_label_count;
+  if (c->pending_label_count < v6_max_pending_labels) {
+    c->pending_label_names[c->pending_label_count] = label.start;
+    c->pending_label_lens[c->pending_label_count] = label.len;
+    c->pending_label_count++;
+  }
+
+  parse_stmt(p, c);
+
+  c->pending_label_count = save_pending;
+  c->label_count = lidx;
+  c->break_depth--;
+
+  size_t end_pos = op_pos(c->m);
+  break_ctx* bc = &c->breaks[bidx];
+  for (size_t i = 0; i < bc->count; i++) {
+    op_patch2(c->m, (uint16_t)(bc->jumps[i] + 1), (uint16_t)(end_pos - bc->jumps[i]));
   }
 }
 
@@ -4133,9 +4835,29 @@ static void parse_stmt(parser* p, compiler* c) {
   }
 
   if (match(p, tok_kw_break)) {
-    if (c->break_depth == 0) {
+    if (check(p, tok_ident)) {
+      tok label = p->cur;
+      advance(p);
+      int found = -1;
+      for (int i = c->label_count - 1; i >= 0; i--) {
+        if (c->label_lens[i] == label.len &&
+            memcmp(c->label_names[i], label.start, label.len) == 0) {
+          found = i;
+          break;
+        }
+      }
+      if (found < 0) {
+        error_at(p, "undefined label");
+      } else {
+        emit_pending_finally_for_break(c, c->label_break_depth[found]);
+        break_ctx* bc = &c->breaks[c->label_break_depth[found]];
+        bc->jumps[bc->count++] = op_pos(c->m);
+        op_emit2(c->m, op_goto, 0);
+      }
+    } else if (c->break_depth == 0) {
       error_at(p, "'break' outside loop or switch");
     } else {
+      emit_pending_finally_for_break(c, c->break_depth - 1);
       break_ctx* bc = &c->breaks[c->break_depth - 1];
       bc->jumps[bc->count++] = op_pos(c->m);
       op_emit2(c->m, op_goto, 0);
@@ -4145,9 +4867,30 @@ static void parse_stmt(parser* p, compiler* c) {
   }
 
   if (match(p, tok_kw_continue)) {
-    if (c->continue_depth == 0) {
+    if (check(p, tok_ident)) {
+      tok label = p->cur;
+      advance(p);
+      int found = -1;
+      for (int i = c->label_count - 1; i >= 0; i--) {
+        if (c->label_lens[i] == label.len &&
+            memcmp(c->label_names[i], label.start, label.len) == 0) {
+          found = i;
+          break;
+        }
+      }
+      if (found < 0 || c->label_continue_depth[found] < 0) {
+        error_at(p, "undefined label or label does not denote a loop");
+      } else {
+        emit_pending_finally_for_continue(c, c->label_continue_depth[found]);
+        size_t target = c->continues[c->label_continue_depth[found]];
+        size_t here = op_pos(c->m);
+        op_emit2(c->m, op_goto, 0);
+        op_patch2(c->m, (uint16_t)(here + 1), (uint16_t)(target - here));
+      }
+    } else if (c->continue_depth == 0) {
       error_at(p, "'continue' outside loop");
     } else {
+      emit_pending_finally_for_continue(c, c->continue_depth - 1);
       size_t target = c->continues[c->continue_depth - 1];
       size_t here = op_pos(c->m);
       op_emit2(c->m, op_goto, 0);
@@ -4188,8 +4931,25 @@ static void parse_stmt(parser* p, compiler* c) {
     else
       parse_expr(p, c);
     expect(p, tok_semi);
+    emit_all_pending_finally(c);
     op_emit(c->m, op_areturn);
     return;
+  }
+
+  if (check(p, tok_ident)) {
+    lexer save_lex = p->lex;
+    tok save_cur = p->cur;
+    tok save_prev = p->prev;
+    tok label = p->cur;
+    advance(p);
+    if (check(p, tok_colon)) {
+      advance(p);
+      parse_labeled_stmt(p, c, label);
+      return;
+    }
+    p->lex = save_lex;
+    p->cur = save_cur;
+    p->prev = save_prev;
   }
 
   if (check(p, tok_lbracket)) {
@@ -4369,6 +5129,69 @@ static void prescan_decls(compiler* c, const char* src, int hoist_functions) {
           break;
       }
       continue;
+    } else if (hoist_functions && depth == 0 &&
+               (t.kind == tok_kw_let || t.kind == tok_kw_const)) {
+      int is_const_decl = t.kind == tok_kw_const;
+      for (;;) {
+        tok name = lex_next(&lx);
+        if (name.kind == tok_lbracket || name.kind == tok_lbrace) {
+          t = prescan_pattern_hoist(c, &lx, name.kind == tok_lbracket);
+          if (t.kind != tok_assign)
+            break;
+          int edepth2 = 0;
+          t = lex_next(&lx);
+          while (t.kind != tok_eof) {
+            if (t.kind == tok_lparen || t.kind == tok_lbracket ||
+                t.kind == tok_lbrace) {
+              edepth2++;
+            } else if (t.kind == tok_rparen || t.kind == tok_rbracket ||
+                       t.kind == tok_rbrace) {
+              if (edepth2 == 0)
+                break;
+              edepth2--;
+            } else if (edepth2 == 0 &&
+                       (t.kind == tok_comma || t.kind == tok_semi)) {
+              break;
+            }
+            t = lex_next(&lx);
+          }
+          if (t.kind != tok_comma)
+            break;
+          continue;
+        }
+        if (name.kind != tok_ident) {
+          t = name;
+          break;
+        }
+        uint16_t slot = c->next_local_slot++;
+        emit_undef(c->cf, c->m);
+        emit_var_declare(c, slot);
+        add_local(c, name, slot, 0, is_const_decl);
+
+        t = lex_next(&lx);
+        if (t.kind == tok_assign) {
+          int edepth = 0;
+          t = lex_next(&lx);
+          while (t.kind != tok_eof) {
+            if (t.kind == tok_lparen || t.kind == tok_lbracket ||
+                t.kind == tok_lbrace) {
+              edepth++;
+            } else if (t.kind == tok_rparen || t.kind == tok_rbracket ||
+                       t.kind == tok_rbrace) {
+              if (edepth == 0)
+                break;
+              edepth--;
+            } else if (edepth == 0 &&
+                       (t.kind == tok_comma || t.kind == tok_semi)) {
+              break;
+            }
+            t = lex_next(&lx);
+          }
+        }
+        if (t.kind != tok_comma)
+          break;
+      }
+      continue;
     } else if (hoist_functions && depth == 0 && t.kind == tok_kw_function) {
       const char* body_start = lx.cur;
       tok name = lex_next(&lx);
@@ -4496,8 +5319,11 @@ static void prescan_decls(compiler* c, const char* src, int hoist_functions) {
         le->fn_method_name = lambda_name;
       }
     }
+    c->pending_async_gen = is_gen && is_async;
     compile_closure_value(&fp, c, 0, 1, lambda_name);
-    if (is_gen)
+    if (is_gen && is_async)
+      emit_wrap_async_generator(c);
+    else if (is_gen)
       emit_wrap_generator(c);
     else if (is_async)
       emit_wrap_async(c);
@@ -4546,7 +5372,70 @@ static void bind_builtin(compiler* c, const char* name, const char* field) {
   add_local(c, t, slot, 1, 0);
 }
 
-compile_result compile_program(const char* src, class_file* cf) {
+static const char* const v6_prelude_src =
+    "class Error {\n"
+    "  constructor(message) {\n"
+    "    this.message = message === undefined ? \"\" : message;\n"
+    "    this.name = \"Error\";\n"
+    "  }\n"
+    "  toString() {\n"
+    "    return this.message ? (this.name + \": \" + this.message) : "
+    "this.name;\n"
+    "  }\n"
+    "}\n"
+    "class TypeError extends Error {\n"
+    "  constructor(message) {\n"
+    "    super(message);\n"
+    "    this.name = \"TypeError\";\n"
+    "  }\n"
+    "}\n"
+    "class RangeError extends Error {\n"
+    "  constructor(message) {\n"
+    "    super(message);\n"
+    "    this.name = \"RangeError\";\n"
+    "  }\n"
+    "}\n"
+    "class SyntaxError extends Error {\n"
+    "  constructor(message) {\n"
+    "    super(message);\n"
+    "    this.name = \"SyntaxError\";\n"
+    "  }\n"
+    "}\n"
+    "class ReferenceError extends Error {\n"
+    "  constructor(message) {\n"
+    "    super(message);\n"
+    "    this.name = \"ReferenceError\";\n"
+    "  }\n"
+    "}\n"
+    "class EvalError extends Error {\n"
+    "  constructor(message) {\n"
+    "    super(message);\n"
+    "    this.name = \"EvalError\";\n"
+    "  }\n"
+    "}\n"
+    "class URIError extends Error {\n"
+    "  constructor(message) {\n"
+    "    super(message);\n"
+    "    this.name = \"URIError\";\n"
+    "  }\n"
+    "}\n";
+
+static int count_newlines(const char* s) {
+  int n = 0;
+  for (; *s; s++)
+    if (*s == '\n')
+      n++;
+  return n;
+}
+
+compile_result compile_program(const char* user_src, class_file* cf) {
+  size_t prelude_len = strlen(v6_prelude_src);
+  size_t user_len = strlen(user_src);
+  char* src = malloc(prelude_len + user_len + 1);
+  memcpy(src, v6_prelude_src, prelude_len);
+  memcpy(src + prelude_len, user_src, user_len + 1);
+  int prelude_lines = count_newlines(v6_prelude_src);
+
   method* main_m =
       cf_method(cf, acc_public | acc_static, "main", "([Ljava/lang/String;)V");
   main_m->max_stack = 64;
@@ -4573,6 +5462,11 @@ compile_result compile_program(const char* src, class_file* cf) {
   c.class_name = NULL;
   c.class_name_len = 0;
   c.pending_field_count = 0;
+  c.label_count = 0;
+  c.pending_label_count = 0;
+  c.finally_depth = 0;
+  c.is_async_gen = 0;
+  c.pending_async_gen = 0;
 
   int top_has_closures = 0;
   {
@@ -4598,6 +5492,7 @@ compile_result compile_program(const char* src, class_file* cf) {
   bind_builtin(&c, "btoa", "BTOA");
   bind_builtin(&c, "Number", "NUMBER");
   bind_builtin(&c, "parseInt", "PARSE_INT");
+  bind_builtin(&c, "BigInt", "BIGINT");
   bind_builtin(&c, "parseFloat", "PARSE_FLOAT");
   bind_builtin(&c, "isNaN", "IS_NAN");
   bind_builtin(&c, "isFinite", "IS_FINITE");
@@ -4636,7 +5531,10 @@ compile_result compile_program(const char* src, class_file* cf) {
 
   compile_result r;
   r.ok = p.had_error ? 0 : 1;
-  r.line = p.err_line;
+  r.line = p.err_line - prelude_lines;
+  if (r.line < 1)
+    r.line = 1;
   memcpy(r.message, p.err_msg, sizeof(r.message));
+  free(src);
   return r;
 }

@@ -96,6 +96,7 @@ static tok make(lexer* lx, tok_kind kind, const char* start) {
   t.len = (size_t)(lx->cur - start);
   t.line = lx->line;
   t.num = 0;
+  t.is_bigint = 0;
   return t;
 }
 
@@ -127,6 +128,12 @@ static tok lex_num(lexer* lx, const char* start) {
 
   while (isdigit((unsigned char)*lx->cur))
     lx->cur++;
+  if (*lx->cur == 'n') {
+    lx->cur++;
+    tok t = make(lx, tok_num, start);
+    t.is_bigint = 1;
+    return t;
+  }
   if (*lx->cur == '.' && isdigit((unsigned char)lx->cur[1])) {
     lx->cur++;
     while (isdigit((unsigned char)*lx->cur))
@@ -386,6 +393,10 @@ tok lex_next(lexer* lx) {
   case '&':
     if (*lx->cur == '&') {
       lx->cur++;
+      if (*lx->cur == '=') {
+        lx->cur++;
+        return make(lx, tok_amp_amp_eq, start);
+      }
       return make(lx, tok_amp_amp, start);
     }
     if (*lx->cur == '=') {
@@ -396,6 +407,10 @@ tok lex_next(lexer* lx) {
   case '|':
     if (*lx->cur == '|') {
       lx->cur++;
+      if (*lx->cur == '=') {
+        lx->cur++;
+        return make(lx, tok_pipe_pipe_eq, start);
+      }
       return make(lx, tok_pipe_pipe, start);
     }
     if (*lx->cur == '=') {

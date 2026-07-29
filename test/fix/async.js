@@ -60,3 +60,57 @@ async function chained() {
   return await p;
 }
 chained().then((v) => console.log("chained:", v));
+
+class Fetcher {
+  constructor(value) {
+    this.value = value;
+  }
+  async load() {
+    return this.value * 2;
+  }
+  static async create(value) {
+    return new Fetcher(value);
+  }
+}
+new Fetcher(21).load().then((v) => console.log("method:", v));
+Fetcher.create(10).then((instance) => console.log("static method:", instance.value));
+
+const computer = {
+  base: 5,
+  async compute() {
+    return this.base + 1;
+  },
+};
+computer.compute().then((v) => console.log("object method:", v));
+
+async function* ticker() {
+  yield 1;
+  yield 2;
+  await Promise.resolve("waited");
+  yield 3;
+}
+async function drainTicker() {
+  let g = ticker();
+  let out = [];
+  let r;
+  while (!(r = await g.next()).done) {
+    out.push(r.value);
+  }
+  console.log("ticker:", out.join(","));
+}
+drainTicker().then(() => console.log("ticker drained"));
+
+async function* delayedRange(n) {
+  for (let i = 0; i < n; i++) {
+    await Promise.resolve(i);
+    yield i * 10;
+  }
+}
+async function useForAwait() {
+  let collected = [];
+  for await (const v of delayedRange(4)) {
+    collected.push(v);
+  }
+  console.log("for-await:", collected.join(","));
+}
+useForAwait().then(() => console.log("for-await done"));

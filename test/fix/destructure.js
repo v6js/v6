@@ -76,3 +76,19 @@ let sa = 0,
   sb = 1;
 [sa, sb] = [sb, sa + sb];
 console.log(sa, sb);
+
+let dx, dy;
+({ x: dx, y: dy } = { x: 1, y: 2 });
+console.log(dx, dy);
+
+let renamedTarget;
+({ x: renamedTarget } = { x: 99 });
+console.log(renamedTarget);
+
+let withDefaultTarget;
+({ missing: withDefaultTarget = 42 } = {});
+console.log(withDefaultTarget);
+
+let assignResult;
+console.log((assignResult = ({ x: dx, y: dy } = { x: 7, y: 8 })));
+console.log(dx, dy, assignResult.x, assignResult.y);

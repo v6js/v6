@@ -10,6 +10,9 @@
 #define v6_max_upvalues 64
 #define v6_max_catches 16
 #define v6_max_fields 32
+#define v6_max_labels 32
+#define v6_max_pending_labels 8
+#define v6_max_pending_finally 16
 
 typedef struct field_init {
   const char* name;
@@ -73,6 +76,20 @@ typedef struct compiler {
   field_init pending_fields[v6_max_fields];
   int pending_field_count;
   int box_locals;
+  const char* label_names[v6_max_labels];
+  size_t label_lens[v6_max_labels];
+  int label_break_depth[v6_max_labels];
+  int label_continue_depth[v6_max_labels];
+  int label_count;
+  const char* pending_label_names[v6_max_pending_labels];
+  size_t pending_label_lens[v6_max_pending_labels];
+  int pending_label_count;
+  const char* finally_src[v6_max_pending_finally];
+  int finally_break_depth[v6_max_pending_finally];
+  int finally_continue_depth[v6_max_pending_finally];
+  int finally_depth;
+  int is_async_gen;
+  int pending_async_gen;
 } compiler;
 
 typedef struct parser {

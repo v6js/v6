@@ -114,3 +114,53 @@ let acc = new Account();
 console.log(acc.balance());
 acc.deposit(58);
 console.log(acc.balance());
+
+const greetKey = "greet";
+const makeKey = "make";
+const valueKey = "value";
+class Catalog {
+  constructor(v) {
+    this._v = v;
+  }
+  [greetKey]() {
+    return "hello " + this._v;
+  }
+  static [makeKey](v) {
+    return new Catalog(v);
+  }
+  get [valueKey]() {
+    return this._v * 2;
+  }
+  set [valueKey](n) {
+    this._v = n;
+  }
+}
+let catalogEntry = new Catalog(3);
+console.log(catalogEntry.greet());
+console.log(catalogEntry.value);
+catalogEntry.value = 10;
+console.log(catalogEntry._v);
+console.log(Catalog.make(7).greet());
+
+class Animal {
+  constructor() {
+    console.log(
+      new.target === Animal ? "Animal" : new.target === Mammal ? "Mammal" : "other"
+    );
+  }
+}
+class Mammal extends Animal {
+  constructor() {
+    super();
+    console.log(new.target === Mammal ? "Mammal" : "other");
+  }
+}
+new Animal();
+new Mammal();
+
+class Rodent extends Mammal {
+  constructor() {
+    super();
+  }
+}
+new Rodent();

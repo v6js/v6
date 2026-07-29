@@ -37,6 +37,8 @@ public final class V6Builtins {
   private static String inspect(V6Value v, java.util.Map<Object, Boolean> seen) {
     if (v.tag() == V6Value.TAG_STR)
       return "'" + v.toString().replace("'", "\\'") + "'";
+    if (v.tag() == V6Value.TAG_BIGINT)
+      return v.toString() + "n";
     if (v.tag() != V6Value.TAG_OBJ)
       return v.toString();
     Object ref = v.ref();
@@ -394,6 +396,20 @@ public final class V6Builtins {
     }
   });
 
+  public static final V6Value BIGINT = fn((thisArg, args) -> {
+    V6Value v = V6Value.argAt(args, 0);
+    if (v.tag() == V6Value.TAG_BIGINT)
+      return v;
+    if (v.tag() == V6Value.TAG_STR)
+      return V6Value.bigint(new java.math.BigInteger(v.toString().strip()));
+    double n = v.toNumber();
+    if (n != Math.rint(n) || Double.isNaN(n) || Double.isInfinite(n))
+      throw new RuntimeException(
+          "Cannot convert non-integer to BigInt: " + n);
+    return V6Value.bigint(
+        new java.math.BigDecimal(n).toBigInteger());
+  });
+
   public static final V6Value PARSE_FLOAT = fn((thisArg, args) -> {
     String str = V6Value.argAt(args, 0).toString().strip();
     int i = 0;
@@ -658,6 +674,23 @@ public final class V6Builtins {
   }
 
   public static final V6Object GENERATOR_PROTOTYPE = generatorPrototype();
+
+  private static V6Object asyncGeneratorPrototype() {
+    V6Object o = new V6Object();
+    o.set("next", fn((thisArg, args)
+                         -> ((V6AsyncGenerator)thisArg.ref())
+                                .next(V6Value.argAt(args, 0))));
+    o.set("return", fn((thisArg, args)
+                           -> ((V6AsyncGenerator)thisArg.ref())
+                                  .returnValue(V6Value.argAt(args, 0))));
+    o.set("throw", fn((thisArg, args)
+                          -> ((V6AsyncGenerator)thisArg.ref())
+                                 .throwInto(V6Value.argAt(args, 0))));
+    return o;
+  }
+
+  public static final V6Object ASYNC_GENERATOR_PROTOTYPE =
+      asyncGeneratorPrototype();
 
   private static final V6Value UNDEF_FN_MARKER =
       new V6Value(V6Value.TAG_UNDEF, 0, null);

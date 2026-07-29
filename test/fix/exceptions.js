@@ -49,3 +49,83 @@ try {
 } finally {
   console.log("always runs");
 }
+
+function returnsThroughFinally() {
+  try {
+    return 1;
+  } finally {
+    console.log("returnsThroughFinally: cleanup");
+  }
+}
+console.log(returnsThroughFinally());
+
+function finallyOverridesReturn() {
+  try {
+    return 1;
+  } finally {
+    return 2;
+  }
+}
+console.log(finallyOverridesReturn());
+
+function returnInCatchRunsFinally() {
+  try {
+    throw "boom";
+  } catch (e) {
+    return "caught:" + e;
+  } finally {
+    console.log("returnInCatchRunsFinally: cleanup");
+  }
+}
+console.log(returnInCatchRunsFinally());
+
+function nestedFinallyOrder() {
+  try {
+    try {
+      return "inner";
+    } finally {
+      console.log("nestedFinallyOrder: inner cleanup");
+    }
+  } finally {
+    console.log("nestedFinallyOrder: outer cleanup");
+  }
+}
+console.log(nestedFinallyOrder());
+
+function breakOutOfTryRunsFinally() {
+  let trace = [];
+  outer: for (let i = 0; i < 3; i++) {
+    try {
+      trace.push("try" + i);
+      if (i === 1) break outer;
+    } finally {
+      trace.push("finally" + i);
+    }
+  }
+  return trace.join(",");
+}
+console.log(breakOutOfTryRunsFinally());
+
+function continueOutOfTryRunsFinally() {
+  let trace = [];
+  for (let i = 0; i < 3; i++) {
+    try {
+      if (i === 1) continue;
+      trace.push("body" + i);
+    } finally {
+      trace.push("cleanup" + i);
+    }
+  }
+  return trace.join(",");
+}
+console.log(continueOutOfTryRunsFinally());
+
+function returnValueCapturedBeforeFinallyMutates() {
+  let x = 5;
+  try {
+    return x;
+  } finally {
+    x = 999;
+  }
+}
+console.log(returnValueCapturedBeforeFinallyMutates());
