@@ -9,6 +9,13 @@
 #define v6_max_breaks 32
 #define v6_max_upvalues 64
 #define v6_max_catches 16
+#define v6_max_fields 32
+
+typedef struct field_init {
+  const char* name;
+  size_t name_len;
+  const char* init_src;
+} field_init;
 
 typedef struct param {
   const char* name;
@@ -61,6 +68,10 @@ typedef struct compiler {
   int brace_depth;
   const char* super_name;
   size_t super_len;
+  const char* class_name;
+  size_t class_name_len;
+  field_init pending_fields[v6_max_fields];
+  int pending_field_count;
   int box_locals;
 } compiler;
 

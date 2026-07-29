@@ -40,6 +40,10 @@ public record V6Value(int tag, double num, Object ref) {
     return new java.math.BigDecimal(Double.toString(n)).toPlainString();
   }
 
+  public boolean isNullish() {
+    return tag == TAG_NULL || tag == TAG_UNDEF;
+  }
+
   public boolean truthy() {
     return switch (tag) {
       case TAG_NUM -> num != 0 && !Double.isNaN(num);
@@ -147,6 +151,7 @@ public record V6Value(int tag, double num, Object ref) {
       case TAG_STR -> "string";
       case TAG_UNDEF -> "undefined";
       case TAG_FUNC -> "function";
+      case TAG_OBJ -> ref instanceof V6Symbol ? "symbol" : "object";
       default -> "object";
     };
   }
@@ -162,6 +167,8 @@ public record V6Value(int tag, double num, Object ref) {
   }
 
   public static V6Value construct(V6Value classValue, V6Value[] args) {
+    if (classValue.ref instanceof V6NativeConstructor)
+      return ((V6NativeConstructor)classValue.ref).construct(args);
     V6Class cls = (V6Class)classValue.ref;
     V6Object instance = new V6Object();
     Object protoRef = cls.get("prototype").ref;
@@ -197,6 +204,17 @@ public record V6Value(int tag, double num, Object ref) {
   public V6Value getProp(String key) {
     switch (tag) {
     case TAG_OBJ:
+      if (ref instanceof V6Symbol) {
+        V6Symbol sym = (V6Symbol)ref;
+        if (key.equals("description"))
+          return sym.description != null
+                     ? new V6Value(TAG_STR, 0, sym.description)
+                     : new V6Value(TAG_UNDEF, 0, null);
+        if (key.equals("toString"))
+          return new V6Value(TAG_FUNC, 0,
+                             (V6Callable)(t, a) -> new V6Value(TAG_STR, 0, t.toString()));
+        return new V6Value(TAG_UNDEF, 0, null);
+      }
       return ((V6Object)ref).get(key);
     case TAG_STR:
       CharSequence s = (CharSequence)ref;
@@ -212,6 +230,10 @@ public record V6Value(int tag, double num, Object ref) {
       return V6Number.PROTOTYPE.get(key);
     case TAG_BOOL:
       return V6Boolean.PROTOTYPE.get(key);
+    case TAG_FUNC:
+      if (ref instanceof V6Object)
+        return ((V6Object)ref).get(key);
+      return new V6Value(TAG_UNDEF, 0, null);
     default:
       return new V6Value(TAG_UNDEF, 0, null);
     }
@@ -273,5 +295,33 @@ public record V6Value(int tag, double num, Object ref) {
     int shift = toInt32(b.toNumber()) & 31;
     long result = (toInt32(a.toNumber()) >>> shift) & 0xFFFFFFFFL;
     return new V6Value(TAG_NUM, result, null);
+  }
+
+  public static boolean instanceOf(V6Value obj, V6Value ctor) {
+    if (obj.tag != TAG_OBJ || ctor.tag != TAG_OBJ)
+      return false;
+    if (ctor.ref == V6Builtins.ARRAY.ref())
+      return obj.ref instanceof V6Array;
+    if (ctor.ref == V6Builtins.OBJECT.ref())
+      return true;
+    if (!(ctor.ref instanceof V6Class))
+      return false;
+    Object protoRef = ((V6Class)ctor.ref).get("prototype").ref();
+    if (!(protoRef instanceof V6Object))
+      return false;
+    V6Object targetProto = (V6Object)protoRef;
+    for (V6Object o = ((V6Object)obj.ref).getProto(); o != null; o = o.getProto()) {
+      if (o == targetProto)
+        return true;
+    }
+    return false;
+  }
+
+  public static boolean hasProp(V6Value key, V6Value obj) {
+    return obj.tag == TAG_OBJ && ((V6Object)obj.ref).has(key.toString());
+  }
+
+  public static V6Value pow(V6Value a, V6Value b) {
+    return new V6Value(TAG_NUM, Math.pow(a.toNumber(), b.toNumber()), null);
   }
 }

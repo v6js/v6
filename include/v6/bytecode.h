@@ -58,6 +58,7 @@ typedef enum {
   op_astore_3 = 0x4e,
   op_dup = 0x59,
   op_dup_x1 = 0x5a,
+  op_dup2 = 0x5c,
   op_pop = 0x57,
   op_swap = 0x5f,
   op_iadd = 0x60,

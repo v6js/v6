@@ -90,6 +90,18 @@ typedef enum {
   tok_kw_static,
   tok_ellipsis,
   tok_template,
+  tok_question_dot,
+  tok_question_question,
+  tok_question_question_eq,
+  tok_star_star,
+  tok_star_star_eq,
+  tok_kw_instanceof,
+  tok_kw_get,
+  tok_kw_set,
+  tok_kw_async,
+  tok_kw_await,
+  tok_kw_yield,
+  tok_regex,
 } tok_kind;
 
 typedef struct tok {

@@ -21,6 +21,9 @@ static compiler make_compiler(class_file* cf, method* m) {
   c.brace_depth = 0;
   c.super_name = NULL;
   c.super_len = 0;
+  c.class_name = NULL;
+  c.class_name_len = 0;
+  c.pending_field_count = 0;
   c.box_locals = 1;
   return c;
 }

@@ -34,12 +34,65 @@ public final class V6Builtins {
     return v.tag() == V6Value.TAG_OBJ ? (V6Object)v.ref() : null;
   }
 
+  private static String inspect(V6Value v, java.util.Map<Object, Boolean> seen) {
+    if (v.tag() == V6Value.TAG_STR)
+      return "'" + v.toString().replace("'", "\\'") + "'";
+    if (v.tag() != V6Value.TAG_OBJ)
+      return v.toString();
+    Object ref = v.ref();
+    if (seen.containsKey(ref))
+      return "[Circular *1]";
+    seen.put(ref, Boolean.TRUE);
+    String result;
+    if (ref instanceof V6Array) {
+      V6Array arr = (V6Array)ref;
+      int len = (int)arr.get("length").num();
+      if (len == 0) {
+        result = "[]";
+      } else {
+        StringBuilder sb = new StringBuilder("[ ");
+        for (int i = 0; i < len; i++) {
+          if (i > 0)
+            sb.append(", ");
+          sb.append(inspect(arr.get(Integer.toString(i)), seen));
+        }
+        sb.append(" ]");
+        result = sb.toString();
+      }
+    } else {
+      V6Object obj = (V6Object)ref;
+      V6Array keys = obj.enumKeys();
+      int n = (int)keys.get("length").num();
+      if (n == 0) {
+        result = "{}";
+      } else {
+        StringBuilder sb = new StringBuilder("{ ");
+        for (int i = 0; i < n; i++) {
+          if (i > 0)
+            sb.append(", ");
+          String key = keys.get(Integer.toString(i)).toString();
+          sb.append(key).append(": ").append(inspect(obj.get(key), seen));
+        }
+        sb.append(" }");
+        result = sb.toString();
+      }
+    }
+    seen.remove(ref);
+    return result;
+  }
+
+  private static String inspectTop(V6Value v) {
+    if (v.tag() == V6Value.TAG_STR)
+      return v.toString();
+    return inspect(v, new java.util.IdentityHashMap<>());
+  }
+
   public static final V6Value CONSOLE_LOG = fn((thisArg, args) -> {
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < args.length; i++) {
       if (i > 0)
         sb.append(' ');
-      sb.append(args[i].toString());
+      sb.append(inspectTop(args[i]));
     }
     System.out.println(sb.toString());
     return UNDEF;
@@ -244,7 +297,42 @@ public final class V6Builtins {
     o.set("is", fn((thisArg, args)
                        -> boolValue(V6Value.strictEquals(
                            V6Value.argAt(args, 0), V6Value.argAt(args, 1)))));
+    o.set("defineProperty", fn((thisArg, args) -> {
+            V6Value targetV = V6Value.argAt(args, 0);
+            V6Object target = asObj(targetV);
+            String key = V6Value.argAt(args, 1).toString();
+            V6Object desc = asObj(V6Value.argAt(args, 2));
+            applyDescriptor(target, key, desc);
+            return targetV;
+          }));
+    o.set("defineProperties", fn((thisArg, args) -> {
+            V6Value targetV = V6Value.argAt(args, 0);
+            V6Object target = asObj(targetV);
+            V6Object descs = asObj(V6Value.argAt(args, 1));
+            if (target != null && descs != null) {
+              for (V6Value k : descs.enumKeys().toValueArray()) {
+                String key = k.toString();
+                applyDescriptor(target, key, asObj(descs.get(key)));
+              }
+            }
+            return targetV;
+          }));
     return o;
+  }
+
+  private static void applyDescriptor(V6Object target, String key, V6Object desc) {
+    if (target == null || desc == null)
+      return;
+    if (desc.has("get") || desc.has("set")) {
+      V6Value g = desc.get("get");
+      V6Value st = desc.get("set");
+      if (g.tag() == V6Value.TAG_FUNC)
+        target.defineGetter(key, g.asCallable());
+      if (st.tag() == V6Value.TAG_FUNC)
+        target.defineSetter(key, st.asCallable());
+    } else {
+      target.set(key, desc.get("value"));
+    }
   }
 
   public static final V6Value OBJECT = objValue(objectNamespace());
@@ -271,6 +359,337 @@ public final class V6Builtins {
   }
 
   public static final V6Value ARRAY = objValue(arrayNamespace());
+
+  public static final V6Value PARSE_INT = fn((thisArg, args) -> {
+    String str = V6Value.argAt(args, 0).toString().strip();
+    int radix = args.length > 1 && !args[1].isUndefined()
+                    ? (int)args[1].toNumber()
+                    : 0;
+    int sign = 1;
+    int i = 0;
+    int n = str.length();
+    if (i < n && (str.charAt(i) == '+' || str.charAt(i) == '-')) {
+      if (str.charAt(i) == '-')
+        sign = -1;
+      i++;
+    }
+    if ((radix == 16 || radix == 0) && i + 1 < n && str.charAt(i) == '0' &&
+        (str.charAt(i + 1) == 'x' || str.charAt(i + 1) == 'X')) {
+      radix = 16;
+      i += 2;
+    } else if (radix == 0) {
+      radix = 10;
+    }
+    int start = i;
+    while (i < n && Character.digit(str.charAt(i), radix) >= 0)
+      i++;
+    if (i == start)
+      return new V6Value(V6Value.TAG_NUM, Double.NaN, null);
+    try {
+      return new V6Value(
+          V6Value.TAG_NUM,
+          sign * (double)Long.parseLong(str.substring(start, i), radix), null);
+    } catch (NumberFormatException e) {
+      return new V6Value(V6Value.TAG_NUM, Double.NaN, null);
+    }
+  });
+
+  public static final V6Value PARSE_FLOAT = fn((thisArg, args) -> {
+    String str = V6Value.argAt(args, 0).toString().strip();
+    int i = 0;
+    int n = str.length();
+    if (i < n && (str.charAt(i) == '+' || str.charAt(i) == '-'))
+      i++;
+    int start0 = i;
+    while (i < n && Character.isDigit(str.charAt(i)))
+      i++;
+    if (i < n && str.charAt(i) == '.') {
+      i++;
+      while (i < n && Character.isDigit(str.charAt(i)))
+        i++;
+    }
+    if (i < n && (str.charAt(i) == 'e' || str.charAt(i) == 'E')) {
+      int save = i;
+      i++;
+      if (i < n && (str.charAt(i) == '+' || str.charAt(i) == '-'))
+        i++;
+      if (i < n && Character.isDigit(str.charAt(i))) {
+        while (i < n && Character.isDigit(str.charAt(i)))
+          i++;
+      } else {
+        i = save;
+      }
+    }
+    if (i == start0 || (i == start0 + 1 && str.charAt(start0) == '.'))
+      return new V6Value(V6Value.TAG_NUM, Double.NaN, null);
+    try {
+      return new V6Value(V6Value.TAG_NUM, Double.parseDouble(str.substring(0, i)),
+                         null);
+    } catch (NumberFormatException e) {
+      return new V6Value(V6Value.TAG_NUM, Double.NaN, null);
+    }
+  });
+
+  public static final V6Value IS_NAN = fn(
+      (thisArg, args) -> boolValue(Double.isNaN(V6Value.argAt(args, 0).toNumber())));
+
+  public static final V6Value IS_FINITE = fn((thisArg, args) -> {
+    double n = V6Value.argAt(args, 0).toNumber();
+    return boolValue(!Double.isNaN(n) && !Double.isInfinite(n));
+  });
+
+  private static V6Object numberNamespace() {
+    V6Object o = new V6Object();
+    o.set("isInteger", fn((thisArg, args) -> {
+            V6Value v = V6Value.argAt(args, 0);
+            if (v.tag() != V6Value.TAG_NUM)
+              return boolValue(false);
+            double n = v.toNumber();
+            return boolValue(!Double.isNaN(n) && !Double.isInfinite(n) &&
+                             n == Math.floor(n));
+          }));
+    o.set("isFinite", fn((thisArg, args) -> {
+            V6Value v = V6Value.argAt(args, 0);
+            if (v.tag() != V6Value.TAG_NUM)
+              return boolValue(false);
+            double n = v.toNumber();
+            return boolValue(!Double.isNaN(n) && !Double.isInfinite(n));
+          }));
+    o.set("isNaN", fn((thisArg, args) -> {
+            V6Value v = V6Value.argAt(args, 0);
+            return boolValue(v.tag() == V6Value.TAG_NUM &&
+                             Double.isNaN(v.toNumber()));
+          }));
+    o.set("isSafeInteger", fn((thisArg, args) -> {
+            V6Value v = V6Value.argAt(args, 0);
+            if (v.tag() != V6Value.TAG_NUM)
+              return boolValue(false);
+            double n = v.toNumber();
+            return boolValue(!Double.isNaN(n) && !Double.isInfinite(n) &&
+                             n == Math.floor(n) &&
+                             Math.abs(n) <= 9007199254740991.0);
+          }));
+    o.set("parseFloat", PARSE_FLOAT);
+    o.set("parseInt", PARSE_INT);
+    o.set("EPSILON", new V6Value(V6Value.TAG_NUM, Math.ulp(1.0), null));
+    o.set("MAX_SAFE_INTEGER",
+          new V6Value(V6Value.TAG_NUM, 9007199254740991.0, null));
+    o.set("MIN_SAFE_INTEGER",
+          new V6Value(V6Value.TAG_NUM, -9007199254740991.0, null));
+    o.set("MAX_VALUE", new V6Value(V6Value.TAG_NUM, Double.MAX_VALUE, null));
+    o.set("MIN_VALUE", new V6Value(V6Value.TAG_NUM, Double.MIN_VALUE, null));
+    o.set("POSITIVE_INFINITY",
+          new V6Value(V6Value.TAG_NUM, Double.POSITIVE_INFINITY, null));
+    o.set("NEGATIVE_INFINITY",
+          new V6Value(V6Value.TAG_NUM, Double.NEGATIVE_INFINITY, null));
+    o.set("NaN", new V6Value(V6Value.TAG_NUM, Double.NaN, null));
+    return o;
+  }
+
+  public static final V6Value NUMBER = objValue(numberNamespace());
+  public static final V6Value NAN_VALUE = new V6Value(V6Value.TAG_NUM, Double.NaN, null);
+  public static final V6Value INFINITY_VALUE =
+      new V6Value(V6Value.TAG_NUM, Double.POSITIVE_INFINITY, null);
+
+  private static V6Object mapPrototype() {
+    V6Object o = new V6Object();
+    o.set("get", fn((thisArg, args) -> {
+            V6MapObject m = (V6MapObject)thisArg.ref();
+            V6Value v = m.entries.get(V6MapObject.keyFor(V6Value.argAt(args, 0)));
+            return v != null ? v : UNDEF;
+          }));
+    o.set("set", fn((thisArg, args) -> {
+            V6MapObject m = (V6MapObject)thisArg.ref();
+            m.entries.put(V6MapObject.keyFor(V6Value.argAt(args, 0)),
+                         V6Value.argAt(args, 1));
+            return thisArg;
+          }));
+    o.set("has", fn((thisArg, args)
+                        -> boolValue(((V6MapObject)thisArg.ref())
+                                         .entries.containsKey(V6MapObject.keyFor(
+                                             V6Value.argAt(args, 0))))));
+    o.set("delete", fn((thisArg, args) -> {
+            V6MapObject m = (V6MapObject)thisArg.ref();
+            Object k = V6MapObject.keyFor(V6Value.argAt(args, 0));
+            boolean had = m.entries.containsKey(k);
+            m.entries.remove(k);
+            return boolValue(had);
+          }));
+    o.set("clear", fn((thisArg, args) -> {
+            ((V6MapObject)thisArg.ref()).entries.clear();
+            return UNDEF;
+          }));
+    o.set("forEach", fn((thisArg, args) -> {
+            V6MapObject m = (V6MapObject)thisArg.ref();
+            V6Callable cb = V6Value.argAt(args, 0).asCallable();
+            for (java.util.Map.Entry<Object, V6Value> e : m.entries.entrySet())
+              cb.call(UNDEF, new V6Value[] {e.getValue(),
+                                            V6MapObject.keyToValue(e.getKey()),
+                                            thisArg});
+            return UNDEF;
+          }));
+    o.set("keys", fn((thisArg, args) -> {
+            V6MapObject m = (V6MapObject)thisArg.ref();
+            V6Array result = new V6Array();
+            for (Object k : m.entries.keySet())
+              result.push(V6MapObject.keyToValue(k));
+            return objValue(result);
+          }));
+    o.set("values", fn((thisArg, args) -> {
+            V6MapObject m = (V6MapObject)thisArg.ref();
+            V6Array result = new V6Array();
+            for (V6Value v : m.entries.values())
+              result.push(v);
+            return objValue(result);
+          }));
+    o.set("entries", fn((thisArg, args) -> {
+            V6MapObject m = (V6MapObject)thisArg.ref();
+            V6Array result = new V6Array();
+            for (java.util.Map.Entry<Object, V6Value> e : m.entries.entrySet()) {
+              V6Array pair = new V6Array();
+              pair.push(V6MapObject.keyToValue(e.getKey()));
+              pair.push(e.getValue());
+              result.push(objValue(pair));
+            }
+            return objValue(result);
+          }));
+    o.defineGetter(
+        "size",
+        (thisArg, args) -> num(((V6MapObject)thisArg.ref()).entries.size()));
+    return o;
+  }
+
+  public static final V6Object MAP_PROTOTYPE = mapPrototype();
+  public static final V6Value MAP = objValue(new V6MapConstructor());
+  public static final V6Value WEAK_MAP = objValue(new V6MapConstructor());
+
+  private static V6Object setPrototype() {
+    V6Object o = new V6Object();
+    o.set("add", fn((thisArg, args) -> {
+            V6SetObject st = (V6SetObject)thisArg.ref();
+            V6Value v = V6Value.argAt(args, 0);
+            st.entries.put(V6MapObject.keyFor(v), v);
+            return thisArg;
+          }));
+    o.set("has", fn((thisArg, args)
+                        -> boolValue(((V6SetObject)thisArg.ref())
+                                         .entries.containsKey(V6MapObject.keyFor(
+                                             V6Value.argAt(args, 0))))));
+    o.set("delete", fn((thisArg, args) -> {
+            V6SetObject st = (V6SetObject)thisArg.ref();
+            Object k = V6MapObject.keyFor(V6Value.argAt(args, 0));
+            boolean had = st.entries.containsKey(k);
+            st.entries.remove(k);
+            return boolValue(had);
+          }));
+    o.set("clear", fn((thisArg, args) -> {
+            ((V6SetObject)thisArg.ref()).entries.clear();
+            return UNDEF;
+          }));
+    o.set("forEach", fn((thisArg, args) -> {
+            V6SetObject st = (V6SetObject)thisArg.ref();
+            V6Callable cb = V6Value.argAt(args, 0).asCallable();
+            for (V6Value v : st.entries.values())
+              cb.call(UNDEF, new V6Value[] {v, v, thisArg});
+            return UNDEF;
+          }));
+    V6Value valuesFn = fn((thisArg, args) -> {
+      V6SetObject st = (V6SetObject)thisArg.ref();
+      V6Array result = new V6Array();
+      for (V6Value v : st.entries.values())
+        result.push(v);
+      return objValue(result);
+    });
+    o.set("values", valuesFn);
+    o.set("keys", valuesFn);
+    o.set("entries", fn((thisArg, args) -> {
+            V6SetObject st = (V6SetObject)thisArg.ref();
+            V6Array result = new V6Array();
+            for (V6Value v : st.entries.values()) {
+              V6Array pair = new V6Array();
+              pair.push(v);
+              pair.push(v);
+              result.push(objValue(pair));
+            }
+            return objValue(result);
+          }));
+    o.defineGetter(
+        "size",
+        (thisArg, args) -> num(((V6SetObject)thisArg.ref()).entries.size()));
+    return o;
+  }
+
+  public static final V6Object SET_PROTOTYPE = setPrototype();
+  public static final V6Value SET = objValue(new V6SetConstructor());
+  public static final V6Value WEAK_SET = objValue(new V6SetConstructor());
+
+  private static V6Value num(double n) {
+    return new V6Value(V6Value.TAG_NUM, n, null);
+  }
+
+  private static V6SymbolFunction symbolFunction() {
+    V6SymbolFunction f = new V6SymbolFunction();
+    f.set("iterator",
+          new V6Value(V6Value.TAG_OBJ, 0, new V6Symbol("Symbol.iterator")));
+    java.util.Map<String, V6Symbol> registry = new java.util.HashMap<>();
+    f.set("for", fn((thisArg, args) -> {
+            String key = V6Value.argAt(args, 0).toString();
+            V6Symbol sym = registry.computeIfAbsent(key, V6Symbol::new);
+            return new V6Value(V6Value.TAG_OBJ, 0, sym);
+          }));
+    return f;
+  }
+
+  public static final V6Value SYMBOL =
+      new V6Value(V6Value.TAG_FUNC, 0, symbolFunction());
+
+  private static V6Object generatorPrototype() {
+    V6Object o = new V6Object();
+    o.set("next", fn((thisArg, args)
+                         -> ((V6Generator)thisArg.ref())
+                                .next(V6Value.argAt(args, 0))));
+    o.set("return", fn((thisArg, args)
+                           -> ((V6Generator)thisArg.ref())
+                                  .returnValue(V6Value.argAt(args, 0))));
+    o.set("throw", fn((thisArg, args)
+                          -> ((V6Generator)thisArg.ref())
+                                 .throwInto(V6Value.argAt(args, 0))));
+    return o;
+  }
+
+  public static final V6Object GENERATOR_PROTOTYPE = generatorPrototype();
+
+  private static final V6Value UNDEF_FN_MARKER =
+      new V6Value(V6Value.TAG_UNDEF, 0, null);
+
+  private static V6Object promisePrototype() {
+    V6Object o = new V6Object();
+    o.set("then", fn((thisArg, args)
+                         -> ((V6Promise)thisArg.ref())
+                                .then(V6Value.argAt(args, 0),
+                                     V6Value.argAt(args, 1))));
+    o.set("catch", fn((thisArg, args)
+                          -> ((V6Promise)thisArg.ref())
+                                 .then(UNDEF_FN_MARKER, V6Value.argAt(args, 0))));
+    o.set("finally", fn((thisArg, args) -> {
+            V6Value cb = V6Value.argAt(args, 0);
+            V6Value onOk = fn((t, a) -> {
+              if (cb.tag() == V6Value.TAG_FUNC)
+                cb.asCallable().call(UNDEF, new V6Value[0]);
+              return V6Value.argAt(a, 0);
+            });
+            V6Value onErr = fn((t, a) -> {
+              if (cb.tag() == V6Value.TAG_FUNC)
+                cb.asCallable().call(UNDEF, new V6Value[0]);
+              throw new V6Throw(V6Value.argAt(a, 0));
+            });
+            return ((V6Promise)thisArg.ref()).then(onOk, onErr);
+          }));
+    return o;
+  }
+
+  public static final V6Object PROMISE_PROTOTYPE = promisePrototype();
+  public static final V6Value PROMISE = objValue(new V6PromiseConstructor());
 
   public static final V6Value BTOA = fn((thisArg, args) -> {
     String s = V6Value.argAt(args, 0).toString();

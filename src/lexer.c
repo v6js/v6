@@ -41,6 +41,12 @@ static const keyword keywords[] = {
     {"finally", tok_kw_finally},
     {"throw", tok_kw_throw},
     {"static", tok_kw_static},
+    {"instanceof", tok_kw_instanceof},
+    {"get", tok_kw_get},
+    {"set", tok_kw_set},
+    {"async", tok_kw_async},
+    {"await", tok_kw_await},
+    {"yield", tok_kw_yield},
 };
 
 void lex_init(lexer* lx, const char* src) {
@@ -50,7 +56,7 @@ void lex_init(lexer* lx, const char* src) {
 }
 
 static int is_ident_start(char c) {
-  return isalpha((unsigned char)c) || c == '_' || c == '$';
+  return isalpha((unsigned char)c) || c == '_' || c == '$' || c == '#';
 }
 
 static int is_ident_part(char c) {
@@ -276,6 +282,14 @@ tok lex_next(lexer* lx) {
     }
     return make(lx, tok_minus, start);
   case '*':
+    if (*lx->cur == '*') {
+      lx->cur++;
+      if (*lx->cur == '=') {
+        lx->cur++;
+        return make(lx, tok_star_star_eq, start);
+      }
+      return make(lx, tok_star_star, start);
+    }
     if (*lx->cur == '=') {
       lx->cur++;
       return make(lx, tok_star_eq, start);
@@ -294,6 +308,18 @@ tok lex_next(lexer* lx) {
     }
     return make(lx, tok_percent, start);
   case '?':
+    if (*lx->cur == '.' && !isdigit((unsigned char)lx->cur[1])) {
+      lx->cur++;
+      return make(lx, tok_question_dot, start);
+    }
+    if (*lx->cur == '?') {
+      lx->cur++;
+      if (*lx->cur == '=') {
+        lx->cur++;
+        return make(lx, tok_question_question_eq, start);
+      }
+      return make(lx, tok_question_question, start);
+    }
     return make(lx, tok_question, start);
   case ':':
     return make(lx, tok_colon, start);

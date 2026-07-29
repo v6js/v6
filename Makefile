@@ -70,7 +70,14 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/core/V6String.java lib/core/V6Number.java lib/core/V6Boolean.java \
                 lib/core/V6Iterator.java lib/core/V6Ref.java lib/core/V6Callable.java \
                 lib/core/V6Closure.java lib/core/V6Builtins.java lib/core/V6Class.java \
-                lib/core/V6Throw.java lib/core/V6Rope.java
+                lib/core/V6Throw.java lib/core/V6Rope.java lib/core/V6NativeConstructor.java \
+                lib/core/V6MapObject.java lib/core/V6SetObject.java \
+                lib/core/V6MapConstructor.java lib/core/V6SetConstructor.java \
+                lib/core/V6Symbol.java lib/core/V6SymbolFunction.java \
+                lib/core/V6Generator.java lib/core/V6GeneratorFunction.java \
+                lib/core/V6GeneratorReturn.java lib/core/V6MicrotaskQueue.java \
+                lib/core/V6Promise.java lib/core/V6PromiseConstructor.java \
+                lib/core/V6AsyncFunction.java
 RT_CLASS_FILES := $(patsubst lib/core/%.java,$(GEN)/%.class,$(RT_JAVA_SRCS))
 RT_TABLE_C := $(GEN)/runtime_classes.c
 

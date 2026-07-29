@@ -3,6 +3,7 @@ import java.util.Map;
 
 public class V6Object {
   private static final V6Value[] EMPTY_ELEMENTS = new V6Value[0];
+  private static final V6Value[] EMPTY_ARGS = new V6Value[0];
 
   protected final Map<String, V6Value> props = new LinkedHashMap<>();
   protected V6Value[] elements = EMPTY_ELEMENTS;
@@ -11,6 +12,47 @@ public class V6Object {
   private V6Object proto;
   private boolean frozen = false;
   private boolean sealed = false;
+  private Map<String, V6Callable> getters;
+  private Map<String, V6Callable> setters;
+
+  public void defineGetter(String key, V6Callable getter) {
+    if (getters == null)
+      getters = new LinkedHashMap<>();
+    getters.put(key, getter);
+    props.remove(key);
+  }
+
+  public void defineSetter(String key, V6Callable setter) {
+    if (setters == null)
+      setters = new LinkedHashMap<>();
+    setters.put(key, setter);
+    props.remove(key);
+  }
+
+  private V6Callable findGetter(String key) {
+    if (getters != null) {
+      V6Callable g = getters.get(key);
+      if (g != null)
+        return g;
+    }
+    return proto != null ? proto.findGetter(key) : null;
+  }
+
+  private boolean hasAccessor(String key) {
+    if ((getters != null && getters.containsKey(key)) ||
+        (setters != null && setters.containsKey(key)))
+      return true;
+    return proto != null && proto.hasAccessor(key);
+  }
+
+  private V6Callable findSetter(String key) {
+    if (setters != null) {
+      V6Callable s = setters.get(key);
+      if (s != null)
+        return s;
+    }
+    return proto != null ? proto.findSetter(key) : null;
+  }
 
   private void ensureCapacity(int min) {
     if (elements.length >= min)
@@ -50,20 +92,47 @@ public class V6Object {
   }
 
   public V6Value get(String key) {
+    return get(key, new V6Value(V6Value.TAG_OBJ, 0, this));
+  }
+
+  private V6Value get(String key, V6Value receiver) {
     if (key.equals("length"))
       return new V6Value(V6Value.TAG_NUM, length, null);
     int idx = parseIndex(key);
     if (idx >= 0 && idx < elemCount)
       return elements[idx];
+    if (hasAccessor(key)) {
+      V6Callable g = findGetter(key);
+      if (g == null)
+        return new V6Value(V6Value.TAG_UNDEF, 0, null);
+      return g.call(receiver, EMPTY_ARGS);
+    }
     V6Value v = props.get(key);
     if (v != null)
       return v;
     if (proto != null)
-      return proto.get(key);
+      return proto.get(key, receiver);
     return new V6Value(V6Value.TAG_UNDEF, 0, null);
   }
 
+  public boolean has(String key) {
+    if (key.equals("length"))
+      return true;
+    int idx = parseIndex(key);
+    if (idx >= 0 && idx < elemCount)
+      return true;
+    if (props.containsKey(key))
+      return true;
+    return proto != null && proto.has(key);
+  }
+
   public void set(String key, V6Value value) {
+    if (hasAccessor(key)) {
+      V6Callable s = findSetter(key);
+      if (s != null)
+        s.call(new V6Value(V6Value.TAG_OBJ, 0, this), new V6Value[] {value});
+      return;
+    }
     if (frozen)
       return;
     int idx = parseIndex(key);
@@ -267,16 +336,11 @@ public class V6Object {
   }
 
   public void pushAll(V6Value v) {
-    if (v.tag() == V6Value.TAG_OBJ) {
-      V6Object o = (V6Object)v.ref();
-      int n = (int)o.get("length").num();
-      for (int i = 0; i < n; i++)
-        push(o.get(Integer.toString(i)));
-    } else if (v.tag() == V6Value.TAG_STR) {
-      CharSequence s = (CharSequence)v.ref();
-      for (int i = 0; i < s.length(); i++)
-        push(new V6Value(V6Value.TAG_STR, 0, String.valueOf(s.charAt(i))));
-    }
+    if (v.tag() != V6Value.TAG_OBJ && v.tag() != V6Value.TAG_STR)
+      return;
+    V6Iterator it = new V6Iterator(v);
+    while (it.hasNext())
+      push(it.next());
   }
 
   public void spreadFrom(V6Value v) {
