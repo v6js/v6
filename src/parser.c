@@ -5586,6 +5586,7 @@ compile_result compile_program(const char* user_src, class_file* cf) {
   bind_builtin(&c, "Symbol", "SYMBOL");
   bind_builtin(&c, "Promise", "PROMISE");
   bind_builtin(&c, "RegExp", "REGEXP");
+  bind_builtin(&c, "JSON", "JSON");
 
   uint16_t this_slot = c.next_local_slot++;
   emit_undef(cf, main_m);

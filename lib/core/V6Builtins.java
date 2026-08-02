@@ -793,6 +793,61 @@ public final class V6Builtins {
   public static final V6Object REGEXP_PROTOTYPE = regexPrototype();
   public static final V6Value REGEXP = objValue(new V6RegexConstructor());
 
+  private static V6Object jsonObject() {
+    V6Object o = new V6Object();
+    o.set("parse", fn((thisArg, args) -> {
+            String text = V6Value.argAt(args, 0).toString();
+            V6Value result = V6Json.parse(text);
+            V6Value reviver = V6Value.argAt(args, 1);
+            if (reviver.tag() != V6Value.TAG_FUNC)
+              return result;
+            V6Object holder = new V6Object();
+            holder.set("", result);
+            return applyReviver(holder, "", reviver.asCallable());
+          }));
+    o.set("stringify", fn((thisArg, args) -> {
+            V6Value value = V6Value.argAt(args, 0);
+            V6Value replacer = V6Value.argAt(args, 1);
+            V6Value space = V6Value.argAt(args, 2);
+            return V6Json.stringify(value, replacer, space);
+          }));
+    return o;
+  }
+
+  private static V6Value applyReviver(V6Object holder, String key, V6Callable reviver) {
+    V6Value value = holder.get(key);
+    if (value.tag() == V6Value.TAG_OBJ && value.ref() instanceof V6Object) {
+      V6Object obj = (V6Object)value.ref();
+      if (obj instanceof V6Array) {
+        V6Array arr = (V6Array)obj;
+        int n = (int)arr.get("length").num();
+        for (int i = 0; i < n; i++) {
+          String k = Integer.toString(i);
+          V6Value newElem = applyReviver(arr, k, reviver);
+          if (newElem.isUndefined())
+            arr.set(k, UNDEF);
+          else
+            arr.set(k, newElem);
+        }
+      } else {
+        V6Array keys = obj.enumKeys();
+        int n = (int)keys.get("length").num();
+        for (int i = 0; i < n; i++) {
+          String k = keys.get(Integer.toString(i)).toString();
+          V6Value newElem = applyReviver(obj, k, reviver);
+          if (newElem.isUndefined())
+            obj.set(k, UNDEF);
+          else
+            obj.set(k, newElem);
+        }
+      }
+    }
+    return reviver.call(objValue(holder),
+                        new V6Value[] {new V6Value(V6Value.TAG_STR, 0, key), value});
+  }
+
+  public static final V6Value JSON = objValue(jsonObject());
+
   public static final V6Value BTOA = fn((thisArg, args) -> {
     String s = V6Value.argAt(args, 0).toString();
     byte[] bytes = new byte[s.length()];
