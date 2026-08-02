@@ -38,8 +38,7 @@ public final class V6Builtins {
     return v.tag() == V6Value.TAG_OBJ ? (V6Object)v.ref() : null;
   }
 
-  private static String inspect(V6Value v,
-                                java.util.Map<Object, Boolean> seen) {
+  static String inspect(V6Value v, java.util.Map<Object, Boolean> seen) {
     if (v.tag() == V6Value.TAG_STR)
       return "'" + v.toString().replace("'", "\\'") + "'";
     if (v.tag() == V6Value.TAG_BIGINT)
@@ -857,6 +856,20 @@ public final class V6Builtins {
   }
 
   public static final V6Value JSON = objValue(jsonObject());
+
+  public static final V6Value NODE_PATH = objValue(V6Path.build());
+  public static final V6Value NODE_UTIL = objValue(V6Util.build());
+  public static final V6Value NODE_OS = objValue(V6Os.build());
+  public static final V6Value NODE_FS = objValue(V6Fs.build());
+  private static V6Value buildEventsModule() {
+    V6EventEmitterConstructor ctor = new V6EventEmitterConstructor();
+    ctor.set("EventEmitter", objValue(ctor));
+    return objValue(ctor);
+  }
+
+  public static final V6Value NODE_EVENTS = buildEventsModule();
+  public static final V6Value PROCESS = objValue(V6Process.build());
+  public static final V6Value BUFFER = objValue(new V6BufferConstructor());
 
   public static final V6Value BTOA = fn((thisArg, args) -> {
     String s = V6Value.argAt(args, 0).toString();

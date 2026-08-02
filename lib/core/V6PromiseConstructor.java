@@ -17,6 +17,9 @@ public final class V6PromiseConstructor
   }
 
   public V6PromiseConstructor() {
+    set("prototype",
+        new V6Value(V6Value.TAG_OBJ, 0, V6Builtins.PROMISE_PROTOTYPE));
+    V6Builtins.PROMISE_PROTOTYPE.nativeCtor = this;
     set("resolve",
         fn((t, a) -> objValue(V6Promise.resolved(V6Value.argAt(a, 0)))));
     set("reject",
@@ -166,8 +169,13 @@ public final class V6PromiseConstructor
   }
 
   @Override
-  public V6Value construct(V6Value[] args) {
-    V6Promise p = new V6Promise();
+  public V6Object allocate() {
+    return new V6Promise();
+  }
+
+  @Override
+  public void initInstance(V6Object instance, V6Value[] args) {
+    V6Promise p = (V6Promise)instance;
     V6Value executor = V6Value.argAt(args, 0);
     if (executor.tag() == V6Value.TAG_FUNC) {
       V6Callable exec = executor.asCallable();
@@ -188,6 +196,12 @@ public final class V6PromiseConstructor
             new V6Value(V6Value.TAG_STR, 0, String.valueOf(e.getMessage())));
       }
     }
+  }
+
+  @Override
+  public V6Value construct(V6Value[] args) {
+    V6Promise p = new V6Promise();
+    initInstance(p, args);
     return objValue(p);
   }
 

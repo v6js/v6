@@ -1,0 +1,18 @@
+const path = require("path");
+const pathNs = require("node:path");
+console.log(path === pathNs);
+console.log(path.join("a", "b", "c"));
+console.log(path.join("a/", "/b", "c/"));
+console.log(path.normalize("a/b//c/../d"));
+console.log(path.isAbsolute("/a/b"));
+console.log(path.isAbsolute("a/b"));
+console.log(path.dirname("/a/b/c.js"));
+console.log(path.basename("/a/b/c.js"));
+console.log(path.basename("/a/b/c.js", ".js"));
+console.log(path.extname("/a/b/c.js"));
+console.log(path.extname("/a/b/c"));
+const parsed = path.parse("/a/b/c.js");
+console.log(parsed.dir, parsed.base, parsed.name, parsed.ext);
+console.log(path.format(parsed));
+console.log(path.sep);
+console.log(path.relative("/a/b", "/a/c/d"));

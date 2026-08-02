@@ -1210,10 +1210,10 @@ static void compile_direct_new(parser* p, compiler* c, var_ref vr,
   op_emit2(c->m, op_checkcast, cls_cls);
   emit_astore(c->m, cls_obj_slot);
 
-  uint16_t obj_ctor_idx = cf_methodref(c->cf, "V6Object", "<init>", "()V");
-  op_emit2(c->m, op_new, object_class(c->cf));
-  op_emit(c->m, op_dup);
-  op_emit2(c->m, op_invokespecial, obj_ctor_idx);
+  uint16_t alloc_idx = cf_methodref(c->cf, "V6Value", "allocateInstance",
+                                    "(LV6Class;)LV6Object;");
+  emit_aload(c->m, cls_obj_slot);
+  op_emit2(c->m, op_invokestatic, alloc_idx);
   uint16_t inst_slot = c->next_local_slot++;
   emit_astore(c->m, inst_slot);
 
@@ -4906,6 +4906,34 @@ static void parse_labeled_stmt(parser* p, compiler* c, tok label) {
   }
 }
 
+typedef struct {
+  const char* name;
+  const char* field;
+} node_builtin_ref;
+
+static const node_builtin_ref v6_node_builtin_table[] = {
+    {"path", "NODE_PATH"},
+    {"util", "NODE_UTIL"},
+    {"os", "NODE_OS"},
+    {"fs", "NODE_FS"},
+    {"events", "NODE_EVENTS"},
+};
+
+static int emit_node_builtin_ref(compiler* c, const char* specifier) {
+  if (strncmp(specifier, "node:", 5) == 0)
+    specifier += 5;
+  size_t n = sizeof(v6_node_builtin_table) / sizeof(v6_node_builtin_table[0]);
+  for (size_t i = 0; i < n; i++) {
+    if (strcmp(specifier, v6_node_builtin_table[i].name) == 0) {
+      uint16_t fidx = cf_fieldref(c->cf, "V6Builtins", v6_node_builtin_table[i].field,
+                                  "LV6Value;");
+      op_emit2(c->m, op_getstatic, fidx);
+      return 1;
+    }
+  }
+  return 0;
+}
+
 static compiled_module* get_or_compile_module(module_ctx* modctx,
                                               const char* importer_dir,
                                               const char* specifier, int kind,
@@ -4971,11 +4999,16 @@ static void emit_require_expr(parser* p, compiler* c) {
   advance(p);
   if (!expect(p, tok_rparen))
     return;
-  if (!c->modctx) {
-    error_at(p, "require() is not supported in this context");
+  char* spec = decode_string(spec_tok);
+  if (emit_node_builtin_ref(c, spec)) {
+    free(spec);
     return;
   }
-  char* spec = decode_string(spec_tok);
+  if (!c->modctx) {
+    error_at(p, "require() is not supported in this context");
+    free(spec);
+    return;
+  }
   compiled_module* mod =
       get_or_compile_module(c->modctx, c->module_dir, spec, 1, p);
   free(spec);
@@ -5013,15 +5046,27 @@ static void parse_import_stmt(parser* p, compiler* c) {
     tok spec_tok = p->cur;
     advance(p);
     char* spec = decode_string(spec_tok);
+    if (emit_node_builtin_ref(c, spec)) {
+      free(spec);
+      op_emit(c->m, op_pop);
+      expect(p, tok_semi);
+      return;
+    }
     compiled_module* mod =
         get_or_compile_module(c->modctx, c->module_dir, spec, 0, p);
     free(spec);
     expect(p, tok_semi);
     if (!mod)
       return;
-    uint16_t exp_idx =
-        cf_methodref(c->cf, mod->class_name, "exports", "()LV6Object;");
-    op_emit2(c->m, op_invokestatic, exp_idx);
+    if (mod->kind == 1) {
+      uint16_t exp_idx =
+          cf_methodref(c->cf, mod->class_name, "moduleExports", "()LV6Value;");
+      op_emit2(c->m, op_invokestatic, exp_idx);
+    } else {
+      uint16_t exp_idx =
+          cf_methodref(c->cf, mod->class_name, "exports", "()LV6Object;");
+      op_emit2(c->m, op_invokestatic, exp_idx);
+    }
     op_emit(c->m, op_pop);
     return;
   }
@@ -5119,33 +5164,57 @@ static void parse_import_stmt(parser* p, compiler* c) {
   tok spec_tok = p->cur;
   advance(p);
   char* spec = decode_string(spec_tok);
-  compiled_module* mod =
-      get_or_compile_module(c->modctx, c->module_dir, spec, 0, p);
-  free(spec);
-  expect(p, tok_semi);
-  if (!mod)
-    return;
 
-  uint16_t exp_idx =
-      cf_methodref(c->cf, mod->class_name, "exports", "()LV6Object;");
-  op_emit2(c->m, op_invokestatic, exp_idx);
+  int is_value_shape;
   uint16_t exports_slot = c->next_local_slot++;
-  emit_astore(c->m, exports_slot);
 
-  uint16_t get_idx =
+  if (emit_node_builtin_ref(c, spec)) {
+    free(spec);
+    is_value_shape = 1;
+    emit_astore(c->m, exports_slot);
+  } else {
+    compiled_module* mod =
+        get_or_compile_module(c->modctx, c->module_dir, spec, 0, p);
+    free(spec);
+    if (!mod) {
+      expect(p, tok_semi);
+      return;
+    }
+    if (mod->kind == 1) {
+      uint16_t exp_idx =
+          cf_methodref(c->cf, mod->class_name, "moduleExports", "()LV6Value;");
+      op_emit2(c->m, op_invokestatic, exp_idx);
+      is_value_shape = 1;
+    } else {
+      uint16_t exp_idx =
+          cf_methodref(c->cf, mod->class_name, "exports", "()LV6Object;");
+      op_emit2(c->m, op_invokestatic, exp_idx);
+      is_value_shape = 0;
+    }
+    emit_astore(c->m, exports_slot);
+  }
+  expect(p, tok_semi);
+
+  uint16_t get_obj_idx =
       cf_methodref(c->cf, "V6Object", "get", "(Ljava/lang/String;)LV6Value;");
+  uint16_t get_val_idx =
+      cf_methodref(c->cf, "V6Value", "getProp", "(Ljava/lang/String;)LV6Value;");
+  uint16_t get_idx = is_value_shape ? get_val_idx : get_obj_idx;
 
   if (has_default) {
     emit_aload(c->m, exports_slot);
-    uint16_t key_idx = cf_string(c->cf, "default");
-    op_emit2(c->m, op_ldc_w, key_idx);
-    op_emit2(c->m, op_invokevirtual, get_idx);
+    if (!is_value_shape) {
+      uint16_t key_idx = cf_string(c->cf, "default");
+      op_emit2(c->m, op_ldc_w, key_idx);
+      op_emit2(c->m, op_invokevirtual, get_obj_idx);
+    }
     declare_or_assign_module_binding(c, default_name);
   }
 
   if (has_namespace) {
     emit_aload(c->m, exports_slot);
-    emit_box_object_ref(c);
+    if (!is_value_shape)
+      emit_box_object_ref(c);
     declare_or_assign_module_binding(c, namespace_name);
   }
 
@@ -6152,6 +6221,8 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   bind_builtin(&c, "Promise", "PROMISE");
   bind_builtin(&c, "RegExp", "REGEXP");
   bind_builtin(&c, "JSON", "JSON");
+  bind_builtin(&c, "Buffer", "BUFFER");
+  bind_builtin(&c, "process", "PROCESS");
 
   uint16_t this_slot = c.next_local_slot++;
   emit_undef(cf, main_m);

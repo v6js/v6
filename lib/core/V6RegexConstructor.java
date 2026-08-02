@@ -1,5 +1,10 @@
 public final class V6RegexConstructor
     extends V6Object implements V6NativeConstructor {
+  public V6RegexConstructor() {
+    set("prototype",
+        new V6Value(V6Value.TAG_OBJ, 0, V6Builtins.REGEXP_PROTOTYPE));
+  }
+
   @Override
   public V6Value construct(V6Value[] args) {
     V6Value first = V6Value.argAt(args, 0);

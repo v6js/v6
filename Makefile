@@ -59,7 +59,7 @@ endif
 
 OBJ := $(BUILD)/obj
 BIN := $(BUILD)/bin
-GEN := $(BUILD)/gen
+GEN := $(BUILD)/lib
 
 RT_SRCS := $(filter-out src/main.c,$(wildcard src/*.c))
 RT_OBJS := $(patsubst src/%.c,$(OBJ)/%.o,$(RT_SRCS))
@@ -85,11 +85,16 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/core/V6AsyncFunction.java lib/core/V6AsyncGenerator.java \
                 lib/core/V6AsyncGeneratorFunction.java \
                 lib/core/V6Regex.java lib/core/V6RegexConstructor.java \
-                lib/core/V6Json.java
-RT_CLASS_FILES := $(patsubst lib/core/%.java,$(GEN)/%.class,$(RT_JAVA_SRCS))
+                lib/core/V6Json.java \
+                lib/node/V6Path.java \
+                lib/node/V6EventEmitterObject.java lib/node/V6EventEmitterConstructor.java \
+                lib/node/V6Util.java lib/node/V6Os.java lib/node/V6Process.java \
+                lib/node/V6Buffer.java lib/node/V6BufferConstructor.java \
+                lib/node/V6Fs.java
+RT_CLASS_FILES := $(patsubst lib/node/%.java,$(GEN)/%.class,$(patsubst lib/core/%.java,$(GEN)/%.class,$(RT_JAVA_SRCS)))
 RT_TABLE_C := $(GEN)/runtime_classes.c
 
-FMT_FILES := $(wildcard src/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java)
+FMT_FILES := $(wildcard src/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java) $(wildcard lib/node/*.java)
 
 .PHONY: all test fmt clean dirs release bench
 

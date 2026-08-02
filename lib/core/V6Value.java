@@ -242,11 +242,29 @@ public record V6Value(int tag, double num, Object ref) {
     return idx < args.length ? args[idx] : new V6Value(TAG_UNDEF, 0, null);
   }
 
+  private static V6NativeConstructor findNativeAncestor(V6Object proto) {
+    for (V6Object cur = proto; cur != null; cur = cur.getProto())
+      if (cur.nativeCtor != null)
+        return cur.nativeCtor;
+    return null;
+  }
+
+  public static V6Object allocateInstance(V6Class cls) {
+    Object protoRef = cls.get("prototype").ref;
+    V6Object protoObj = protoRef instanceof V6Object ? (V6Object)protoRef : null;
+    V6NativeConstructor nativeAncestor = findNativeAncestor(protoObj);
+    V6Object instance =
+        nativeAncestor != null ? nativeAncestor.allocate() : null;
+    if (instance == null)
+      instance = new V6Object();
+    return instance;
+  }
+
   public static V6Value construct(V6Value classValue, V6Value[] args) {
     if (classValue.ref instanceof V6NativeConstructor)
       return ((V6NativeConstructor)classValue.ref).construct(args);
     V6Class cls = (V6Class)classValue.ref;
-    V6Object instance = new V6Object();
+    V6Object instance = allocateInstance(cls);
     Object protoRef = cls.get("prototype").ref;
     if (protoRef instanceof V6Object)
       instance.setProto((V6Object)protoRef);
@@ -259,6 +277,11 @@ public record V6Value(int tag, double num, Object ref) {
 
   public static void superConstruct(V6Value classValue, V6Value thisArg,
                                     V6Value[] args) {
+    if (classValue.ref instanceof V6NativeConstructor) {
+      ((V6NativeConstructor)classValue.ref)
+          .initInstance((V6Object)thisArg.ref, args);
+      return;
+    }
     V6Class cls = (V6Class)classValue.ref;
     if (cls.ctor != null)
       cls.ctor.call(thisArg, args);
