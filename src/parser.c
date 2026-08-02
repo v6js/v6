@@ -6187,6 +6187,12 @@ static const char* const v6_prelude_src =
     "    super(message);\n"
     "    this.name = \"URIError\";\n"
     "  }\n"
+    "}\n"
+    "class DOMException extends Error {\n"
+    "  constructor(message, name) {\n"
+    "    super(message === undefined ? \"\" : message);\n"
+    "    this.name = name === undefined ? \"Error\" : name;\n"
+    "  }\n"
     "}\n";
 
 static int count_newlines(const char* s) {
@@ -6309,6 +6315,44 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   bind_builtin(&c, "setImmediate", "SET_IMMEDIATE");
   bind_builtin(&c, "clearImmediate", "CLEAR_IMMEDIATE");
   bind_builtin(&c, "queueMicrotask", "QUEUE_MICROTASK");
+  bind_builtin(&c, "Event", "EVENT_CTOR");
+  bind_builtin(&c, "CustomEvent", "CUSTOM_EVENT_CTOR");
+  bind_builtin(&c, "EventTarget", "EVENT_TARGET_CTOR");
+  bind_builtin(&c, "AbortSignal", "ABORT_SIGNAL_CTOR");
+  bind_builtin(&c, "AbortController", "ABORT_CONTROLLER_CTOR");
+  bind_builtin(&c, "structuredClone", "STRUCTURED_CLONE");
+  bind_builtin(&c, "TextEncoder", "TEXT_ENCODER_CTOR");
+  bind_builtin(&c, "TextDecoder", "TEXT_DECODER_CTOR");
+  bind_builtin(&c, "ReadableStream", "READABLE_STREAM_CTOR");
+  bind_builtin(&c, "WritableStream", "WRITABLE_STREAM_CTOR");
+  bind_builtin(&c, "TransformStream", "TRANSFORM_STREAM_CTOR");
+  bind_builtin(&c, "CountQueuingStrategy", "COUNT_QUEUING_STRATEGY_CTOR");
+  bind_builtin(&c, "ByteLengthQueuingStrategy",
+               "BYTE_LENGTH_QUEUING_STRATEGY_CTOR");
+  bind_builtin(&c, "ArrayBuffer", "ARRAY_BUFFER_CTOR");
+  bind_builtin(&c, "Blob", "BLOB_CTOR");
+  bind_builtin(&c, "File", "FILE_CTOR");
+  bind_builtin(&c, "FormData", "FORM_DATA_CTOR");
+  bind_builtin(&c, "TextEncoderStream", "TEXT_ENCODER_STREAM_CTOR");
+  bind_builtin(&c, "TextDecoderStream", "TEXT_DECODER_STREAM_CTOR");
+  bind_builtin(&c, "CompressionStream", "COMPRESSION_STREAM_CTOR");
+  bind_builtin(&c, "DecompressionStream", "DECOMPRESSION_STREAM_CTOR");
+  bind_builtin(&c, "Headers", "HEADERS_CTOR");
+  bind_builtin(&c, "Request", "REQUEST_CTOR");
+  bind_builtin(&c, "Response", "RESPONSE_CTOR");
+  bind_builtin(&c, "fetch", "FETCH");
+  bind_builtin(&c, "WebSocket", "WEBSOCKET_CTOR");
+  bind_builtin(&c, "EventSource", "EVENT_SOURCE_CTOR");
+  bind_builtin(&c, "CryptoKey", "CRYPTO_KEY_CTOR");
+  bind_builtin(&c, "crypto", "WEB_CRYPTO");
+  bind_builtin(&c, "MessageEvent", "MESSAGE_EVENT_CTOR");
+  bind_builtin(&c, "MessagePort", "MESSAGE_PORT_CTOR");
+  bind_builtin(&c, "MessageChannel", "MESSAGE_CHANNEL_CTOR");
+  bind_builtin(&c, "BroadcastChannel", "BROADCAST_CHANNEL_CTOR");
+  bind_builtin(&c, "self", "WORKER_SELF");
+  bind_builtin(&c, "Worker", "WEB_WORKER_CTOR");
+  bind_builtin(&c, "performance", "PERFORMANCE");
+  bind_builtin(&c, "navigator", "NAVIGATOR");
 
   if (is_entry) {
     uint16_t setargv_idx =

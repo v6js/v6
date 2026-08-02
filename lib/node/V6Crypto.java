@@ -250,8 +250,8 @@ public final class V6Crypto {
                                                   full.length);
                 } else {
                   if (authTag[0] == null)
-                    throw new V6Throw(str("crypto: authTag must be set via " +
-                                          "setAuthTag before final() "
+                    throw new V6Throw(str("crypto: authTag must be set via "
+                                          + "setAuthTag before final() "
                                           + "for GCM decryption"));
                   byte[] ct = gcmBuffer.toByteArray();
                   byte[] combined = new byte[ct.length + authTag[0].length];
@@ -550,8 +550,8 @@ public final class V6Crypto {
             byte[] x = bytesOf(V6Value.argAt(args, 0), null);
             byte[] y = bytesOf(V6Value.argAt(args, 1), null);
             if (x.length != y.length)
-              throw new V6Throw(str("crypto.timingSafeEqual: Input buffers " +
-                                    "must have the same byte length"));
+              throw new V6Throw(str("crypto.timingSafeEqual: Input buffers "
+                                    + "must have the same byte length"));
             return bool(MessageDigest.isEqual(x, y));
           }));
 

@@ -87,6 +87,9 @@ public final class V6BufferConstructor
       return decodeString(first.toString(), encoding);
     if (first.tag() == V6Value.TAG_OBJ && first.ref() instanceof V6Buffer)
       return ((V6Buffer)first.ref()).toBytes();
+    if (first.tag() == V6Value.TAG_OBJ && first.ref() instanceof
+                                              V6ArrayBufferObject)
+      return ((V6ArrayBufferObject)first.ref()).data;
     if (first.tag() == V6Value.TAG_OBJ) {
       V6Object arr = (V6Object)first.ref();
       int n = (int)arr.get("length").num();

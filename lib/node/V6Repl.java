@@ -84,12 +84,12 @@ public final class V6Repl {
 
     String exePath = V6IpcUtil.detectV6ExecutablePath();
     if (exePath == null) {
-      throw new V6Throw(str("repl.start is not supported when running via " +
-                            "'java -jar' (AOT-jar mode "
-                            + "embeds only the one already-compiled program, " +
-                              "with no compiler available "
-                            + "to evaluate REPL input); run via the v6 " +
-                              "executable directly to use repl"));
+      throw new V6Throw(str("repl.start is not supported when running via "
+                            + "'java -jar' (AOT-jar mode "
+                            + "embeds only the one already-compiled program, "
+                            + "with no compiler available "
+                            + "to evaluate REPL input); run via the v6 "
+                            + "executable directly to use repl"));
     }
 
     V6EventLoop.ref();

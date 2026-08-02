@@ -21,8 +21,8 @@ public final class V6UrlLegacy {
   }
 
   private static final Pattern LEGACY_PATTERN = Pattern.compile(
-      "^(?:([a-zA-Z][a-zA-Z0-9+.-]*):)?(//(?:([^:@/]*)(?::([^@/]*))?@)?([^:/" +
-      "?#]*)(?::(\\d+))?)?([^?#]*)(?:\\?([^#]*))?(?:#(.*))?$");
+      "^(?:([a-zA-Z][a-zA-Z0-9+.-]*):)?(//(?:([^:@/]*)(?::([^@/]*))?@)?([^:/"
+      + "?#]*)(?::(\\d+))?)?([^?#]*)(?:\\?([^#]*))?(?:#(.*))?$");
 
   static V6Value parseImpl(V6Value[] args) {
     String urlStr = V6Value.argAt(args, 0).toString();
@@ -118,8 +118,8 @@ public final class V6UrlLegacy {
     if (arg.tag() == V6Value.TAG_STR)
       return arg;
     if (arg.tag() != V6Value.TAG_OBJ || !(arg.ref() instanceof V6Object))
-      throw new V6Throw(str("TypeError [ERR_INVALID_ARG_TYPE]: url.format " +
-                            "expects a string or object"));
+      throw new V6Throw(str("TypeError [ERR_INVALID_ARG_TYPE]: url.format "
+                            + "expects a string or object"));
 
     if (arg.ref() instanceof V6UrlObject)
       return str(((V6UrlObject)arg.ref()).href());

@@ -43,8 +43,8 @@ public final class V6WorkerConstructor
           "worker_threads.Worker is not supported when running via 'java -jar' "
           +
           "(AOT-jar mode embeds only the one already-compiled program, with no "
-          + "compiler available to run a second script); run via the v6 " +
-            "executable "
+          + "compiler available to run a second script); run via the v6 "
+          + "executable "
           + "directly to use Worker"));
     }
 

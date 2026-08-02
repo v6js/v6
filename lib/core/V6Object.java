@@ -98,7 +98,7 @@ public class V6Object {
   }
 
   private V6Value get(String key, V6Value receiver) {
-    if (key.equals("length"))
+    if (key.equals("length") && !props.containsKey("length"))
       return new V6Value(V6Value.TAG_NUM, length, null);
     int idx = parseIndex(key);
     if (idx >= 0 && idx < elemCount)
@@ -118,7 +118,7 @@ public class V6Object {
   }
 
   public boolean has(String key) {
-    if (key.equals("length"))
+    if (key.equals("length") && !props.containsKey("length"))
       return true;
     int idx = parseIndex(key);
     if (idx >= 0 && idx < elemCount)
@@ -249,6 +249,50 @@ public class V6Object {
         result.push(el);
     }
     return result;
+  }
+
+  public boolean some(V6Callable fn) {
+    V6Value undef = new V6Value(V6Value.TAG_UNDEF, 0, null);
+    for (int i = 0; i < length; i++) {
+      V6Value el = get(Integer.toString(i));
+      V6Value idx = new V6Value(V6Value.TAG_NUM, i, null);
+      if (fn.call(undef, new V6Value[] {el, idx}).truthy())
+        return true;
+    }
+    return false;
+  }
+
+  public boolean every(V6Callable fn) {
+    V6Value undef = new V6Value(V6Value.TAG_UNDEF, 0, null);
+    for (int i = 0; i < length; i++) {
+      V6Value el = get(Integer.toString(i));
+      V6Value idx = new V6Value(V6Value.TAG_NUM, i, null);
+      if (!fn.call(undef, new V6Value[] {el, idx}).truthy())
+        return false;
+    }
+    return true;
+  }
+
+  public V6Value find(V6Callable fn) {
+    V6Value undef = new V6Value(V6Value.TAG_UNDEF, 0, null);
+    for (int i = 0; i < length; i++) {
+      V6Value el = get(Integer.toString(i));
+      V6Value idx = new V6Value(V6Value.TAG_NUM, i, null);
+      if (fn.call(undef, new V6Value[] {el, idx}).truthy())
+        return el;
+    }
+    return new V6Value(V6Value.TAG_UNDEF, 0, null);
+  }
+
+  public int findIndex(V6Callable fn) {
+    V6Value undef = new V6Value(V6Value.TAG_UNDEF, 0, null);
+    for (int i = 0; i < length; i++) {
+      V6Value el = get(Integer.toString(i));
+      V6Value idx = new V6Value(V6Value.TAG_NUM, i, null);
+      if (fn.call(undef, new V6Value[] {el, idx}).truthy())
+        return i;
+    }
+    return -1;
   }
 
   public void forEach(V6Callable fn) {

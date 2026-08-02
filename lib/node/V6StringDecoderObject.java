@@ -60,6 +60,7 @@ public final class V6StringDecoderObject extends V6Object {
     CharBuffer cb = CharBuffer.allocate(combined.length * 2 + 16);
     decoder.decode(bb, cb, true);
     decoder.flush(cb);
+    decoder.reset();
     cb.flip();
     return cb.toString();
   }

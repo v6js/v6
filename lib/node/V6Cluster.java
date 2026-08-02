@@ -64,8 +64,8 @@ public final class V6Cluster {
                         objValue(workerHandle),
                         new V6Value[] {
                             str("error"),
-                            str("cluster.fork is not supported when running " +
-                                "via "
+                            str("cluster.fork is not supported when running "
+                                + "via "
                                 + "'java -jar' (no compiler available to run a "
                                 + "second script)")}));
             return objValue(workerHandle);

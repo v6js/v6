@@ -292,8 +292,8 @@ public final class V6Assert {
                   resultPromise.resolve(UNDEF);
                 else
                   resultPromise.reject(messageOrDefault(
-                      message, "AssertionError: rejection did not match " +
-                               "expected error."));
+                      message, "AssertionError: rejection did not match "
+                                   + "expected error."));
               });
           return objValue(resultPromise);
         }));

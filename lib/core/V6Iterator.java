@@ -9,11 +9,39 @@ public final class V6Iterator {
   private V6Value nativePending;
   private boolean nativeHasPending = false;
 
+  private static V6Value objValue(V6Object o) {
+    return new V6Value(V6Value.TAG_OBJ, 0, o);
+  }
+
   public V6Iterator(V6Value v) {
     if (v.tag() == V6Value.TAG_STR) {
       str = (CharSequence)v.ref();
       arr = null;
       len = str.length();
+      nativeNext = null;
+      nativeReceiver = null;
+    } else if (v.tag() == V6Value.TAG_OBJ && v.ref() instanceof V6SetObject) {
+      V6SetObject st = (V6SetObject)v.ref();
+      V6Array materialized = new V6Array();
+      for (V6Value val : st.entries.values())
+        materialized.push(val);
+      arr = materialized;
+      str = null;
+      len = materialized.elemCount;
+      nativeNext = null;
+      nativeReceiver = null;
+    } else if (v.tag() == V6Value.TAG_OBJ && v.ref() instanceof V6MapObject) {
+      V6MapObject mp = (V6MapObject)v.ref();
+      V6Array materialized = new V6Array();
+      for (java.util.Map.Entry<Object, V6Value> e : mp.entries.entrySet()) {
+        V6Array pair = new V6Array();
+        pair.push(V6MapObject.keyToValue(e.getKey()));
+        pair.push(e.getValue());
+        materialized.push(objValue(pair));
+      }
+      arr = materialized;
+      str = null;
+      len = materialized.elemCount;
       nativeNext = null;
       nativeReceiver = null;
     } else if (v.tag() == V6Value.TAG_OBJ) {
@@ -25,6 +53,18 @@ public final class V6Iterator {
         len = 0;
         nativeNext = nextFn.asCallable();
         nativeReceiver = v;
+      } else if (obj.elemCount == 0 &&
+                 obj.get("entries").tag() == V6Value.TAG_FUNC) {
+        V6Value entriesResult =
+            obj.get("entries").asCallable().call(v, new V6Value[0]);
+        V6Object materialized = entriesResult.tag() == V6Value.TAG_OBJ
+                                    ? (V6Object)entriesResult.ref()
+                                    : new V6Array();
+        arr = materialized;
+        str = null;
+        len = (int)materialized.get("length").num();
+        nativeNext = null;
+        nativeReceiver = null;
       } else {
         arr = obj;
         str = null;

@@ -75,8 +75,8 @@ public final class V6V8 {
           }));
 
     o.set("writeHeapSnapshot", fn((thisArg, args) -> {
-            throw new V6Throw(str("v8.writeHeapSnapshot is not supported (no " +
-                                  "JVM-native V8 heap snapshot format)"));
+            throw new V6Throw(str("v8.writeHeapSnapshot is not supported (no "
+                                  + "JVM-native V8 heap snapshot format)"));
           }));
 
     return o;

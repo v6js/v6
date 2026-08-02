@@ -16,8 +16,8 @@ public final class V6TraceEvents {
     V6Object o = new V6Object();
 
     o.set("createTracing", fn((thisArg, args) -> {
-            throw new V6Throw(str("trace_events.createTracing is not " +
-                                  "supported (no V8 trace event backend "
+            throw new V6Throw(str("trace_events.createTracing is not "
+                                  + "supported (no V8 trace event backend "
                                   + "on the JVM)"));
           }));
 

@@ -337,10 +337,10 @@ public final class V6ChildProcess {
                       -> cp.get("emit").asCallable().call(
                           objValue(cp),
                           new V6Value[] {str("error"),
-                                         str("child_process.fork is not " +
-                                             "supported when running via "
-                                             + "'java -jar' (no compiler " +
-                                               "available to run a second "
+                                         str("child_process.fork is not "
+                                             + "supported when running via "
+                                             + "'java -jar' (no compiler "
+                                             + "available to run a second "
                                              + "script)")}));
               return objValue(cp);
             }

@@ -15,6 +15,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(18924, () => {
+  console.log("address port matches:", server.address().port === 18924);
   http.get("http://localhost:18924/", (res) => {
     console.log("GET status:", res.statusCode);
     console.log("GET header:", res.headers["x-custom"]);

@@ -12,8 +12,8 @@ public final class V6UrlObject extends V6Object {
   V6UrlSearchParamsObject searchParams;
 
   private static final Pattern URL_PATTERN = Pattern.compile(
-      "^([a-zA-Z][a-zA-Z0-9+.-]*):(?://(?:([^:@/]*)(?::([^@/]*))?@)?([^:/" +
-      "?#]*)(?::(\\d+))?)?([^?#]*)(?:\\?([^#]*))?(?:#(.*))?$");
+      "^([a-zA-Z][a-zA-Z0-9+.-]*):(?://(?:([^:@/]*)(?::([^@/]*))?@)?([^:/"
+      + "?#]*)(?::(\\d+))?)?([^?#]*)(?:\\?([^#]*))?(?:#(.*))?$");
 
   V6UrlObject(String href, String base) {
     Matcher m = URL_PATTERN.matcher(href);

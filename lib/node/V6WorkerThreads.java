@@ -17,6 +17,12 @@ public final class V6WorkerThreads {
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
   private static final V6Value NUL = new V6Value(V6Value.TAG_NULL, 0, null);
 
+  private static V6Value selfScope = null;
+
+  static V6Value selfScope() {
+    return selfScope != null ? selfScope : UNDEF;
+  }
+
   static V6Object buildPort() {
     V6EventEmitterObject port = new V6EventEmitterObject();
     port.setProto(V6EventEmitterConstructor.PROTOTYPE);
@@ -50,7 +56,7 @@ public final class V6WorkerThreads {
     return port;
   }
 
-  private static V6Object buildParentPort() {
+  private static V6Object buildParentPort(V6EventTargetObject scope) {
     V6EventEmitterObject port = new V6EventEmitterObject();
     port.setProto(V6EventEmitterConstructor.PROTOTYPE);
     port.set("postMessage", fn((t, a) -> {
@@ -58,12 +64,32 @@ public final class V6WorkerThreads {
                return UNDEF;
              }));
     port.set("close", fn((t, a) -> UNDEF));
-    V6IpcUtil.pumpMessages(
-        System.in, null,
-        msg
-        -> port.get("emit").asCallable().call(
-            objValue(port), new V6Value[] {str("message"), msg}));
+    V6IpcUtil.pumpMessages(System.in, null, msg -> {
+      port.get("emit").asCallable().call(objValue(port),
+                                         new V6Value[] {str("message"), msg});
+      V6MessageEventObject ev = new V6MessageEventObject();
+      ev.setProto(V6MessageEventConstructor.PROTOTYPE);
+      ev.type = "message";
+      ev.data = msg;
+      scope.dispatch(ev);
+    });
     return port;
+  }
+
+  private static V6EventTargetObject buildSelfScope() {
+    V6EventTargetObject scope = new V6EventTargetObject();
+    scope.setProto(V6EventTargetConstructor.PROTOTYPE);
+    scope.set("postMessage", fn((t, a) -> {
+                V6IpcUtil.sendMessage(System.out, V6Value.argAt(a, 0));
+                return UNDEF;
+              }));
+    scope.set("close", fn((t, a) -> {
+                System.exit(0);
+                return UNDEF;
+              }));
+    V6EventHandlerProperty.install(scope, "onmessage", "message");
+    V6EventHandlerProperty.install(scope, "onmessageerror", "messageerror");
+    return scope;
   }
 
   public static V6Object build() {
@@ -83,7 +109,9 @@ public final class V6WorkerThreads {
       String workerDataJson = System.getenv("V6_WORKER_DATA");
       o.set("workerData",
             workerDataJson != null ? V6Json.parse(workerDataJson) : UNDEF);
-      o.set("parentPort", objValue(buildParentPort()));
+      V6EventTargetObject scope = buildSelfScope();
+      selfScope = objValue(scope);
+      o.set("parentPort", objValue(buildParentPort(scope)));
     } else {
       o.set("workerData", UNDEF);
       o.set("parentPort", NUL);

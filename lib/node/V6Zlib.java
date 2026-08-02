@@ -28,7 +28,7 @@ public final class V6Zlib {
     return v.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
   }
 
-  private static byte[] deflateBytes(byte[] input, boolean raw) {
+  static byte[] deflateBytes(byte[] input, boolean raw) {
     Deflater def = new Deflater(Deflater.DEFAULT_COMPRESSION, raw);
     def.setInput(input);
     def.finish();
@@ -42,7 +42,7 @@ public final class V6Zlib {
     return out.toByteArray();
   }
 
-  private static byte[] inflateBytes(byte[] input, boolean raw) {
+  static byte[] inflateBytes(byte[] input, boolean raw) {
     Inflater inf = new Inflater(raw);
     inf.setInput(input);
     ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -63,7 +63,7 @@ public final class V6Zlib {
     return out.toByteArray();
   }
 
-  private static byte[] gzipBytes(byte[] input) {
+  static byte[] gzipBytes(byte[] input) {
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
     try (GZIPOutputStream gz = new GZIPOutputStream(bos)) {
       gz.write(input);
@@ -74,7 +74,7 @@ public final class V6Zlib {
     return bos.toByteArray();
   }
 
-  private static byte[] gunzipBytes(byte[] input) {
+  static byte[] gunzipBytes(byte[] input) {
     try (GZIPInputStream gis =
              new GZIPInputStream(new ByteArrayInputStream(input))) {
       return gis.readAllBytes();

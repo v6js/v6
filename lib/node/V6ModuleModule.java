@@ -65,10 +65,10 @@ public final class V6ModuleModule {
           }));
 
     o.set("createRequire", fn((thisArg, args) -> {
-            throw new V6Throw(str("module.createRequire is not supported (v6 " +
-                                  "resolves 'require' statically at "
-                                  + "compile time; there is no runtime " +
-                                    "module loader to hand back dynamically)"));
+            throw new V6Throw(str("module.createRequire is not supported (v6 "
+                                  + "resolves 'require' statically at "
+                                  + "compile time; there is no runtime "
+                                  + "module loader to hand back dynamically)"));
           }));
 
     return o;

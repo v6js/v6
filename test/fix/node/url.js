@@ -26,6 +26,13 @@ console.log(sp.toString());
 const sp2 = new URLSearchParams({ x: "1", y: "2" });
 console.log(sp2.toString());
 
+const iterPairs = [];
+for (const [k, v] of new URLSearchParams("p=1&q=2")) {
+  iterPairs.push(k + "=" + v);
+}
+console.log(iterPairs.join(","));
+console.log([...new URLSearchParams("p=1&q=2")].length);
+
 try {
   new URL("not a url");
   console.log("should not reach");

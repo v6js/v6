@@ -155,8 +155,8 @@ public final class V6Http2 {
           }));
     o.set("createSecureServer", fn((thisArg, args) -> {
             throw new V6Throw(str(
-                "http2.createSecureServer is not supported (no HTTP/2 server " +
-                "framing "
+                "http2.createSecureServer is not supported (no HTTP/2 server "
+                + "framing "
                 + "implementation; use http2.connect for client-only usage, or "
                 + "http/https for servers)"));
           }));

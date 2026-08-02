@@ -123,11 +123,49 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/node/V6DiagnosticsChannel.java lib/node/V6AsyncHooks.java \
                 lib/node/V6AsyncLocalStorageConstructor.java \
                 lib/node/V6UnsupportedConstructor.java \
-                lib/node/V6Inspector.java lib/node/V6TraceEvents.java
-RT_CLASS_FILES := $(patsubst lib/node/%.java,$(GEN)/%.class,$(patsubst lib/core/%.java,$(GEN)/%.class,$(RT_JAVA_SRCS)))
+                lib/node/V6Inspector.java lib/node/V6TraceEvents.java \
+                lib/shared/V6EventHandlerProperty.java \
+                lib/web/V6EventObject.java lib/web/V6EventConstructor.java \
+                lib/web/V6CustomEventObject.java lib/web/V6CustomEventConstructor.java \
+                lib/web/V6EventTargetObject.java lib/web/V6EventTargetConstructor.java \
+                lib/web/V6AbortSignalObject.java lib/web/V6AbortSignalConstructor.java \
+                lib/web/V6AbortControllerConstructor.java \
+                lib/web/V6StructuredClone.java \
+                lib/web/V6TextEncoderConstructor.java \
+                lib/web/V6TextDecoderObject.java lib/web/V6TextDecoderConstructor.java \
+                lib/web/V6ReadableStreamObject.java lib/web/V6ReadableStreamConstructor.java \
+                lib/web/V6WritableStreamObject.java lib/web/V6WritableStreamConstructor.java \
+                lib/web/V6TransformStreamConstructor.java \
+                lib/web/V6CountQueuingStrategyConstructor.java \
+                lib/web/V6ByteLengthQueuingStrategyConstructor.java \
+                lib/web/V6ArrayBufferObject.java lib/web/V6ArrayBufferConstructor.java \
+                lib/web/V6BlobObject.java lib/web/V6BlobConstructor.java \
+                lib/web/V6FileObject.java lib/web/V6FileConstructor.java \
+                lib/web/V6FormDataObject.java lib/web/V6FormDataConstructor.java \
+                lib/web/V6TextEncoderStreamConstructor.java \
+                lib/web/V6TextDecoderStreamConstructor.java \
+                lib/web/V6CompressionStreamConstructor.java \
+                lib/web/V6DecompressionStreamConstructor.java \
+                lib/web/V6HeadersObject.java lib/web/V6HeadersConstructor.java \
+                lib/web/V6BodyUtil.java \
+                lib/web/V6RequestObject.java lib/web/V6RequestConstructor.java \
+                lib/web/V6ResponseObject.java lib/web/V6ResponseConstructor.java \
+                lib/web/V6Fetch.java \
+                lib/web/V6WebSocketObject.java lib/web/V6WebSocketListenerImpl.java \
+                lib/web/V6WebSocketConstructor.java \
+                lib/web/V6EventSourceObject.java lib/web/V6EventSourceConstructor.java \
+                lib/web/V6CryptoKeyObject.java lib/web/V6CryptoKeyConstructor.java \
+                lib/web/V6WebCrypto.java \
+                lib/web/V6MessageEventObject.java lib/web/V6MessageEventConstructor.java \
+                lib/web/V6MessagePortObject.java lib/web/V6MessagePortConstructor.java \
+                lib/web/V6WebMessageChannelConstructor.java \
+                lib/web/V6BroadcastChannelObject.java lib/web/V6BroadcastChannelConstructor.java \
+                lib/web/V6WebWorkerObject.java lib/web/V6WebWorkerConstructor.java \
+                lib/web/V6Navigator.java
+RT_CLASS_FILES := $(patsubst lib/web/%.java,$(GEN)/%.class,$(patsubst lib/shared/%.java,$(GEN)/%.class,$(patsubst lib/node/%.java,$(GEN)/%.class,$(patsubst lib/core/%.java,$(GEN)/%.class,$(RT_JAVA_SRCS)))))
 RT_TABLE_C := $(GEN)/runtime_classes.c
 
-FMT_FILES := $(wildcard src/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java) $(wildcard lib/node/*.java)
+FMT_FILES := $(wildcard src/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java) $(wildcard lib/node/*.java) $(wildcard lib/shared/*.java) $(wildcard lib/web/*.java)
 
 .PHONY: all test fmt clean dirs release bench
 
