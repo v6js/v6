@@ -123,3 +123,4 @@ typedef struct lexer {
 
 void lex_init(lexer* lx, const char* src);
 tok lex_next(lexer* lx);
+tok lex_regex_literal(lexer* lx);

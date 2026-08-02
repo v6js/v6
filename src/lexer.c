@@ -430,3 +430,26 @@ tok lex_next(lexer* lx) {
     return make(lx, tok_error, start);
   }
 }
+
+tok lex_regex_literal(lexer* lx) {
+  const char* start = lx->cur;
+  lx->cur++;
+  int in_class = 0;
+  while (*lx->cur && *lx->cur != '\n' && (in_class || *lx->cur != '/')) {
+    if (*lx->cur == '\\' && lx->cur[1]) {
+      lx->cur += 2;
+      continue;
+    }
+    if (*lx->cur == '[') {
+      in_class = 1;
+    } else if (*lx->cur == ']') {
+      in_class = 0;
+    }
+    lx->cur++;
+  }
+  if (*lx->cur == '/')
+    lx->cur++;
+  while (isalpha((unsigned char)*lx->cur))
+    lx->cur++;
+  return make(lx, tok_regex, start);
+}

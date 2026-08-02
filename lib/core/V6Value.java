@@ -413,12 +413,19 @@ public record V6Value(int tag, double num, Object ref) {
       return obj.ref instanceof V6Array;
     if (ctor.ref == V6Builtins.OBJECT.ref())
       return true;
-    if (!(ctor.ref instanceof V6Class))
+    V6Object targetProto;
+    if (ctor.ref instanceof V6Class) {
+      Object protoRef = ((V6Class)ctor.ref).get("prototype").ref();
+      if (!(protoRef instanceof V6Object))
+        return false;
+      targetProto = (V6Object)protoRef;
+    } else if (ctor.ref instanceof V6NativeConstructor) {
+      targetProto = ((V6NativeConstructor)ctor.ref).prototypeObject();
+      if (targetProto == null)
+        return false;
+    } else {
       return false;
-    Object protoRef = ((V6Class)ctor.ref).get("prototype").ref();
-    if (!(protoRef instanceof V6Object))
-      return false;
-    V6Object targetProto = (V6Object)protoRef;
+    }
     for (V6Object o = ((V6Object)obj.ref).getProto(); o != null; o = o.getProto()) {
       if (o == targetProto)
         return true;

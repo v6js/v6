@@ -28,6 +28,10 @@ public final class V6Builtins {
     return new V6Value(V6Value.TAG_OBJ, 0, o);
   }
 
+  private static V6Value str(String s) {
+    return new V6Value(V6Value.TAG_STR, 0, s);
+  }
+
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
 
   private static V6Object asObj(V6Value v) {
@@ -723,6 +727,71 @@ public final class V6Builtins {
 
   public static final V6Object PROMISE_PROTOTYPE = promisePrototype();
   public static final V6Value PROMISE = objValue(new V6PromiseConstructor());
+
+  private static V6Array execResult(java.util.regex.Matcher m, String input) {
+    V6Array result = new V6Array();
+    for (int i = 0; i <= m.groupCount(); i++) {
+      String g = m.group(i);
+      result.push(g == null ? UNDEF : str(g));
+    }
+    result.set("index", num(m.start()));
+    result.set("input", str(input));
+    return result;
+  }
+
+  private static V6Object regexPrototype() {
+    V6Object o = new V6Object();
+    o.set("test", fn((thisArg, args) -> {
+            V6Regex re = (V6Regex)thisArg.ref();
+            String input = V6Value.argAt(args, 0).toString();
+            int start = (re.global || re.sticky)
+                ? (int)re.get("lastIndex").toNumber()
+                : 0;
+            if (start < 0 || start > input.length()) {
+              if (re.global || re.sticky)
+                re.set("lastIndex", num(0));
+              return boolValue(false);
+            }
+            java.util.regex.Matcher m = re.pattern.matcher(input);
+            boolean found = re.sticky ? m.region(start, input.length()).lookingAt()
+                                      : m.find(start);
+            if (re.global || re.sticky)
+              re.set("lastIndex", num(found ? m.end() : 0));
+            return boolValue(found);
+          }));
+    o.set("exec", fn((thisArg, args) -> {
+            V6Regex re = (V6Regex)thisArg.ref();
+            String input = V6Value.argAt(args, 0).toString();
+            int start = (re.global || re.sticky)
+                ? (int)re.get("lastIndex").toNumber()
+                : 0;
+            if (start < 0 || start > input.length()) {
+              if (re.global || re.sticky)
+                re.set("lastIndex", num(0));
+              return V6Value.NUL;
+            }
+            java.util.regex.Matcher m = re.pattern.matcher(input);
+            boolean found = re.sticky ? m.region(start, input.length()).lookingAt()
+                                      : m.find(start);
+            if (!found) {
+              if (re.global || re.sticky)
+                re.set("lastIndex", num(0));
+              return V6Value.NUL;
+            }
+            if (re.global || re.sticky)
+              re.set("lastIndex", num(m.end()));
+            return objValue(execResult(m, input));
+          }));
+    o.set("toString", fn((thisArg, args) -> {
+            V6Object re = (V6Object)thisArg.ref();
+            return str("/" + re.get("source").toString() + "/" +
+                       re.get("flags").toString());
+          }));
+    return o;
+  }
+
+  public static final V6Object REGEXP_PROTOTYPE = regexPrototype();
+  public static final V6Value REGEXP = objValue(new V6RegexConstructor());
 
   public static final V6Value BTOA = fn((thisArg, args) -> {
     String s = V6Value.argAt(args, 0).toString();

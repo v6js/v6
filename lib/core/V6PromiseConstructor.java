@@ -179,4 +179,9 @@ public final class V6PromiseConstructor extends V6Object implements V6NativeCons
     }
     return objValue(p);
   }
+
+  @Override
+  public V6Object prototypeObject() {
+    return V6Builtins.PROMISE_PROTOTYPE;
+  }
 }

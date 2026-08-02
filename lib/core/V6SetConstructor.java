@@ -13,4 +13,9 @@ public final class V6SetConstructor extends V6Object implements V6NativeConstruc
     }
     return new V6Value(V6Value.TAG_OBJ, 0, s);
   }
+
+  @Override
+  public V6Object prototypeObject() {
+    return V6Builtins.SET_PROTOTYPE;
+  }
 }

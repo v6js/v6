@@ -1767,6 +1767,74 @@ static void parse_super(parser* p, compiler* c) {
   emit_call_args_and_invoke(p, c);
 }
 
+static void decode_regex(tok t, char** out_source, char** out_flags) {
+  const char* s = t.start;
+  size_t i = 1;
+  int in_class = 0;
+  while (i < t.len && (in_class || s[i] != '/')) {
+    if (s[i] == '\\' && i + 1 < t.len) {
+      i += 2;
+      continue;
+    }
+    if (s[i] == '[')
+      in_class = 1;
+    else if (s[i] == ']')
+      in_class = 0;
+    i++;
+  }
+  size_t source_len = i - 1;
+  char* source = malloc(source_len + 1);
+  memcpy(source, s + 1, source_len);
+  source[source_len] = '\0';
+  size_t flags_start = i + 1;
+  size_t flags_len = (flags_start <= t.len) ? t.len - flags_start : 0;
+  char* flags = malloc(flags_len + 1);
+  if (flags_len)
+    memcpy(flags, s + flags_start, flags_len);
+  flags[flags_len] = '\0';
+  *out_source = source;
+  *out_flags = flags;
+}
+
+static void emit_regex_literal(parser* p, compiler* c, tok t) {
+  char* source;
+  char* flags;
+  decode_regex(t, &source, &flags);
+
+  var_ref vr = resolve_var(c, "RegExp", 6);
+  if (vr.kind == var_not_found) {
+    error_at(p, "RegExp is not defined");
+    free(source);
+    free(flags);
+    return;
+  }
+  emit_var_read_ref(c, vr);
+  uint16_t cls_val_slot = c->next_local_slot++;
+  emit_astore(c->m, cls_val_slot);
+
+  emit_iconst(c->m, 2);
+  op_emit2(c->m, op_anewarray, value_class(c->cf));
+  op_emit(c->m, op_dup);
+  emit_iconst(c->m, 0);
+  emit_string_value(c, source);
+  op_emit(c->m, op_aastore);
+  op_emit(c->m, op_dup);
+  emit_iconst(c->m, 1);
+  emit_string_value(c, flags);
+  op_emit(c->m, op_aastore);
+  uint16_t args_slot = c->next_local_slot++;
+  emit_astore(c->m, args_slot);
+
+  emit_aload(c->m, cls_val_slot);
+  emit_aload(c->m, args_slot);
+  uint16_t construct_idx = cf_methodref(c->cf, "V6Value", "construct",
+                                        "(LV6Value;[LV6Value;)LV6Value;");
+  op_emit2(c->m, op_invokestatic, construct_idx);
+
+  free(source);
+  free(flags);
+}
+
 static void parse_primary(parser* p, compiler* c) {
   if (match(p, tok_kw_new)) {
     if (match(p, tok_dot)) {
@@ -2231,6 +2299,19 @@ static void parse_primary(parser* p, compiler* c) {
 
   if (match(p, tok_lbracket)) {
     parse_array_literal(p, c);
+    return;
+  }
+
+  if (check(p, tok_slash) || check(p, tok_slash_eq)) {
+    lexer regex_lex;
+    regex_lex.src = p->lex.src;
+    regex_lex.cur = p->cur.start;
+    regex_lex.line = p->cur.line;
+    tok regex_tok = lex_regex_literal(&regex_lex);
+    p->lex = regex_lex;
+    p->cur = regex_tok;
+    advance(p);
+    emit_regex_literal(p, c, p->prev);
     return;
   }
 
@@ -5504,6 +5585,7 @@ compile_result compile_program(const char* user_src, class_file* cf) {
   bind_builtin(&c, "WeakSet", "WEAK_SET");
   bind_builtin(&c, "Symbol", "SYMBOL");
   bind_builtin(&c, "Promise", "PROMISE");
+  bind_builtin(&c, "RegExp", "REGEXP");
 
   uint16_t this_slot = c.next_local_slot++;
   emit_undef(cf, main_m);

@@ -16,4 +16,9 @@ public final class V6MapConstructor extends V6Object implements V6NativeConstruc
     }
     return new V6Value(V6Value.TAG_OBJ, 0, m);
   }
+
+  @Override
+  public V6Object prototypeObject() {
+    return V6Builtins.MAP_PROTOTYPE;
+  }
 }

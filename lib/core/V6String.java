@@ -33,6 +33,95 @@ public final class V6String extends V6Object {
     return Math.min(idx, len);
   }
 
+  private static V6Regex asRegex(V6Value v) {
+    return (v.tag() == V6Value.TAG_OBJ && v.ref() instanceof V6Regex)
+        ? (V6Regex)v.ref()
+        : null;
+  }
+
+  private static String replaceWithRegex(V6Regex re, String input,
+                                         V6Value replacer, boolean all) {
+    java.util.regex.Matcher m = re.pattern.matcher(input);
+    StringBuilder sb = new StringBuilder();
+    int last = 0;
+    while (m.find(last)) {
+      sb.append(input, last, m.start());
+      if (replacer.tag() == V6Value.TAG_FUNC) {
+        V6Value[] cbArgs = new V6Value[m.groupCount() + 3];
+        for (int i = 0; i <= m.groupCount(); i++) {
+          String g = m.group(i);
+          cbArgs[i] = g == null ? UNDEF : str(g);
+        }
+        cbArgs[m.groupCount() + 1] = num(m.start());
+        cbArgs[m.groupCount() + 2] = str(input);
+        sb.append(s(replacer.asCallable().call(UNDEF, cbArgs)));
+      } else {
+        StringBuilder rep = new StringBuilder();
+        String template = s(replacer);
+        for (int i = 0; i < template.length(); i++) {
+          char c = template.charAt(i);
+          if (c == '$' && i + 1 < template.length()) {
+            char n = template.charAt(i + 1);
+            if (n == '&') {
+              rep.append(m.group());
+              i++;
+              continue;
+            }
+            if (n == '$') {
+              rep.append('$');
+              i++;
+              continue;
+            }
+            if (Character.isDigit(n)) {
+              int j = i + 1;
+              int groupNum = 0;
+              int digits = 0;
+              while (j < template.length() && Character.isDigit(template.charAt(j)) &&
+                     digits < 2) {
+                int candidate = groupNum * 10 + (template.charAt(j) - '0');
+                if (candidate > m.groupCount())
+                  break;
+                groupNum = candidate;
+                j++;
+                digits++;
+              }
+              if (groupNum > 0) {
+                String g = m.group(groupNum);
+                rep.append(g == null ? "" : g);
+                i = j - 1;
+                continue;
+              }
+            }
+          }
+          rep.append(c);
+        }
+        sb.append(rep);
+      }
+      last = m.end() == m.start() ? m.end() + 1 : m.end();
+      if (!all)
+        break;
+      if (last > input.length())
+        break;
+    }
+    if (last <= input.length())
+      sb.append(input.substring(Math.min(last, input.length())));
+    return sb.toString();
+  }
+
+  private static V6Array execAt(V6Regex re, String input, int start) {
+    java.util.regex.Matcher m = re.pattern.matcher(input);
+    if (!m.find(start))
+      return null;
+    V6Array result = new V6Array();
+    for (int i = 0; i <= m.groupCount(); i++) {
+      String g = m.group(i);
+      result.push(g == null ? UNDEF : str(g));
+    }
+    result.set("index", num(m.start()));
+    result.set("input", str(input));
+    return result;
+  }
+
   private void build() {
     set("charAt", fn((thisArg, args) -> {
           String self = s(thisArg);
@@ -128,6 +217,12 @@ public final class V6String extends V6Object {
             result.push(str(self));
             return new V6Value(V6Value.TAG_OBJ, 0, result);
           }
+          V6Regex re = asRegex(args[0]);
+          if (re != null) {
+            for (String part : re.pattern.split(self, -1))
+              result.push(str(part));
+            return new V6Value(V6Value.TAG_OBJ, 0, result);
+          }
           String sep = s(args[0]);
           if (sep.isEmpty()) {
             for (int i = 0; i < self.length(); i++)
@@ -148,21 +243,99 @@ public final class V6String extends V6Object {
         }));
     set("replace", fn((thisArg, args) -> {
           String self = s(thisArg);
+          V6Regex re = asRegex(V6Value.argAt(args, 0));
+          if (re != null)
+            return str(replaceWithRegex(re, self, V6Value.argAt(args, 1),
+                                        re.global));
           String search = s(V6Value.argAt(args, 0));
-          String repl = s(V6Value.argAt(args, 1));
+          V6Value replArg = V6Value.argAt(args, 1);
           int idx = self.indexOf(search);
           if (idx < 0)
             return str(self);
+          String repl = replArg.tag() == V6Value.TAG_FUNC
+              ? s(replArg.asCallable().call(
+                    UNDEF, new V6Value[] {str(search), num(idx), str(self)}))
+              : s(replArg);
           return str(self.substring(0, idx) + repl +
                      self.substring(idx + search.length()));
         }));
     set("replaceAll", fn((thisArg, args) -> {
           String self = s(thisArg);
+          V6Regex re = asRegex(V6Value.argAt(args, 0));
+          if (re != null)
+            return str(replaceWithRegex(re, self, V6Value.argAt(args, 1), true));
           String search = s(V6Value.argAt(args, 0));
-          String repl = s(V6Value.argAt(args, 1));
+          V6Value replArg = V6Value.argAt(args, 1);
           if (search.isEmpty())
             return str(self);
-          return str(self.replace(search, repl));
+          if (replArg.tag() != V6Value.TAG_FUNC)
+            return str(self.replace(search, s(replArg)));
+          StringBuilder sb = new StringBuilder();
+          int idx = 0;
+          while (true) {
+            int next = self.indexOf(search, idx);
+            if (next < 0) {
+              sb.append(self.substring(idx));
+              break;
+            }
+            sb.append(self, idx, next);
+            sb.append(s(replArg.asCallable().call(
+                UNDEF, new V6Value[] {str(search), num(next), str(self)})));
+            idx = next + search.length();
+          }
+          return str(sb.toString());
+        }));
+    set("match", fn((thisArg, args) -> {
+          String self = s(thisArg);
+          V6Regex re = asRegex(V6Value.argAt(args, 0));
+          if (re == null)
+            re = new V6Regex(s(V6Value.argAt(args, 0)), "");
+          if (!re.global) {
+            V6Array result = execAt(re, self, 0);
+            return result == null ? V6Value.NUL
+                                  : new V6Value(V6Value.TAG_OBJ, 0, result);
+          }
+          java.util.regex.Matcher m = re.pattern.matcher(self);
+          V6Array result = new V6Array();
+          int count = 0;
+          int last = 0;
+          while (last <= self.length() && m.find(last)) {
+            result.push(str(m.group()));
+            count++;
+            last = m.end() == m.start() ? m.end() + 1 : m.end();
+          }
+          if (count == 0)
+            return V6Value.NUL;
+          return new V6Value(V6Value.TAG_OBJ, 0, result);
+        }));
+    set("matchAll", fn((thisArg, args) -> {
+          String self = s(thisArg);
+          V6Regex re = asRegex(V6Value.argAt(args, 0));
+          if (re == null)
+            re = new V6Regex(s(V6Value.argAt(args, 0)), "g");
+          java.util.regex.Matcher m = re.pattern.matcher(self);
+          V6Array result = new V6Array();
+          int last = 0;
+          while (last <= self.length() && m.find(last)) {
+            V6Array entry = new V6Array();
+            for (int i = 0; i <= m.groupCount(); i++) {
+              String g = m.group(i);
+              entry.push(g == null ? UNDEF : str(g));
+            }
+            entry.set("index", num(m.start()));
+            entry.set("input", str(self));
+            result.push(new V6Value(V6Value.TAG_OBJ, 0, entry));
+            last = m.end() == m.start() ? m.end() + 1 : m.end();
+          }
+          return new V6Value(V6Value.TAG_OBJ, 0, result);
+        }));
+    set("search", fn((thisArg, args) -> {
+          String self = s(thisArg);
+          V6Regex re = asRegex(V6Value.argAt(args, 0));
+          if (re == null)
+            re = new V6Regex(s(V6Value.argAt(args, 0)), "");
+          java.util.regex.Matcher m = re.pattern.matcher(self);
+          return num(m.find() ? m.start() : -1);
         }));
     set("repeat", fn((thisArg, args) -> {
           int n = (int)V6Value.argAt(args, 0).toNumber();
