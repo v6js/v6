@@ -6223,6 +6223,20 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   bind_builtin(&c, "JSON", "JSON");
   bind_builtin(&c, "Buffer", "BUFFER");
   bind_builtin(&c, "process", "PROCESS");
+  bind_builtin(&c, "setTimeout", "SET_TIMEOUT");
+  bind_builtin(&c, "clearTimeout", "CLEAR_TIMEOUT");
+  bind_builtin(&c, "setInterval", "SET_INTERVAL");
+  bind_builtin(&c, "clearInterval", "CLEAR_INTERVAL");
+  bind_builtin(&c, "setImmediate", "SET_IMMEDIATE");
+  bind_builtin(&c, "clearImmediate", "CLEAR_IMMEDIATE");
+  bind_builtin(&c, "queueMicrotask", "QUEUE_MICROTASK");
+
+  if (is_entry) {
+    uint16_t setargv_idx = cf_methodref(cf, "V6Process", "setArgv",
+                                        "([Ljava/lang/String;)V");
+    emit_aload(main_m, 0);
+    op_emit2(main_m, op_invokestatic, setargv_idx);
+  }
 
   uint16_t this_slot = c.next_local_slot++;
   emit_undef(cf, main_m);
@@ -6329,8 +6343,8 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   parse_program(&p, &c);
 
   if (is_entry) {
-    uint16_t drain_idx = cf_methodref(cf, "V6MicrotaskQueue", "drain", "()V");
-    op_emit2(main_m, op_invokestatic, drain_idx);
+    uint16_t run_idx = cf_methodref(cf, "V6EventLoop", "run", "()V");
+    op_emit2(main_m, op_invokestatic, run_idx);
     op_emit(main_m, op_return);
   } else if (is_cjs) {
     var_ref module_vr;

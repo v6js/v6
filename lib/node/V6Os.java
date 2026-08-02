@@ -49,6 +49,47 @@ public final class V6Os {
     return "Linux";
   }
 
+  private static com.sun.management.OperatingSystemMXBean osBean() {
+    return (com.sun.management.OperatingSystemMXBean)java.lang.management
+        .ManagementFactory.getOperatingSystemMXBean();
+  }
+
+  private static String cpuModel() {
+    if (IS_WINDOWS) {
+      String id = System.getenv("PROCESSOR_IDENTIFIER");
+      return id != null ? id : "unknown";
+    }
+    try {
+      for (String line :
+           java.nio.file.Files.readAllLines(java.nio.file.Paths.get("/proc/cpuinfo"))) {
+        if (line.startsWith("model name")) {
+          int idx = line.indexOf(':');
+          if (idx >= 0)
+            return line.substring(idx + 1).trim();
+        }
+      }
+    } catch (Exception ignored) {
+    }
+    return "unknown";
+  }
+
+  private static double cpuSpeedMHz() {
+    if (!IS_WINDOWS) {
+      try {
+        for (String line : java.nio.file.Files.readAllLines(
+                 java.nio.file.Paths.get("/proc/cpuinfo"))) {
+          if (line.startsWith("cpu MHz")) {
+            int idx = line.indexOf(':');
+            if (idx >= 0)
+              return Double.parseDouble(line.substring(idx + 1).trim());
+          }
+        }
+      } catch (Exception ignored) {
+      }
+    }
+    return 0;
+  }
+
   public static V6Object build() {
     V6Object o = new V6Object();
 
@@ -68,11 +109,13 @@ public final class V6Os {
           }));
     o.set("cpus", fn((thisArg, args) -> {
             int n = Runtime.getRuntime().availableProcessors();
+            String model = cpuModel();
+            double speed = cpuSpeedMHz();
             V6Array result = new V6Array();
             for (int i = 0; i < n; i++) {
               V6Object cpu = new V6Object();
-              cpu.set("model", str("unknown"));
-              cpu.set("speed", num(0));
+              cpu.set("model", str(model));
+              cpu.set("speed", num(speed));
               V6Object times = new V6Object();
               times.set("user", num(0));
               times.set("nice", num(0));
@@ -84,9 +127,8 @@ public final class V6Os {
             }
             return objValue(result);
           }));
-    o.set("totalmem",
-          fn((thisArg, args) -> num(Runtime.getRuntime().totalMemory())));
-    o.set("freemem", fn((thisArg, args) -> num(Runtime.getRuntime().freeMemory())));
+    o.set("totalmem", fn((thisArg, args) -> num(osBean().getTotalMemorySize())));
+    o.set("freemem", fn((thisArg, args) -> num(osBean().getFreeMemorySize())));
     o.set("EOL", str(IS_WINDOWS ? "\r\n" : "\n"));
     o.set("endianness",
           fn((thisArg, args)

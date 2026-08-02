@@ -137,7 +137,8 @@ int v6_jvm_define_extra(v6_jvm* jvm, const char* name,
   return cls ? 0 : -1;
 }
 
-int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len) {
+int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
+              char** script_args, int script_argc) {
   JNIEnv* env = jvm->env;
 
   jclass cls = (*env)->DefineClass(env, "Main", NULL, (const jbyte*)class_bytes,
@@ -154,9 +155,15 @@ int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len) {
   if (!str_cls)
     return -1;
 
-  jobjectArray args = (*env)->NewObjectArray(env, 0, str_cls, NULL);
+  jobjectArray args =
+      (*env)->NewObjectArray(env, (jsize)script_argc, str_cls, NULL);
   if (!args)
     return -1;
+
+  for (int i = 0; i < script_argc; i++) {
+    jstring s = (*env)->NewStringUTF(env, script_args[i]);
+    (*env)->SetObjectArrayElement(env, args, i, s);
+  }
 
   (*env)->CallStaticVoidMethod(env, cls, main_m, args);
   if ((*env)->ExceptionCheck(env)) {
@@ -207,10 +214,13 @@ int v6_jvm_define_extra(v6_jvm* jvm, const char* name,
   return -1;
 }
 
-int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len) {
+int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
+              char** script_args, int script_argc) {
   (void)jvm;
   (void)class_bytes;
   (void)len;
+  (void)script_args;
+  (void)script_argc;
   return -1;
 }
 

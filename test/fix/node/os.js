@@ -13,3 +13,6 @@ console.log(typeof os.totalmem());
 console.log(typeof os.freemem());
 console.log(typeof os.hostname());
 console.log(os.endianness() === "LE" || os.endianness() === "BE");
+console.log(os.totalmem() > 0);
+console.log(os.freemem() > 0);
+console.log(os.totalmem() >= os.freemem());

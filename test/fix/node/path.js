@@ -16,3 +16,8 @@ console.log(parsed.dir, parsed.base, parsed.name, parsed.ext);
 console.log(path.format(parsed));
 console.log(path.sep);
 console.log(path.relative("/a/b", "/a/c/d"));
+
+console.log(path.win32.join("a", "b"));
+console.log(path.posix.join("a", "b"));
+console.log(path.win32.sep, path.posix.sep);
+console.log(path.win32.win32 === path.win32, path.win32.posix === path.posix);

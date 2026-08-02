@@ -122,9 +122,86 @@ public final class V6Util {
             return UNDEF;
           }));
 
-    o.set("types", objValue(new V6Object()));
+    o.set("types", objValue(buildTypes()));
+
+    o.set("deprecate", fn((thisArg, args) -> {
+            V6Callable target = V6Value.argAt(args, 0).asCallable();
+            String msg = args.length > 1 ? args[1].toString() : "DeprecationWarning";
+            boolean[] warned = {false};
+            return fn((t, a) -> {
+              if (!warned[0]) {
+                warned[0] = true;
+                System.err.println("(v6:util.deprecate) " + msg);
+              }
+              return target.call(t, a);
+            });
+          }));
+
+    o.set("callbackify", fn((thisArg, args) -> {
+            V6Callable target = V6Value.argAt(args, 0).asCallable();
+            return fn((t, callArgs) -> {
+              V6Callable cb = callArgs[callArgs.length - 1].asCallable();
+              V6Value[] fnArgs =
+                  java.util.Arrays.copyOf(callArgs, callArgs.length - 1);
+              V6Value result;
+              try {
+                result = target.call(t, fnArgs);
+              } catch (V6Throw e) {
+                cb.call(UNDEF, new V6Value[] {e.value});
+                return UNDEF;
+              }
+              if (result.tag() == V6Value.TAG_OBJ &&
+                  result.ref() instanceof V6Promise) {
+                V6Promise p = (V6Promise)result.ref();
+                p.addCallbacks(
+                    v
+                    -> cb.call(UNDEF,
+                              new V6Value[] {new V6Value(V6Value.TAG_NULL, 0, null),
+                                             v}),
+                    err -> cb.call(UNDEF, new V6Value[] {err}));
+              } else {
+                cb.call(UNDEF,
+                        new V6Value[] {new V6Value(V6Value.TAG_NULL, 0, null), result});
+              }
+              return UNDEF;
+            });
+          }));
 
     return o;
+  }
+
+  private static boolean isa(V6Value v, Class<?> cls) {
+    return v.tag() == V6Value.TAG_OBJ && cls.isInstance(v.ref());
+  }
+
+  private static V6Object buildTypes() {
+    V6Object t = new V6Object();
+    t.set("isPromise", fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6Promise.class))));
+    t.set("isRegExp", fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6Regex.class))));
+    t.set("isMap", fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6MapObject.class))));
+    t.set("isSet", fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6SetObject.class))));
+    t.set("isWeakMap", fn((th, a) -> bool(false)));
+    t.set("isWeakSet", fn((th, a) -> bool(false)));
+    t.set("isDate", fn((th, a) -> bool(false)));
+    t.set("isAsyncFunction",
+          fn((th, a)
+                 -> bool(V6Value.argAt(a, 0).tag() == V6Value.TAG_FUNC &&
+                         V6Value.argAt(a, 0).ref() instanceof V6AsyncFunction)));
+    t.set("isGeneratorFunction",
+          fn((th, a)
+                 -> bool(V6Value.argAt(a, 0).tag() == V6Value.TAG_FUNC &&
+                         V6Value.argAt(a, 0).ref() instanceof V6GeneratorFunction)));
+    t.set("isAsyncGeneratorFunction",
+          fn((th, a)
+                 -> bool(V6Value.argAt(a, 0).tag() == V6Value.TAG_FUNC &&
+                         V6Value.argAt(a, 0).ref() instanceof
+                             V6AsyncGeneratorFunction)));
+    t.set("isGeneratorObject", fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6Generator.class))));
+    return t;
+  }
+
+  private static V6Value bool(boolean b) {
+    return new V6Value(V6Value.TAG_BOOL, b ? 1 : 0, null);
   }
 
   private static V6Object asObjIfPresent(V6Value v) {

@@ -7,6 +7,7 @@ import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public final class V6Fs {
   private V6Fs() {}
@@ -233,9 +234,224 @@ public final class V6Fs {
             return UNDEF;
           }));
 
+    o.set("symlinkSync", fn((thisArg, args) -> {
+            String target = V6Value.argAt(args, 0).toString();
+            String linkPath = V6Value.argAt(args, 1).toString();
+            try {
+              Files.createSymbolicLink(Paths.get(linkPath), Paths.get(target));
+            } catch (IOException e) {
+              throw ioError("EEXIST: could not create symlink", linkPath, e);
+            }
+            return UNDEF;
+          }));
+
+    o.set("readlinkSync", fn((thisArg, args) -> {
+            String pathStr = V6Value.argAt(args, 0).toString();
+            try {
+              return str(Files.readSymbolicLink(Paths.get(pathStr)).toString());
+            } catch (IOException e) {
+              throw ioError("ENOENT: no such symlink", pathStr, e);
+            }
+          }));
+
+    o.set("constants", objValue(buildConstants()));
+
     wireAsyncVariants(o);
+    o.set("promises", objValue(buildPromises(o)));
+    wireWatch(o);
 
     return o;
+  }
+
+  private static V6Object buildConstants() {
+    V6Object c = new V6Object();
+    c.set("F_OK", num(0));
+    c.set("R_OK", num(4));
+    c.set("W_OK", num(2));
+    c.set("X_OK", num(1));
+    c.set("O_RDONLY", num(0));
+    c.set("O_WRONLY", num(1));
+    c.set("O_RDWR", num(2));
+    c.set("O_CREAT", num(64));
+    c.set("O_EXCL", num(128));
+    c.set("O_TRUNC", num(512));
+    c.set("O_APPEND", num(1024));
+    return c;
+  }
+
+  private static V6Value promisified(V6Object o, String syncName) {
+    return fn((thisArg, args) -> {
+      V6Promise p = new V6Promise();
+      try {
+        V6Value result = o.get(syncName).asCallable().call(thisArg, args);
+        p.resolve(result);
+      } catch (V6Throw e) {
+        p.reject(e.value);
+      }
+      return objValue(p);
+    });
+  }
+
+  private static V6Object buildPromises(V6Object o) {
+    V6Object p = new V6Object();
+    p.set("readFile", promisified(o, "readFileSync"));
+    p.set("writeFile", promisified(o, "writeFileSync"));
+    p.set("appendFile", promisified(o, "appendFileSync"));
+    p.set("mkdir", promisified(o, "mkdirSync"));
+    p.set("readdir", promisified(o, "readdirSync"));
+    p.set("stat", promisified(o, "statSync"));
+    p.set("lstat", promisified(o, "statSync"));
+    p.set("unlink", promisified(o, "unlinkSync"));
+    p.set("rmdir", promisified(o, "rmdirSync"));
+    p.set("rm", promisified(o, "rmSync"));
+    p.set("rename", promisified(o, "renameSync"));
+    p.set("copyFile", promisified(o, "copyFileSync"));
+    p.set("symlink", promisified(o, "symlinkSync"));
+    p.set("readlink", promisified(o, "readlinkSync"));
+    return p;
+  }
+
+  private static final Map<String, boolean[]> watchFileStops =
+      new java.util.concurrent.ConcurrentHashMap<>();
+
+  private static void wireWatch(V6Object o) {
+    o.set("watch", fn((thisArg, args) -> {
+            String pathStr = V6Value.argAt(args, 0).toString();
+            V6Callable listener = null;
+            for (int i = 1; i < args.length; i++)
+              if (args[i].tag() == V6Value.TAG_FUNC) {
+                listener = args[i].asCallable();
+                break;
+              }
+            final V6Callable cb = listener;
+            Path target = Paths.get(pathStr);
+            Path dir = Files.isDirectory(target) ? target : target.getParent();
+            if (dir == null)
+              dir = Paths.get(".");
+            final String watchName =
+                Files.isDirectory(target) ? null : target.getFileName().toString();
+
+            V6EventEmitterObject watcher = new V6EventEmitterObject();
+            watcher.setProto(V6EventEmitterConstructor.PROTOTYPE);
+            boolean[] closed = {false};
+
+            try {
+              java.nio.file.WatchService ws = dir.getFileSystem().newWatchService();
+              dir.register(ws, java.nio.file.StandardWatchEventKinds.ENTRY_CREATE,
+                           java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY,
+                           java.nio.file.StandardWatchEventKinds.ENTRY_DELETE);
+              V6EventLoop.ref();
+              Thread th = new Thread(() -> {
+                try {
+                  while (!closed[0]) {
+                    java.nio.file.WatchKey key;
+                    try {
+                      key = ws.poll(200, java.util.concurrent.TimeUnit.MILLISECONDS);
+                    } catch (InterruptedException ie) {
+                      break;
+                    }
+                    if (key == null)
+                      continue;
+                    for (java.nio.file.WatchEvent<?> ev : key.pollEvents()) {
+                      Object ctx = ev.context();
+                      String changedName = ctx != null ? ctx.toString() : "";
+                      if (watchName != null && !changedName.equals(watchName))
+                        continue;
+                      String eventType =
+                          ev.kind() == java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY
+                              ? "change"
+                              : "rename";
+                      final String fName = changedName;
+                      final String eType = eventType;
+                      V6EventLoop.postExternal(() -> {
+                        if (cb != null)
+                          cb.call(UNDEF, new V6Value[] {str(eType), str(fName)});
+                        watcher.get("emit").asCallable().call(
+                            objValue(watcher),
+                            new V6Value[] {str("change"), str(eType), str(fName)});
+                      });
+                    }
+                    if (!key.reset())
+                      break;
+                  }
+                } finally {
+                  try {
+                    ws.close();
+                  } catch (IOException ignored) {
+                  }
+                  V6EventLoop.unref();
+                }
+              });
+              th.setDaemon(true);
+              th.start();
+              watcher.set("close", fn((t, a) -> {
+                            closed[0] = true;
+                            return UNDEF;
+                          }));
+            } catch (IOException e) {
+              throw ioError("ENOENT: could not watch", pathStr, e);
+            }
+
+            return objValue(watcher);
+          }));
+
+    o.set("watchFile", fn((thisArg, args) -> {
+            String pathStr = V6Value.argAt(args, 0).toString();
+            V6Callable listener = null;
+            long interval = 1000;
+            for (int i = 1; i < args.length; i++) {
+              if (args[i].tag() == V6Value.TAG_FUNC) {
+                listener = args[i].asCallable();
+              } else if (args[i].tag() == V6Value.TAG_OBJ) {
+                V6Value iv = ((V6Object)args[i].ref()).get("interval");
+                if (iv.tag() == V6Value.TAG_NUM)
+                  interval = (long)iv.toNumber();
+              }
+            }
+            final V6Callable cb = listener;
+            final long pollMs = interval;
+            Path p = Paths.get(pathStr);
+            boolean[] stopped = {false};
+            V6EventLoop.ref();
+            Thread th = new Thread(() -> {
+              V6Object prev = null;
+              try {
+                while (!stopped[0]) {
+                  V6Object cur;
+                  try {
+                    cur = statsObject(p);
+                  } catch (IOException e) {
+                    cur = null;
+                  }
+                  final V6Object curF = cur;
+                  final V6Object prevF = prev;
+                  if (cb != null && prevF != null)
+                    V6EventLoop.postExternal(
+                        ()
+                            -> cb.call(UNDEF, new V6Value[] {
+                                 curF != null ? objValue(curF) : UNDEF, objValue(prevF)
+                               }));
+                  prev = cur;
+                  Thread.sleep(pollMs);
+                }
+              } catch (InterruptedException ignored) {
+              } finally {
+                V6EventLoop.unref();
+              }
+            });
+            th.setDaemon(true);
+            th.start();
+            watchFileStops.put(pathStr, stopped);
+            return UNDEF;
+          }));
+
+    o.set("unwatchFile", fn((thisArg, args) -> {
+            String pathStr = V6Value.argAt(args, 0).toString();
+            boolean[] stopped = watchFileStops.remove(pathStr);
+            if (stopped != null)
+              stopped[0] = true;
+            return UNDEF;
+          }));
   }
 
   private static byte[] toBytesForWrite(V6Value data, String encoding) {
@@ -281,6 +497,8 @@ public final class V6Fs {
     o.set("rm", asyncWrap(o, "rmSync"));
     o.set("rename", asyncWrap(o, "renameSync"));
     o.set("copyFile", asyncWrap(o, "copyFileSync"));
+    o.set("symlink", asyncWrap(o, "symlinkSync"));
+    o.set("readlink", asyncWrap(o, "readlinkSync"));
   }
 
   private static V6Value asyncWrap(V6Object o, String syncName) {

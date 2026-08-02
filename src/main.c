@@ -31,12 +31,15 @@ static char* read_file(const char* path) {
 }
 
 static void usage(const char* prog) {
-  fprintf(stderr, "usage: %s <script.js> [-o <output.jar>]\n", prog);
+  fprintf(stderr, "usage: %s <script.js> [-o <output.jar>] [script args...]\n",
+          prog);
 }
 
 int main(int argc, char** argv) {
   const char* in_path = NULL;
   const char* out_path = NULL;
+  char** script_args = argc > 1 ? malloc(sizeof(char*) * (size_t)argc) : NULL;
+  int script_argc = 0;
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
@@ -44,8 +47,7 @@ int main(int argc, char** argv) {
     } else if (!in_path) {
       in_path = argv[i];
     } else {
-      usage(argv[0]);
-      return 1;
+      script_args[script_argc++] = argv[i];
     }
   }
 
@@ -176,7 +178,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  int run_rc = v6_jvm_run(jvm, out.data, out.len);
+  int run_rc = v6_jvm_run(jvm, out.data, out.len, script_args, script_argc);
   buf_free(&out);
   v6_jvm_destroy(jvm);
 

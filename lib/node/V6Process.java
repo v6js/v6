@@ -37,12 +37,109 @@ public final class V6Process {
     return o;
   }
 
-  public static V6Object build() {
-    V6Object o = new V6Object();
+  private static V6EventEmitterObject processObj;
+  public static volatile String[] rawArgv = new String[0];
+  private static boolean stdinStarted = false;
 
-    V6Array argv = new V6Array();
-    argv.push(str("v6"));
-    o.set("argv", objValue(argv));
+  public static void setArgv(String[] args) {
+    rawArgv = args;
+  }
+
+  public static void dispatchExit(int code) {
+    if (processObj == null)
+      return;
+    processObj.get("emit").asCallable().call(
+        objValue(processObj),
+        new V6Value[] {str("exit"), new V6Value(V6Value.TAG_NUM, code, null)});
+  }
+
+  public static boolean dispatchUncaught(V6Value err) {
+    if (processObj == null)
+      return false;
+    int count = (int)processObj.get("listenerCount")
+                    .asCallable()
+                    .call(objValue(processObj),
+                          new V6Value[] {str("uncaughtException")})
+                    .toNumber();
+    if (count == 0)
+      return false;
+    processObj.get("emit").asCallable().call(
+        objValue(processObj), new V6Value[] {str("uncaughtException"), err});
+    return true;
+  }
+
+  private static synchronized void ensureStdinStarted(V6EventEmitterObject s,
+                                                       String[] encodingHolder) {
+    if (stdinStarted)
+      return;
+    stdinStarted = true;
+    V6EventLoop.ref();
+    Thread th = new Thread(() -> {
+      try {
+        java.io.BufferedReader r =
+            new java.io.BufferedReader(new java.io.InputStreamReader(System.in));
+        String line;
+        while ((line = r.readLine()) != null) {
+          final String chunk = line + "\n";
+          V6EventLoop.postExternal(() -> {
+            V6Value dataVal =
+                encodingHolder[0] != null
+                    ? str(chunk)
+                    : objValue(new V6Buffer(
+                          chunk.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            s.get("emit").asCallable().call(
+                objValue(s), new V6Value[] {str("data"), dataVal});
+          });
+        }
+      } catch (java.io.IOException ignored) {
+      } finally {
+        V6EventLoop.postExternal(
+            () -> s.get("emit").asCallable().call(objValue(s),
+                                                  new V6Value[] {str("end")}));
+        V6EventLoop.unref();
+      }
+    });
+    th.setDaemon(true);
+    th.start();
+  }
+
+  private static V6Object buildStdin() {
+    V6EventEmitterObject s = new V6EventEmitterObject();
+    s.setProto(V6EventEmitterConstructor.PROTOTYPE);
+    s.set("readable", new V6Value(V6Value.TAG_BOOL, 1, null));
+    String[] encodingHolder = new String[1];
+    s.set("setEncoding", fn((t, a) -> {
+            encodingHolder[0] = a.length > 0 ? a[0].toString() : null;
+            return t;
+          }));
+    s.set("resume", fn((t, a) -> {
+            ensureStdinStarted(s, encodingHolder);
+            return t;
+          }));
+    s.set("pause", fn((t, a) -> t));
+    s.set("on", fn((t, a) -> {
+            String event = V6Value.argAt(a, 0).toString();
+            if (event.equals("data") || event.equals("readable"))
+              ensureStdinStarted(s, encodingHolder);
+            return V6EventEmitterConstructor.PROTOTYPE.get("on")
+                .asCallable()
+                .call(t, a);
+          }));
+    return s;
+  }
+
+  public static V6Object build() {
+    V6EventEmitterObject o = new V6EventEmitterObject();
+    o.setProto(V6EventEmitterConstructor.PROTOTYPE);
+    processObj = o;
+
+    o.defineGetter("argv", (t, a) -> {
+      V6Array argv = new V6Array();
+      argv.push(str("v6"));
+      for (String s : rawArgv)
+        argv.push(str(s));
+      return objValue(argv);
+    });
 
     V6Object env = new V6Object();
     for (java.util.Map.Entry<String, String> e : System.getenv().entrySet())
@@ -60,6 +157,7 @@ public final class V6Process {
 
     o.set("exit", fn((thisArg, args) -> {
             int code = args.length > 0 ? (int)args[0].toNumber() : 0;
+            dispatchExit(code);
             System.exit(code);
             return UNDEF;
           }));
@@ -74,6 +172,7 @@ public final class V6Process {
 
     o.set("stdout", objValue(streamObject(System.out)));
     o.set("stderr", objValue(streamObject(System.err)));
+    o.set("stdin", objValue(buildStdin()));
 
     o.set("hrtime", fn((thisArg, args) -> {
             long nanos = System.nanoTime();

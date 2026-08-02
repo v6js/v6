@@ -2,13 +2,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class V6Path {
-  private V6Path() {}
+  private final boolean isWindows;
+  private final char sep;
+  private final String sepStr;
+  private final String delimiter;
 
-  private static final boolean IS_WINDOWS =
-      System.getProperty("os.name", "").toLowerCase().contains("win");
-  private static final char SEP = IS_WINDOWS ? '\\' : '/';
-  private static final String SEP_STR = String.valueOf(SEP);
-  private static final String DELIMITER = IS_WINDOWS ? ";" : ":";
+  private V6Path(boolean isWindows) {
+    this.isWindows = isWindows;
+    this.sep = isWindows ? '\\' : '/';
+    this.sepStr = String.valueOf(sep);
+    this.delimiter = isWindows ? ";" : ":";
+  }
 
   private static V6Value str(String s) {
     return new V6Value(V6Value.TAG_STR, 0, s);
@@ -22,24 +26,24 @@ public final class V6Path {
     return new V6Value(V6Value.TAG_FUNC, 0, c);
   }
 
-  private static boolean isSlash(char c) {
-    return c == '/' || (IS_WINDOWS && c == '\\');
+  private boolean isSlash(char c) {
+    return c == '/' || (isWindows && c == '\\');
   }
 
-  private static String driveLetter(String p) {
-    if (IS_WINDOWS && p.length() >= 2 && Character.isLetter(p.charAt(0)) &&
+  private String driveLetter(String p) {
+    if (isWindows && p.length() >= 2 && Character.isLetter(p.charAt(0)) &&
         p.charAt(1) == ':')
       return p.substring(0, 2);
     return "";
   }
 
-  private static boolean isAbsoluteInternal(String p) {
+  private boolean isAbsoluteInternal(String p) {
     String drive = driveLetter(p);
     String rest = p.substring(drive.length());
     return !rest.isEmpty() && isSlash(rest.charAt(0));
   }
 
-  private static String normalizeInternal(String p) {
+  private String normalizeInternal(String p) {
     if (p.isEmpty())
       return ".";
     String drive = driveLetter(p);
@@ -69,22 +73,22 @@ public final class V6Path {
       }
     }
 
-    String joined = String.join(SEP_STR, stack);
-    String result = drive + (abs ? SEP_STR : "") + joined;
+    String joined = String.join(sepStr, stack);
+    String result = drive + (abs ? sepStr : "") + joined;
     if (result.isEmpty())
       result = ".";
-    if (trailingSlash && !result.endsWith(SEP_STR))
-      result = result + SEP_STR;
+    if (trailingSlash && !result.endsWith(sepStr))
+      result = result + sepStr;
     return result;
   }
 
-  private static String joinInternal(String[] parts) {
+  private String joinInternal(String[] parts) {
     StringBuilder sb = new StringBuilder();
     for (String part : parts) {
       if (part.isEmpty())
         continue;
       if (sb.length() > 0 && !isSlash(sb.charAt(sb.length() - 1)))
-        sb.append(SEP);
+        sb.append(sep);
       sb.append(part);
     }
     return sb.length() == 0 ? "." : normalizeInternal(sb.toString());
@@ -94,23 +98,24 @@ public final class V6Path {
     return System.getProperty("user.dir", ".");
   }
 
-  private static String resolveInternal(String[] parts) {
+  private String resolveInternal(String[] parts) {
     String resolved = "";
     boolean resolvedAbs = false;
     for (int i = parts.length - 1; i >= -1 && !resolvedAbs; i--) {
       String part = i >= 0 ? parts[i] : cwd();
       if (part.isEmpty())
         continue;
-      resolved = part + SEP_STR + resolved;
+      resolved = part + sepStr + resolved;
       resolvedAbs = isAbsoluteInternal(part);
     }
     String normalized = normalizeInternal(resolved);
-    if (normalized.endsWith(SEP_STR) && normalized.length() > driveLetter(normalized).length() + 1)
+    if (normalized.endsWith(sepStr) &&
+        normalized.length() > driveLetter(normalized).length() + 1)
       normalized = normalized.substring(0, normalized.length() - 1);
     return normalized;
   }
 
-  private static String dirnameInternal(String p) {
+  private String dirnameInternal(String p) {
     String drive = driveLetter(p);
     String rest = p.substring(drive.length());
     int end = rest.length();
@@ -124,13 +129,13 @@ public final class V6Path {
       }
     }
     if (slash < 0)
-      return drive.isEmpty() ? "." : drive + SEP_STR;
+      return drive.isEmpty() ? "." : drive + sepStr;
     if (slash == 0)
-      return drive + SEP_STR;
+      return drive + sepStr;
     return drive + rest.substring(0, slash);
   }
 
-  private static String basenameInternal(String p, String ext) {
+  private String basenameInternal(String p, String ext) {
     String rest = p.substring(driveLetter(p).length());
     int end = rest.length();
     while (end > 0 && isSlash(rest.charAt(end - 1)))
@@ -148,7 +153,7 @@ public final class V6Path {
     return base;
   }
 
-  private static String extnameInternal(String p) {
+  private String extnameInternal(String p) {
     String base = basenameInternal(p, null);
     int dot = base.lastIndexOf('.');
     if (dot <= 0)
@@ -156,7 +161,7 @@ public final class V6Path {
     return base.substring(dot);
   }
 
-  private static String relativeInternal(String from, String to) {
+  private String relativeInternal(String from, String to) {
     String fromAbs = resolveInternal(new String[] {from});
     String toAbs = resolveInternal(new String[] {to});
     if (fromAbs.equals(toAbs))
@@ -170,18 +175,18 @@ public final class V6Path {
     StringBuilder sb = new StringBuilder();
     for (int i = common; i < fromParts.length; i++) {
       if (sb.length() > 0)
-        sb.append(SEP);
+        sb.append(sep);
       sb.append("..");
     }
     for (int i = common; i < toParts.length; i++) {
       if (sb.length() > 0)
-        sb.append(SEP);
+        sb.append(sep);
       sb.append(toParts[i]);
     }
     return sb.toString();
   }
 
-  private static String[] splitParts(String absPath) {
+  private String[] splitParts(String absPath) {
     String rest = absPath.substring(driveLetter(absPath).length());
     List<String> parts = new ArrayList<>();
     StringBuilder cur = new StringBuilder();
@@ -198,10 +203,10 @@ public final class V6Path {
     return parts.toArray(new String[0]);
   }
 
-  public static V6Object build() {
+  private V6Object buildObject() {
     V6Object o = new V6Object();
-    o.set("sep", str(SEP_STR));
-    o.set("delimiter", str(DELIMITER));
+    o.set("sep", str(sepStr));
+    o.set("delimiter", str(delimiter));
 
     o.set("join", fn((thisArg, args) -> {
             String[] parts = new String[args.length];
@@ -246,7 +251,7 @@ public final class V6Path {
             String drive = driveLetter(p);
             String rest = p.substring(drive.length());
             String root = (!rest.isEmpty() && isSlash(rest.charAt(0)))
-                ? drive + SEP_STR
+                ? drive + sepStr
                 : drive;
             String dir = dirnameInternal(p);
             String base = basenameInternal(p, null);
@@ -276,9 +281,24 @@ public final class V6Path {
             String d = !dir.isEmpty() ? dir : root;
             if (d.isEmpty())
               return str(base);
-            return str(d.endsWith(SEP_STR) ? d + base : d + SEP_STR + base);
+            return str(d.endsWith(sepStr) ? d + base : d + sepStr + base);
           }));
 
     return o;
+  }
+
+  public static V6Object build() {
+    boolean hostIsWindows =
+        System.getProperty("os.name", "").toLowerCase().contains("win");
+    V6Object def = new V6Path(hostIsWindows).buildObject();
+    V6Object win32 = new V6Path(true).buildObject();
+    V6Object posix = new V6Path(false).buildObject();
+    win32.set("win32", new V6Value(V6Value.TAG_OBJ, 0, win32));
+    win32.set("posix", new V6Value(V6Value.TAG_OBJ, 0, posix));
+    posix.set("win32", new V6Value(V6Value.TAG_OBJ, 0, win32));
+    posix.set("posix", new V6Value(V6Value.TAG_OBJ, 0, posix));
+    def.set("win32", new V6Value(V6Value.TAG_OBJ, 0, win32));
+    def.set("posix", new V6Value(V6Value.TAG_OBJ, 0, posix));
+    return def;
   }
 }

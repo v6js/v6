@@ -30,3 +30,23 @@ class Ticker extends EventEmitter {
 const t = new Ticker();
 t.on("tick", (n) => console.log("tick " + n));
 t.tick();
+
+try {
+  emitter.emit("error", new Error("boom"));
+  console.log("should not reach here");
+} catch (e) {
+  console.log("caught error event:", e.message);
+}
+
+let order = [];
+emitter.on("x", () => order.push("normal"));
+emitter.prependListener("x", () => order.push("prepended"));
+emitter.emit("x");
+console.log(order);
+
+let onceOrder = [];
+emitter.on("y", () => onceOrder.push("normal"));
+emitter.prependOnceListener("y", () => onceOrder.push("prepended-once"));
+emitter.emit("y");
+emitter.emit("y");
+console.log(onceOrder);

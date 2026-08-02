@@ -20,3 +20,17 @@ function cbStyle(x, cb) {
 }
 const promisified = util.promisify(cbStyle);
 promisified(21).then((v) => console.log("promisified: " + v));
+
+console.log(util.types.isPromise(Promise.resolve(1)));
+console.log(util.types.isRegExp(/a/));
+console.log(util.types.isMap(new Map()));
+console.log(util.types.isSet(new Set()));
+console.log(util.types.isMap("no"));
+
+const dep = util.deprecate(() => 42, "old fn");
+console.log(dep());
+console.log(dep());
+
+async function doubleAsync(x) { return x * 2; }
+const cbf = util.callbackify(doubleAsync);
+cbf(5, (err, v) => console.log("callbackify:", err, v));

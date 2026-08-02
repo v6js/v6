@@ -81,6 +81,8 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/core/V6Symbol.java lib/core/V6SymbolFunction.java \
                 lib/core/V6Generator.java lib/core/V6GeneratorFunction.java \
                 lib/core/V6GeneratorReturn.java lib/core/V6MicrotaskQueue.java \
+                lib/core/V6EventLoop.java lib/core/V6TimerTask.java \
+                lib/core/V6Timers.java \
                 lib/core/V6Promise.java lib/core/V6PromiseConstructor.java \
                 lib/core/V6AsyncFunction.java lib/core/V6AsyncGenerator.java \
                 lib/core/V6AsyncGeneratorFunction.java \

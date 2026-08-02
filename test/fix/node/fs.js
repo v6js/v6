@@ -63,3 +63,25 @@ fs.readFile(path.join(dir, "nope.txt"), "utf8", (err) => {
 });
 
 console.log("end of sync code");
+
+console.log(fs.constants.F_OK, fs.constants.O_CREAT);
+
+const gapsDir = "test/fix/node/tmp_fs_gaps";
+if (fs.existsSync(gapsDir)) fs.rmSync(gapsDir, { recursive: true, force: true });
+fs.mkdirSync(gapsDir, { recursive: true });
+const gapsFile = path.join(gapsDir, "a.txt");
+fs.writeFileSync(gapsFile, "hello");
+
+fs.promises.readFile(gapsFile, "utf8").then((d) => console.log("promises.readFile:", d));
+fs.promises.stat(gapsFile).then((st) => console.log("promises.stat size:", st.size));
+
+let watchSeen = false;
+const watcher = fs.watch(gapsDir, (evt, name) => {
+  watchSeen = true;
+});
+setTimeout(() => fs.writeFileSync(gapsFile, "changed"), 100);
+setTimeout(() => {
+  watcher.close();
+  console.log("watch saw a change:", watchSeen);
+  fs.rmSync(gapsDir, { recursive: true, force: true });
+}, 350);

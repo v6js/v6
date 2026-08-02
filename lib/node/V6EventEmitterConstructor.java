@@ -52,6 +52,29 @@ public final class V6EventEmitterConstructor extends V6Object
           }));
     o.set("addListener", o.get("on"));
 
+    o.set("prependListener", fn((thisArg, args) -> {
+            V6EventEmitterObject e = self(thisArg);
+            String event = V6Value.argAt(args, 0).toString();
+            V6Value listener = V6Value.argAt(args, 1);
+            e.listenersFor(event, true).add(0, listener);
+            return thisArg;
+          }));
+
+    o.set("prependOnceListener", fn((thisArg, args) -> {
+            V6EventEmitterObject e = self(thisArg);
+            String event = V6Value.argAt(args, 0).toString();
+            V6Value listener = V6Value.argAt(args, 1);
+            V6Value[] wrapperHolder = new V6Value[1];
+            wrapperHolder[0] = fn((t, a) -> {
+              List<V6Value> list = e.listenersFor(event, false);
+              if (list != null)
+                list.remove(wrapperHolder[0]);
+              return listener.asCallable().call(t, a);
+            });
+            e.listenersFor(event, true).add(0, wrapperHolder[0]);
+            return thisArg;
+          }));
+
     o.set("once", fn((thisArg, args) -> {
             V6EventEmitterObject e = self(thisArg);
             String event = V6Value.argAt(args, 0).toString();
@@ -82,8 +105,14 @@ public final class V6EventEmitterConstructor extends V6Object
             V6EventEmitterObject e = self(thisArg);
             String event = V6Value.argAt(args, 0).toString();
             List<V6Value> list = e.listenersFor(event, false);
-            if (list == null || list.isEmpty())
+            if (list == null || list.isEmpty()) {
+              if (event.equals("error"))
+                throw new V6Throw(args.length > 1
+                                       ? args[1]
+                                       : new V6Value(V6Value.TAG_STR, 0,
+                                                     "Unhandled error."));
               return new V6Value(V6Value.TAG_BOOL, 0, null);
+            }
             V6Value[] rest = new V6Value[args.length - 1];
             System.arraycopy(args, 1, rest, 0, rest.length);
             List<V6Value> snapshot = new ArrayList<>(list);
