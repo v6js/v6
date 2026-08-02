@@ -9,6 +9,7 @@
 
 typedef struct compiled_module {
   char abs_path[v6_max_path];
+  int kind;
   char class_name[32];
   class_file* cf;
   int state;

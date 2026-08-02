@@ -662,11 +662,11 @@ static void parse_primary(parser* p, compiler* c);
 static void compile_closure_value(parser* p, compiler* c, int is_arrow,
                                   int parens_params, char* out_lambda_name);
 static void skip_balanced(parser* p, tok_kind open, tok_kind close);
-static compile_result compile_module_impl(class_file* cf,
-                                          const char* this_class_name,
-                                          const char* user_src,
-                                          const char* module_dir,
-                                          module_ctx* modctx, int is_entry);
+static compile_result
+compile_module_impl(class_file* cf, const char* this_class_name,
+                    const char* user_src, const char* module_dir,
+                    module_ctx* modctx, int is_entry, int is_cjs);
+static void emit_require_expr(parser* p, compiler* c);
 static void parse_object_pattern(parser* p, compiler* c, tok_kind kind,
                                  uint16_t src_slot);
 static void emit_tagged_template_call(parser* p, compiler* c);
@@ -2148,6 +2148,15 @@ static void parse_primary(parser* p, compiler* c) {
 
   if (match(p, tok_ident)) {
     tok name = p->prev;
+
+    if (name.len == 7 && memcmp(name.start, "require", 7) == 0 &&
+        check(p, tok_lparen)) {
+      var_ref existing = resolve_var(c, name.start, name.len);
+      if (existing.kind == var_not_found) {
+        emit_require_expr(p, c);
+        return;
+      }
+    }
 
     if (is_logical_assign_op(p->cur.kind)) {
       tok_kind op = p->cur.kind;
@@ -4899,7 +4908,7 @@ static void parse_labeled_stmt(parser* p, compiler* c, tok label) {
 
 static compiled_module* get_or_compile_module(module_ctx* modctx,
                                               const char* importer_dir,
-                                              const char* specifier,
+                                              const char* specifier, int kind,
                                               parser* p) {
   char abs_path[v6_max_path];
   char err[256];
@@ -4909,7 +4918,8 @@ static compiled_module* get_or_compile_module(module_ctx* modctx,
     return NULL;
   }
   for (int i = 0; i < modctx->count; i++) {
-    if (strcmp(modctx->modules[i].abs_path, abs_path) == 0)
+    if (modctx->modules[i].kind == kind &&
+        strcmp(modctx->modules[i].abs_path, abs_path) == 0)
       return &modctx->modules[i];
   }
   if (modctx->count >= v6_max_modules) {
@@ -4919,6 +4929,7 @@ static compiled_module* get_or_compile_module(module_ctx* modctx,
   int idx = modctx->count++;
   compiled_module* mod = &modctx->modules[idx];
   snprintf(mod->abs_path, sizeof(mod->abs_path), "%s", abs_path);
+  mod->kind = kind;
   snprintf(mod->class_name, sizeof(mod->class_name), "Mod%d", idx);
   mod->state = 1;
   mod->cf = malloc(sizeof(class_file));
@@ -4941,13 +4952,38 @@ static compiled_module* get_or_compile_module(module_ctx* modctx,
   char moddir[v6_max_path];
   path_dirname(abs_path, moddir, sizeof(moddir));
 
-  compile_result r =
-      compile_module_impl(mod->cf, mod->class_name, modsrc, moddir, modctx, 0);
+  compile_result r = compile_module_impl(mod->cf, mod->class_name, modsrc,
+                                         moddir, modctx, 0, kind == 1);
   free(modsrc);
   mod->state = 2;
   if (!r.ok)
     error_at(p, r.message);
   return mod;
+}
+
+static void emit_require_expr(parser* p, compiler* c) {
+  advance(p);
+  if (!check(p, tok_str)) {
+    error_at(p, "require() only supports a string literal argument");
+    return;
+  }
+  tok spec_tok = p->cur;
+  advance(p);
+  if (!expect(p, tok_rparen))
+    return;
+  if (!c->modctx) {
+    error_at(p, "require() is not supported in this context");
+    return;
+  }
+  char* spec = decode_string(spec_tok);
+  compiled_module* mod =
+      get_or_compile_module(c->modctx, c->module_dir, spec, 1, p);
+  free(spec);
+  if (!mod)
+    return;
+  uint16_t req_idx =
+      cf_methodref(c->cf, mod->class_name, "moduleExports", "()LV6Value;");
+  op_emit2(c->m, op_invokestatic, req_idx);
 }
 
 static void declare_or_assign_module_binding(compiler* c, tok name) {
@@ -4978,7 +5014,7 @@ static void parse_import_stmt(parser* p, compiler* c) {
     advance(p);
     char* spec = decode_string(spec_tok);
     compiled_module* mod =
-        get_or_compile_module(c->modctx, c->module_dir, spec, p);
+        get_or_compile_module(c->modctx, c->module_dir, spec, 0, p);
     free(spec);
     expect(p, tok_semi);
     if (!mod)
@@ -5084,7 +5120,7 @@ static void parse_import_stmt(parser* p, compiler* c) {
   advance(p);
   char* spec = decode_string(spec_tok);
   compiled_module* mod =
-      get_or_compile_module(c->modctx, c->module_dir, spec, p);
+      get_or_compile_module(c->modctx, c->module_dir, spec, 0, p);
   free(spec);
   expect(p, tok_semi);
   if (!mod)
@@ -6016,11 +6052,10 @@ static int count_newlines(const char* s) {
   return n;
 }
 
-static compile_result compile_module_impl(class_file* cf,
-                                          const char* this_class_name,
-                                          const char* user_src,
-                                          const char* module_dir,
-                                          module_ctx* modctx, int is_entry) {
+static compile_result
+compile_module_impl(class_file* cf, const char* this_class_name,
+                    const char* user_src, const char* module_dir,
+                    module_ctx* modctx, int is_entry, int is_cjs) {
   size_t prelude_len = strlen(v6_prelude_src);
   size_t user_len = strlen(user_src);
   char* src = malloc(prelude_len + user_len + 1);
@@ -6030,12 +6065,17 @@ static compile_result compile_module_impl(class_file* cf,
 
   export_binding exports_list[v6_max_exports];
   int exports_count = 0;
-  preprocess_exports(src + prelude_len, exports_list, &exports_count);
+  if (!is_cjs)
+    preprocess_exports(src + prelude_len, exports_list, &exports_count);
 
   method* main_m;
   if (is_entry) {
     main_m = cf_method(cf, acc_public | acc_static, "main",
                        "([Ljava/lang/String;)V");
+  } else if (is_cjs) {
+    main_m =
+        cf_method(cf, acc_public | acc_static, "moduleExports", "()LV6Value;");
+    cf_field(cf, acc_public | acc_static, "MODULE_CACHE", "LV6Object;");
   } else {
     main_m = cf_method(cf, acc_public | acc_static, "exports", "()LV6Object;");
     cf_field(cf, acc_public | acc_static, "EXPORTS_CACHE", "LV6Object;");
@@ -6124,7 +6164,71 @@ static compile_result compile_module_impl(class_file* cf,
   this_tok.num = 0;
   add_local(&c, this_tok, this_slot, 1, 0);
 
-  if (!is_entry) {
+  uint16_t module_local_slot = 0;
+  uint16_t exports_local_slot = 0;
+
+  if (is_cjs) {
+    uint16_t cache_field =
+        cf_fieldref(cf, this_class_name, "MODULE_CACHE", "LV6Object;");
+    uint16_t get_idx =
+        cf_methodref(cf, "V6Object", "get", "(Ljava/lang/String;)LV6Value;");
+    uint16_t exports_key = cf_string(cf, "exports");
+    op_emit2(main_m, op_getstatic, cache_field);
+    op_emit(main_m, op_dup);
+    size_t null_jump = op_pos(main_m);
+    op_emit2(main_m, op_ifnull, 0);
+    op_emit2(main_m, op_ldc_w, exports_key);
+    op_emit2(main_m, op_invokevirtual, get_idx);
+    op_emit(main_m, op_areturn);
+    size_t create_pos = op_pos(main_m);
+    op_patch2(main_m, (uint16_t)(null_jump + 1),
+              (uint16_t)(create_pos - null_jump));
+    op_emit(main_m, op_pop);
+    uint16_t obj_cls = cf_class(cf, "V6Object");
+    uint16_t obj_ctor = cf_methodref(cf, "V6Object", "<init>", "()V");
+    uint16_t set_idx =
+        cf_methodref(cf, "V6Object", "set", "(Ljava/lang/String;LV6Value;)V");
+    op_emit2(main_m, op_new, obj_cls);
+    op_emit(main_m, op_dup);
+    op_emit2(main_m, op_invokespecial, obj_ctor);
+    op_emit(main_m, op_dup);
+    op_emit2(main_m, op_putstatic, cache_field);
+    op_emit(main_m, op_dup);
+    op_emit2(main_m, op_ldc_w, exports_key);
+    op_emit2(main_m, op_new, obj_cls);
+    op_emit(main_m, op_dup);
+    op_emit2(main_m, op_invokespecial, obj_ctor);
+    emit_box_object_ref(&c);
+    op_emit2(main_m, op_invokevirtual, set_idx);
+    module_local_slot = c.next_local_slot++;
+    emit_box_object_ref(&c);
+    emit_var_declare(&c, module_local_slot);
+    tok module_tok;
+    module_tok.kind = tok_ident;
+    module_tok.start = "module";
+    module_tok.len = 6;
+    module_tok.line = 0;
+    module_tok.num = 0;
+    add_local(&c, module_tok, module_local_slot, 0, 0);
+
+    var_ref module_vr;
+    module_vr.kind = var_local;
+    module_vr.index = module_local_slot;
+    emit_var_read_ref(&c, module_vr);
+    op_emit2(main_m, op_ldc_w, exports_key);
+    uint16_t getprop_idx_early =
+        cf_methodref(cf, "V6Value", "getProp", "(Ljava/lang/String;)LV6Value;");
+    op_emit2(main_m, op_invokevirtual, getprop_idx_early);
+    exports_local_slot = c.next_local_slot++;
+    emit_var_declare(&c, exports_local_slot);
+    tok exports_tok;
+    exports_tok.kind = tok_ident;
+    exports_tok.start = "exports";
+    exports_tok.len = 7;
+    exports_tok.line = 0;
+    exports_tok.num = 0;
+    add_local(&c, exports_tok, exports_local_slot, 0, 0);
+  } else if (!is_entry) {
     uint16_t cache_field =
         cf_fieldref(cf, this_class_name, "EXPORTS_CACHE", "LV6Object;");
     op_emit2(main_m, op_getstatic, cache_field);
@@ -6157,6 +6261,17 @@ static compile_result compile_module_impl(class_file* cf,
     uint16_t drain_idx = cf_methodref(cf, "V6MicrotaskQueue", "drain", "()V");
     op_emit2(main_m, op_invokestatic, drain_idx);
     op_emit(main_m, op_return);
+  } else if (is_cjs) {
+    var_ref module_vr;
+    module_vr.kind = var_local;
+    module_vr.index = module_local_slot;
+    emit_var_read_ref(&c, module_vr);
+    uint16_t exports_key = cf_string(cf, "exports");
+    op_emit2(main_m, op_ldc_w, exports_key);
+    uint16_t getprop_idx =
+        cf_methodref(cf, "V6Value", "getProp", "(Ljava/lang/String;)LV6Value;");
+    op_emit2(main_m, op_invokevirtual, getprop_idx);
+    op_emit(main_m, op_areturn);
   } else {
     for (int i = 0; i < exports_count; i++) {
       var_ref vr = resolve_var(&c, exports_list[i].local_name,
@@ -6174,6 +6289,7 @@ static compile_result compile_module_impl(class_file* cf,
     emit_aload(main_m, c.exports_slot);
     op_emit(main_m, op_areturn);
   }
+  (void)exports_local_slot;
   main_m->max_locals = c.next_local_slot;
 
   compile_result r;
@@ -6196,5 +6312,5 @@ compile_result compile_program(const char* src, class_file* cf,
   }
   if (modctx)
     module_ctx_init(modctx);
-  return compile_module_impl(cf, "Main", src, dir, modctx, 1);
+  return compile_module_impl(cf, "Main", src, dir, modctx, 1, 0);
 }
