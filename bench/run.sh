@@ -4,7 +4,14 @@ set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -W)"
 FIXTURES_DIR="$ROOT_DIR/bench/fixtures"
 DATA_DIR="$ROOT_DIR/bench/data"
-V6_BIN="$ROOT_DIR/build/release/bin/v6.exe"
+
+if [ "${OS:-}" = "Windows_NT" ]; then
+  EXE=".exe"
+else
+  EXE=""
+fi
+
+V6_BIN="$ROOT_DIR/build/release/bin/v6$EXE"
 JAR_DIR="$ROOT_DIR/build/release/bench-jars"
 
 mkdir -p "$DATA_DIR" "$JAR_DIR"

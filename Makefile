@@ -14,6 +14,9 @@ ifeq ($(OS),Windows_NT)
   EXE := .exe
   PLATFORM := windows
   CFLAGS += -D_CRT_SECURE_NO_WARNINGS
+  SHELL := cmd.exe
+  MKDIR_P = if not exist "$(subst /,\,$1)" mkdir "$(subst /,\,$1)"
+  RM_RF = if exist "$(subst /,\,$1)" rmdir /S /Q "$(subst /,\,$1)"
 else
   EXE :=
   UNAME_S := $(shell uname -s)
@@ -22,6 +25,8 @@ else
   else
     PLATFORM := linux
   endif
+  MKDIR_P = mkdir -p $1
+  RM_RF = rm -rf $1
 endif
 
 ifneq ($(JAVA_HOME),)
@@ -48,7 +53,7 @@ ifeq ($(BUILD_TYPE),release)
   CFLAGS += -O3 -DNDEBUG -flto
   LDFLAGS += -flto -fuse-ld=lld
 else
-  BUILD := build
+  BUILD := build/debug
   CFLAGS += -g -O0
 endif
 
@@ -127,12 +132,14 @@ $(OBJ)/test_%.o: test/%.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
 dirs:
-	@mkdir -p $(OBJ) $(BIN) $(GEN)
+	@$(call MKDIR_P,$(OBJ))
+	@$(call MKDIR_P,$(BIN))
+	@$(call MKDIR_P,$(GEN))
 
 fmt:
 	clang-format -i $(FMT_FILES)
 
 clean:
-	rm -rf build
+	@$(call RM_RF,build)
 
 -include $(wildcard $(OBJ)/*.d)
