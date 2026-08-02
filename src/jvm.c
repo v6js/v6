@@ -52,6 +52,7 @@ struct v6_jvm {
   JNIEnv* env;
   v6_lib lib;
   jclass value_class;
+  jobject loader;
 };
 
 int v6_jvm_available(void) {
@@ -77,18 +78,32 @@ v6_jvm* v6_jvm_create(void) {
     return NULL;
   jvm->lib = lib;
   jvm->value_class = NULL;
+  jvm->loader = NULL;
 
   JavaVMInitArgs args;
   args.version = JNI_VERSION_1_8;
   args.nOptions = 0;
   args.options = NULL;
-  args.ignoreUnrecognized = JNI_FALSE;
+  args.ignoreUnrecognized = JNI_TRUE;
 
   jint rc = sym.fn(&jvm->vm, (void**)&jvm->env, &args);
   if (rc != JNI_OK) {
     free(jvm);
     return NULL;
   }
+
+  JNIEnv* env = jvm->env;
+  jclass loader_cls = (*env)->FindClass(env, "java/lang/ClassLoader");
+  if (loader_cls) {
+    jmethodID get_sys = (*env)->GetStaticMethodID(
+        env, loader_cls, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
+    if (get_sys) {
+      jobject sys_loader = (*env)->CallStaticObjectMethod(env, loader_cls, get_sys);
+      if (sys_loader)
+        jvm->loader = (*env)->NewGlobalRef(env, sys_loader);
+    }
+  }
+
   return jvm;
 }
 
@@ -97,7 +112,7 @@ int v6_jvm_load_runtime(v6_jvm* jvm) {
   jclass value_cls = NULL;
 
   for (size_t i = 0; i < v6_runtime_class_count; i++) {
-    jclass cls = (*env)->DefineClass(env, v6_runtime_classes[i].name, NULL,
+    jclass cls = (*env)->DefineClass(env, v6_runtime_classes[i].name, jvm->loader,
                                      (const jbyte*)v6_runtime_classes[i].data,
                                      (jsize)v6_runtime_classes[i].len);
     if (!cls)
@@ -132,7 +147,7 @@ int v6_jvm_load_runtime(v6_jvm* jvm) {
 int v6_jvm_define_extra(v6_jvm* jvm, const char* name,
                         const unsigned char* class_bytes, size_t len) {
   JNIEnv* env = jvm->env;
-  jclass cls = (*env)->DefineClass(env, name, NULL, (const jbyte*)class_bytes,
+  jclass cls = (*env)->DefineClass(env, name, jvm->loader, (const jbyte*)class_bytes,
                                    (jsize)len);
   return cls ? 0 : -1;
 }
@@ -141,7 +156,7 @@ int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
               char** script_args, int script_argc) {
   JNIEnv* env = jvm->env;
 
-  jclass cls = (*env)->DefineClass(env, "Main", NULL, (const jbyte*)class_bytes,
+  jclass cls = (*env)->DefineClass(env, "Main", jvm->loader, (const jbyte*)class_bytes,
                                    (jsize)len);
   if (!cls)
     return -1;
@@ -180,6 +195,8 @@ void v6_jvm_destroy(v6_jvm* jvm) {
     return;
   if (jvm->value_class)
     (*jvm->env)->DeleteGlobalRef(jvm->env, jvm->value_class);
+  if (jvm->loader)
+    (*jvm->env)->DeleteGlobalRef(jvm->env, jvm->loader);
   (*jvm->vm)->DestroyJavaVM(jvm->vm);
   free(jvm);
 }

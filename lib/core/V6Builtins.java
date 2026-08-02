@@ -878,6 +878,51 @@ public final class V6Builtins {
   public static final V6Value CLEAR_IMMEDIATE = V6Timers.CLEAR_IMMEDIATE;
   public static final V6Value QUEUE_MICROTASK = V6Timers.QUEUE_MICROTASK;
 
+  public static final V6Value NODE_ASSERT =
+      new V6Value(V6Value.TAG_FUNC, 0, V6Assert.build());
+  public static final V6Value NODE_QUERYSTRING = objValue(V6QueryString.build());
+  public static final V6Value NODE_PERF_HOOKS = objValue(V6PerfHooks.build());
+  public static final V6Value NODE_DNS = objValue(V6Dns.build());
+  private static V6Value buildStringDecoderModule() {
+    V6Object o = new V6Object();
+    o.set("StringDecoder",
+          new V6Value(V6Value.TAG_OBJ, 0, new V6StringDecoderConstructor()));
+    return objValue(o);
+  }
+  public static final V6Value NODE_STRING_DECODER = buildStringDecoderModule();
+
+  public static final V6Value URL_CTOR =
+      new V6Value(V6Value.TAG_OBJ, 0, new V6UrlConstructor());
+  public static final V6Value URL_SEARCH_PARAMS_CTOR =
+      new V6Value(V6Value.TAG_OBJ, 0, new V6UrlSearchParamsConstructor());
+  private static V6Value buildUrlModule() {
+    V6Object o = new V6Object();
+    o.set("URL", URL_CTOR);
+    o.set("URLSearchParams", URL_SEARCH_PARAMS_CTOR);
+    return objValue(o);
+  }
+  public static final V6Value NODE_URL = buildUrlModule();
+  public static final V6Value NODE_ZLIB = objValue(V6Zlib.build());
+  public static final V6Value NODE_CRYPTO = objValue(V6Crypto.build());
+  private static V6Value buildStreamModule() {
+    V6Object o = new V6Object();
+    o.set("Readable",
+          new V6Value(V6Value.TAG_OBJ, 0, new V6StreamReadableConstructor()));
+    o.set("Writable",
+          new V6Value(V6Value.TAG_OBJ, 0, new V6StreamWritableConstructor()));
+    o.set("Duplex", new V6Value(V6Value.TAG_OBJ, 0, new V6StreamDuplexConstructor()));
+    o.set("Transform",
+          new V6Value(V6Value.TAG_OBJ, 0, new V6StreamTransformConstructor()));
+    return objValue(o);
+  }
+  public static final V6Value NODE_STREAM = buildStreamModule();
+  public static final V6Value NODE_CHILD_PROCESS = objValue(V6ChildProcess.build());
+  public static final V6Value NODE_NET = objValue(V6Net.build());
+  public static final V6Value NODE_HTTP = objValue(V6Http.build());
+  public static final V6Value NODE_HTTPS = objValue(V6Http.buildHttps());
+  public static final V6Value NODE_READLINE = objValue(V6Readline.build());
+  public static final V6Value NODE_WORKER_THREADS = objValue(V6WorkerThreads.build());
+
   public static final V6Value BTOA = fn((thisArg, args) -> {
     String s = V6Value.argAt(args, 0).toString();
     byte[] bytes = new byte[s.length()];

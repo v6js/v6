@@ -1710,13 +1710,39 @@ static void parse_new(parser* p, compiler* c) {
     return;
   }
 
-  const char* lambda_name = find_direct_fn(c, name.start, name.len);
-  if (lambda_name) {
-    compile_direct_new(p, c, vr, lambda_name);
-    return;
+  if (!check(p, tok_dot) && !check(p, tok_lbracket)) {
+    const char* lambda_name = find_direct_fn(c, name.start, name.len);
+    if (lambda_name) {
+      compile_direct_new(p, c, vr, lambda_name);
+      return;
+    }
   }
 
   emit_var_read_ref(c, vr);
+
+  while (check(p, tok_dot) || check(p, tok_lbracket)) {
+    if (match(p, tok_dot)) {
+      if (!match_property_name(p)) {
+        error_at(p, "expected property name");
+        return;
+      }
+      char* key = dup_tok(p->prev);
+      uint16_t key_idx = cf_string(c->cf, key);
+      free(key);
+      op_emit2(c->m, op_ldc_w, key_idx);
+    } else {
+      advance(p);
+      parse_expr(p, c);
+      uint16_t tostring_idx =
+          cf_methodref(c->cf, "V6Value", "toString", "()Ljava/lang/String;");
+      op_emit2(c->m, op_invokevirtual, tostring_idx);
+      if (!expect(p, tok_rbracket))
+        return;
+    }
+    uint16_t get_idx = cf_methodref(c->cf, "V6Value", "getProp",
+                                    "(Ljava/lang/String;)LV6Value;");
+    op_emit2(c->m, op_invokevirtual, get_idx);
+  }
 
   if (match(p, tok_lparen)) {
     emit_args_array(p, c);
@@ -4917,6 +4943,21 @@ static const node_builtin_ref v6_node_builtin_table[] = {
     {"os", "NODE_OS"},
     {"fs", "NODE_FS"},
     {"events", "NODE_EVENTS"},
+    {"assert", "NODE_ASSERT"},
+    {"querystring", "NODE_QUERYSTRING"},
+    {"perf_hooks", "NODE_PERF_HOOKS"},
+    {"dns", "NODE_DNS"},
+    {"string_decoder", "NODE_STRING_DECODER"},
+    {"url", "NODE_URL"},
+    {"zlib", "NODE_ZLIB"},
+    {"crypto", "NODE_CRYPTO"},
+    {"stream", "NODE_STREAM"},
+    {"child_process", "NODE_CHILD_PROCESS"},
+    {"net", "NODE_NET"},
+    {"http", "NODE_HTTP"},
+    {"https", "NODE_HTTPS"},
+    {"readline", "NODE_READLINE"},
+    {"worker_threads", "NODE_WORKER_THREADS"},
 };
 
 static int emit_node_builtin_ref(compiler* c, const char* specifier) {
@@ -6223,6 +6264,8 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   bind_builtin(&c, "JSON", "JSON");
   bind_builtin(&c, "Buffer", "BUFFER");
   bind_builtin(&c, "process", "PROCESS");
+  bind_builtin(&c, "URL", "URL_CTOR");
+  bind_builtin(&c, "URLSearchParams", "URL_SEARCH_PARAMS_CTOR");
   bind_builtin(&c, "setTimeout", "SET_TIMEOUT");
   bind_builtin(&c, "clearTimeout", "CLEAR_TIMEOUT");
   bind_builtin(&c, "setInterval", "SET_INTERVAL");
