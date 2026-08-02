@@ -44,7 +44,8 @@ public final class V6AsyncGenerator extends V6Object {
     }
     V6Value awaitedValue = (V6Value)res[1];
     V6Promise awaited = V6Promise.resolved(awaitedValue);
-    awaited.addCallbacks(v -> drive(V6Generator.RESUME, v, result),
+    awaited.addCallbacks(v
+                         -> drive(V6Generator.RESUME, v, result),
                          err -> drive(V6Generator.THROW, err, result));
   }
 

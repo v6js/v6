@@ -285,11 +285,12 @@ public record V6Value(int tag, double num, Object ref) {
         V6Symbol sym = (V6Symbol)ref;
         if (key.equals("description"))
           return sym.description != null
-                     ? new V6Value(TAG_STR, 0, sym.description)
-                     : new V6Value(TAG_UNDEF, 0, null);
+              ? new V6Value(TAG_STR, 0, sym.description)
+              : new V6Value(TAG_UNDEF, 0, null);
         if (key.equals("toString"))
-          return new V6Value(TAG_FUNC, 0,
-                             (V6Callable)(t, a) -> new V6Value(TAG_STR, 0, t.toString()));
+          return new V6Value(
+              TAG_FUNC, 0,
+              (V6Callable)(t, a) -> new V6Value(TAG_STR, 0, t.toString()));
         return new V6Value(TAG_UNDEF, 0, null);
       }
       return ((V6Object)ref).get(key);
@@ -426,7 +427,8 @@ public record V6Value(int tag, double num, Object ref) {
     } else {
       return false;
     }
-    for (V6Object o = ((V6Object)obj.ref).getProto(); o != null; o = o.getProto()) {
+    for (V6Object o = ((V6Object)obj.ref).getProto(); o != null;
+         o = o.getProto()) {
       if (o == targetProto)
         return true;
     }

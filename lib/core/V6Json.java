@@ -1,5 +1,6 @@
 public final class V6Json {
-  private V6Json() {}
+  private V6Json() {
+  }
 
   public static V6Value parse(String text) {
     int[] pos = {0};
@@ -9,7 +10,8 @@ public final class V6Json {
     if (pos[0] != text.length())
       throw new V6Throw(new V6Value(
           V6Value.TAG_STR, 0,
-          "Unexpected non-whitespace character after JSON at position " + pos[0]));
+          "Unexpected non-whitespace character after JSON at position " +
+              pos[0]));
     return result;
   }
 
@@ -26,7 +28,8 @@ public final class V6Json {
   private static V6Value parseValue(String s, int[] pos) {
     skipWs(s, pos);
     if (pos[0] >= s.length())
-      throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Unexpected end of JSON input"));
+      throw new V6Throw(
+          new V6Value(V6Value.TAG_STR, 0, "Unexpected end of JSON input"));
     char c = s.charAt(pos[0]);
     if (c == '{')
       return parseObject(s, pos);
@@ -48,13 +51,17 @@ public final class V6Json {
     }
     if (c == '-' || (c >= '0' && c <= '9'))
       return parseNumber(s, pos);
-    throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Unexpected token '" + c + "' in JSON at position " + pos[0]));
+    throw new V6Throw(new V6Value(V6Value.TAG_STR, 0,
+                                  "Unexpected token '" + c +
+                                      "' in JSON at position " + pos[0]));
   }
 
   private static void expectLiteral(String s, int[] pos, String lit) {
     if (pos[0] + lit.length() > s.length() ||
         !s.regionMatches(pos[0], lit, 0, lit.length()))
-      throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Unexpected token in JSON at position " + pos[0]));
+      throw new V6Throw(
+          new V6Value(V6Value.TAG_STR, 0,
+                      "Unexpected token in JSON at position " + pos[0]));
     pos[0] += lit.length();
   }
 
@@ -69,17 +76,22 @@ public final class V6Json {
     while (true) {
       skipWs(s, pos);
       if (pos[0] >= s.length() || s.charAt(pos[0]) != '"')
-        throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Expected string key in JSON object at position " + pos[0]));
+        throw new V6Throw(new V6Value(
+            V6Value.TAG_STR, 0,
+            "Expected string key in JSON object at position " + pos[0]));
       String key = parseString(s, pos);
       skipWs(s, pos);
       if (pos[0] >= s.length() || s.charAt(pos[0]) != ':')
-        throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Expected ':' in JSON object at position " + pos[0]));
+        throw new V6Throw(
+            new V6Value(V6Value.TAG_STR, 0,
+                        "Expected ':' in JSON object at position " + pos[0]));
       pos[0]++;
       V6Value val = parseValue(s, pos);
       obj.set(key, val);
       skipWs(s, pos);
       if (pos[0] >= s.length())
-        throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Unexpected end of JSON input"));
+        throw new V6Throw(
+            new V6Value(V6Value.TAG_STR, 0, "Unexpected end of JSON input"));
       char c = s.charAt(pos[0]);
       if (c == ',') {
         pos[0]++;
@@ -89,7 +101,9 @@ public final class V6Json {
         pos[0]++;
         break;
       }
-      throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Expected ',' or '}' in JSON object at position " + pos[0]));
+      throw new V6Throw(new V6Value(
+          V6Value.TAG_STR, 0,
+          "Expected ',' or '}' in JSON object at position " + pos[0]));
     }
     return new V6Value(V6Value.TAG_OBJ, 0, obj);
   }
@@ -107,7 +121,8 @@ public final class V6Json {
       arr.push(val);
       skipWs(s, pos);
       if (pos[0] >= s.length())
-        throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Unexpected end of JSON input"));
+        throw new V6Throw(
+            new V6Value(V6Value.TAG_STR, 0, "Unexpected end of JSON input"));
       char c = s.charAt(pos[0]);
       if (c == ',') {
         pos[0]++;
@@ -117,7 +132,9 @@ public final class V6Json {
         pos[0]++;
         break;
       }
-      throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Expected ',' or ']' in JSON array at position " + pos[0]));
+      throw new V6Throw(new V6Value(
+          V6Value.TAG_STR, 0,
+          "Expected ',' or ']' in JSON array at position " + pos[0]));
     }
     return new V6Value(V6Value.TAG_OBJ, 0, arr);
   }
@@ -127,7 +144,8 @@ public final class V6Json {
     StringBuilder sb = new StringBuilder();
     while (true) {
       if (pos[0] >= s.length())
-        throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Unterminated string in JSON"));
+        throw new V6Throw(
+            new V6Value(V6Value.TAG_STR, 0, "Unterminated string in JSON"));
       char c = s.charAt(pos[0]);
       if (c == '"') {
         pos[0]++;
@@ -136,7 +154,8 @@ public final class V6Json {
       if (c == '\\') {
         pos[0]++;
         if (pos[0] >= s.length())
-          throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Unterminated string in JSON"));
+          throw new V6Throw(
+              new V6Value(V6Value.TAG_STR, 0, "Unterminated string in JSON"));
         char e = s.charAt(pos[0]);
         switch (e) {
         case '"':
@@ -165,16 +184,21 @@ public final class V6Json {
           break;
         case 'u':
           if (pos[0] + 4 >= s.length())
-            throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Invalid unicode escape in JSON string"));
-          sb.append((char)Integer.parseInt(s.substring(pos[0] + 1, pos[0] + 5), 16));
+            throw new V6Throw(new V6Value(
+                V6Value.TAG_STR, 0, "Invalid unicode escape in JSON string"));
+          sb.append(
+              (char)Integer.parseInt(s.substring(pos[0] + 1, pos[0] + 5), 16));
           pos[0] += 4;
           break;
         default:
-          throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Invalid escape character in JSON string"));
+          throw new V6Throw(new V6Value(
+              V6Value.TAG_STR, 0, "Invalid escape character in JSON string"));
         }
         pos[0]++;
       } else if (c < 0x20) {
-        throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Bad control character in string literal in JSON"));
+        throw new V6Throw(
+            new V6Value(V6Value.TAG_STR, 0,
+                        "Bad control character in string literal in JSON"));
       } else {
         sb.append(c);
         pos[0]++;
@@ -188,7 +212,8 @@ public final class V6Json {
     if (s.charAt(pos[0]) == '-')
       pos[0]++;
     if (pos[0] >= s.length() || !Character.isDigit(s.charAt(pos[0])))
-      throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Invalid number in JSON at position " + pos[0]));
+      throw new V6Throw(new V6Value(
+          V6Value.TAG_STR, 0, "Invalid number in JSON at position " + pos[0]));
     if (s.charAt(pos[0]) == '0') {
       pos[0]++;
     } else {
@@ -198,23 +223,31 @@ public final class V6Json {
     if (pos[0] < s.length() && s.charAt(pos[0]) == '.') {
       pos[0]++;
       if (pos[0] >= s.length() || !Character.isDigit(s.charAt(pos[0])))
-        throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Invalid number in JSON at position " + pos[0]));
+        throw new V6Throw(
+            new V6Value(V6Value.TAG_STR, 0,
+                        "Invalid number in JSON at position " + pos[0]));
       while (pos[0] < s.length() && Character.isDigit(s.charAt(pos[0])))
         pos[0]++;
     }
-    if (pos[0] < s.length() && (s.charAt(pos[0]) == 'e' || s.charAt(pos[0]) == 'E')) {
+    if (pos[0] < s.length() &&
+        (s.charAt(pos[0]) == 'e' || s.charAt(pos[0]) == 'E')) {
       pos[0]++;
-      if (pos[0] < s.length() && (s.charAt(pos[0]) == '+' || s.charAt(pos[0]) == '-'))
+      if (pos[0] < s.length() &&
+          (s.charAt(pos[0]) == '+' || s.charAt(pos[0]) == '-'))
         pos[0]++;
       if (pos[0] >= s.length() || !Character.isDigit(s.charAt(pos[0])))
-        throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Invalid number in JSON at position " + pos[0]));
+        throw new V6Throw(
+            new V6Value(V6Value.TAG_STR, 0,
+                        "Invalid number in JSON at position " + pos[0]));
       while (pos[0] < s.length() && Character.isDigit(s.charAt(pos[0])))
         pos[0]++;
     }
-    return new V6Value(V6Value.TAG_NUM, Double.parseDouble(s.substring(start, pos[0])), null);
+    return new V6Value(V6Value.TAG_NUM,
+                       Double.parseDouble(s.substring(start, pos[0])), null);
   }
 
-  public static V6Value stringify(V6Value value, V6Value replacerArg, V6Value spaceArg) {
+  public static V6Value stringify(V6Value value, V6Value replacerArg,
+                                  V6Value spaceArg) {
     String indentUnit = "";
     if (spaceArg.tag() == V6Value.TAG_NUM) {
       int n = Math.max(0, Math.min(10, (int)spaceArg.toNumber()));
@@ -260,16 +293,19 @@ public final class V6Json {
     return v;
   }
 
-  private static boolean writeValue(StringBuilder out, V6Value vIn, V6Callable replacer,
-                                    java.util.Set<String> allowedKeys, String indentUnit,
-                                    String currentIndent, java.util.Set<Object> seen) {
+  private static boolean writeValue(StringBuilder out, V6Value vIn,
+                                    V6Callable replacer,
+                                    java.util.Set<String> allowedKeys,
+                                    String indentUnit, String currentIndent,
+                                    java.util.Set<Object> seen) {
     V6Value v = applyToJSON(vIn);
     switch (v.tag()) {
     case V6Value.TAG_UNDEF:
     case V6Value.TAG_FUNC:
       return false;
     case V6Value.TAG_BIGINT:
-      throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Do not know how to serialize a BigInt"));
+      throw new V6Throw(new V6Value(V6Value.TAG_STR, 0,
+                                    "Do not know how to serialize a BigInt"));
     case V6Value.TAG_NULL:
       out.append("null");
       return true;
@@ -292,7 +328,8 @@ public final class V6Json {
       if (ref == null)
         return false;
       if (seen.contains(ref))
-        throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "Converting circular structure to JSON"));
+        throw new V6Throw(new V6Value(V6Value.TAG_STR, 0,
+                                      "Converting circular structure to JSON"));
       seen.add(ref);
       String nextIndent = currentIndent + indentUnit;
       boolean pretty = !indentUnit.isEmpty();
@@ -312,8 +349,10 @@ public final class V6Json {
             if (replacer != null)
               elem = replacer.call(
                   v, new V6Value[] {
-                      new V6Value(V6Value.TAG_STR, 0, Integer.toString(i)), elem});
-            if (!writeValue(out, elem, replacer, allowedKeys, indentUnit, nextIndent, seen))
+                         new V6Value(V6Value.TAG_STR, 0, Integer.toString(i)),
+                         elem});
+            if (!writeValue(out, elem, replacer, allowedKeys, indentUnit,
+                            nextIndent, seen))
               out.append("null");
           }
           if (pretty)
@@ -333,9 +372,11 @@ public final class V6Json {
           V6Value propVal = obj.get(key);
           if (replacer != null)
             propVal = replacer.call(
-                v, new V6Value[] {new V6Value(V6Value.TAG_STR, 0, key), propVal});
+                v,
+                new V6Value[] {new V6Value(V6Value.TAG_STR, 0, key), propVal});
           StringBuilder valOut = new StringBuilder();
-          if (!writeValue(valOut, propVal, replacer, allowedKeys, indentUnit, nextIndent, seen))
+          if (!writeValue(valOut, propVal, replacer, allowedKeys, indentUnit,
+                          nextIndent, seen))
             continue;
           if (written > 0)
             body.append(',');

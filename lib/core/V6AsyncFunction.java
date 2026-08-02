@@ -24,7 +24,8 @@ public final class V6AsyncFunction implements V6Callable {
       result.reject(e.value);
       return;
     } catch (RuntimeException e) {
-      result.reject(new V6Value(V6Value.TAG_STR, 0, String.valueOf(e.getMessage())));
+      result.reject(
+          new V6Value(V6Value.TAG_STR, 0, String.valueOf(e.getMessage())));
       return;
     }
     V6Object obj = (V6Object)stepResult.ref();
@@ -35,7 +36,7 @@ public final class V6AsyncFunction implements V6Callable {
       return;
     }
     V6Promise awaited = V6Promise.resolved(value);
-    awaited.addCallbacks(v -> step(gen, result, v, false),
-                         err -> step(gen, result, err, true));
+    awaited.addCallbacks(
+        v -> step(gen, result, v, false), err -> step(gen, result, err, true));
   }
 }

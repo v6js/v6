@@ -76,8 +76,8 @@ public final class V6String extends V6Object {
               int j = i + 1;
               int groupNum = 0;
               int digits = 0;
-              while (j < template.length() && Character.isDigit(template.charAt(j)) &&
-                     digits < 2) {
+              while (j < template.length() &&
+                     Character.isDigit(template.charAt(j)) && digits < 2) {
                 int candidate = groupNum * 10 + (template.charAt(j) - '0');
                 if (candidate > m.groupCount())
                   break;
@@ -159,12 +159,12 @@ public final class V6String extends V6Object {
           int from = args.length > 1 ? (int)args[1].toNumber() : 0;
           return num(self.indexOf(needle, from));
         }));
-    set("lastIndexOf", fn((thisArg, args)
-                              -> num(s(thisArg).lastIndexOf(
-                                  s(V6Value.argAt(args, 0))))));
-    set("includes", fn((thisArg, args)
-                           -> bool(s(thisArg).contains(
-                               s(V6Value.argAt(args, 0))))));
+    set("lastIndexOf",
+        fn((thisArg,
+            args) -> num(s(thisArg).lastIndexOf(s(V6Value.argAt(args, 0))))));
+    set("includes",
+        fn((thisArg,
+            args) -> bool(s(thisArg).contains(s(V6Value.argAt(args, 0))))));
     set("startsWith", fn((thisArg, args) -> {
           String self = s(thisArg);
           String needle = s(V6Value.argAt(args, 0));
@@ -181,7 +181,8 @@ public final class V6String extends V6Object {
     set("slice", fn((thisArg, args) -> {
           String self = s(thisArg);
           int len = self.length();
-          int start = args.length > 0 ? normIndex((int)args[0].toNumber(), len) : 0;
+          int start =
+              args.length > 0 ? normIndex((int)args[0].toNumber(), len) : 0;
           int end = args.length > 1 && !args[1].isUndefined()
                         ? normIndex((int)args[1].toNumber(), len)
                         : len;
@@ -245,17 +246,18 @@ public final class V6String extends V6Object {
           String self = s(thisArg);
           V6Regex re = asRegex(V6Value.argAt(args, 0));
           if (re != null)
-            return str(replaceWithRegex(re, self, V6Value.argAt(args, 1),
-                                        re.global));
+            return str(
+                replaceWithRegex(re, self, V6Value.argAt(args, 1), re.global));
           String search = s(V6Value.argAt(args, 0));
           V6Value replArg = V6Value.argAt(args, 1);
           int idx = self.indexOf(search);
           if (idx < 0)
             return str(self);
           String repl = replArg.tag() == V6Value.TAG_FUNC
-              ? s(replArg.asCallable().call(
-                    UNDEF, new V6Value[] {str(search), num(idx), str(self)}))
-              : s(replArg);
+                            ? s(replArg.asCallable().call(
+                                  UNDEF, new V6Value[] {str(search), num(idx),
+                                                        str(self)}))
+                            : s(replArg);
           return str(self.substring(0, idx) + repl +
                      self.substring(idx + search.length()));
         }));
@@ -263,7 +265,8 @@ public final class V6String extends V6Object {
           String self = s(thisArg);
           V6Regex re = asRegex(V6Value.argAt(args, 0));
           if (re != null)
-            return str(replaceWithRegex(re, self, V6Value.argAt(args, 1), true));
+            return str(
+                replaceWithRegex(re, self, V6Value.argAt(args, 1), true));
           String search = s(V6Value.argAt(args, 0));
           V6Value replArg = V6Value.argAt(args, 1);
           if (search.isEmpty())

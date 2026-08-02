@@ -1,4 +1,5 @@
-public final class V6SetConstructor extends V6Object implements V6NativeConstructor {
+public final class V6SetConstructor
+    extends V6Object implements V6NativeConstructor {
   @Override
   public V6Value construct(V6Value[] args) {
     V6SetObject s = new V6SetObject();

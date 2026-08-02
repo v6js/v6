@@ -38,7 +38,8 @@ public final class V6Builtins {
     return v.tag() == V6Value.TAG_OBJ ? (V6Object)v.ref() : null;
   }
 
-  private static String inspect(V6Value v, java.util.Map<Object, Boolean> seen) {
+  private static String inspect(V6Value v,
+                                java.util.Map<Object, Boolean> seen) {
     if (v.tag() == V6Value.TAG_STR)
       return "'" + v.toString().replace("'", "\\'") + "'";
     if (v.tag() == V6Value.TAG_BIGINT)
@@ -326,7 +327,8 @@ public final class V6Builtins {
     return o;
   }
 
-  private static void applyDescriptor(V6Object target, String key, V6Object desc) {
+  private static void applyDescriptor(V6Object target, String key,
+                                      V6Object desc) {
     if (target == null || desc == null)
       return;
     if (desc.has("get") || desc.has("set")) {
@@ -368,9 +370,8 @@ public final class V6Builtins {
 
   public static final V6Value PARSE_INT = fn((thisArg, args) -> {
     String str = V6Value.argAt(args, 0).toString().strip();
-    int radix = args.length > 1 && !args[1].isUndefined()
-                    ? (int)args[1].toNumber()
-                    : 0;
+    int radix =
+        args.length > 1 && !args[1].isUndefined() ? (int)args[1].toNumber() : 0;
     int sign = 1;
     int i = 0;
     int n = str.length();
@@ -408,10 +409,8 @@ public final class V6Builtins {
       return V6Value.bigint(new java.math.BigInteger(v.toString().strip()));
     double n = v.toNumber();
     if (n != Math.rint(n) || Double.isNaN(n) || Double.isInfinite(n))
-      throw new RuntimeException(
-          "Cannot convert non-integer to BigInt: " + n);
-    return V6Value.bigint(
-        new java.math.BigDecimal(n).toBigInteger());
+      throw new RuntimeException("Cannot convert non-integer to BigInt: " + n);
+    return V6Value.bigint(new java.math.BigDecimal(n).toBigInteger());
   });
 
   public static final V6Value PARSE_FLOAT = fn((thisArg, args) -> {
@@ -443,15 +442,16 @@ public final class V6Builtins {
     if (i == start0 || (i == start0 + 1 && str.charAt(start0) == '.'))
       return new V6Value(V6Value.TAG_NUM, Double.NaN, null);
     try {
-      return new V6Value(V6Value.TAG_NUM, Double.parseDouble(str.substring(0, i)),
-                         null);
+      return new V6Value(V6Value.TAG_NUM,
+                         Double.parseDouble(str.substring(0, i)), null);
     } catch (NumberFormatException e) {
       return new V6Value(V6Value.TAG_NUM, Double.NaN, null);
     }
   });
 
-  public static final V6Value IS_NAN = fn(
-      (thisArg, args) -> boolValue(Double.isNaN(V6Value.argAt(args, 0).toNumber())));
+  public static final V6Value IS_NAN =
+      fn((thisArg,
+          args) -> boolValue(Double.isNaN(V6Value.argAt(args, 0).toNumber())));
 
   public static final V6Value IS_FINITE = fn((thisArg, args) -> {
     double n = V6Value.argAt(args, 0).toNumber();
@@ -507,7 +507,8 @@ public final class V6Builtins {
   }
 
   public static final V6Value NUMBER = objValue(numberNamespace());
-  public static final V6Value NAN_VALUE = new V6Value(V6Value.TAG_NUM, Double.NaN, null);
+  public static final V6Value NAN_VALUE =
+      new V6Value(V6Value.TAG_NUM, Double.NaN, null);
   public static final V6Value INFINITY_VALUE =
       new V6Value(V6Value.TAG_NUM, Double.POSITIVE_INFINITY, null);
 
@@ -515,19 +516,21 @@ public final class V6Builtins {
     V6Object o = new V6Object();
     o.set("get", fn((thisArg, args) -> {
             V6MapObject m = (V6MapObject)thisArg.ref();
-            V6Value v = m.entries.get(V6MapObject.keyFor(V6Value.argAt(args, 0)));
+            V6Value v =
+                m.entries.get(V6MapObject.keyFor(V6Value.argAt(args, 0)));
             return v != null ? v : UNDEF;
           }));
     o.set("set", fn((thisArg, args) -> {
             V6MapObject m = (V6MapObject)thisArg.ref();
             m.entries.put(V6MapObject.keyFor(V6Value.argAt(args, 0)),
-                         V6Value.argAt(args, 1));
+                          V6Value.argAt(args, 1));
             return thisArg;
           }));
-    o.set("has", fn((thisArg, args)
-                        -> boolValue(((V6MapObject)thisArg.ref())
-                                         .entries.containsKey(V6MapObject.keyFor(
-                                             V6Value.argAt(args, 0))))));
+    o.set("has",
+          fn((thisArg, args)
+                 -> boolValue(((V6MapObject)thisArg.ref())
+                                  .entries.containsKey(V6MapObject.keyFor(
+                                      V6Value.argAt(args, 0))))));
     o.set("delete", fn((thisArg, args) -> {
             V6MapObject m = (V6MapObject)thisArg.ref();
             Object k = V6MapObject.keyFor(V6Value.argAt(args, 0));
@@ -565,7 +568,8 @@ public final class V6Builtins {
     o.set("entries", fn((thisArg, args) -> {
             V6MapObject m = (V6MapObject)thisArg.ref();
             V6Array result = new V6Array();
-            for (java.util.Map.Entry<Object, V6Value> e : m.entries.entrySet()) {
+            for (java.util.Map.Entry<Object, V6Value> e :
+                 m.entries.entrySet()) {
               V6Array pair = new V6Array();
               pair.push(V6MapObject.keyToValue(e.getKey()));
               pair.push(e.getValue());
@@ -591,10 +595,11 @@ public final class V6Builtins {
             st.entries.put(V6MapObject.keyFor(v), v);
             return thisArg;
           }));
-    o.set("has", fn((thisArg, args)
-                        -> boolValue(((V6SetObject)thisArg.ref())
-                                         .entries.containsKey(V6MapObject.keyFor(
-                                             V6Value.argAt(args, 0))))));
+    o.set("has",
+          fn((thisArg, args)
+                 -> boolValue(((V6SetObject)thisArg.ref())
+                                  .entries.containsKey(V6MapObject.keyFor(
+                                      V6Value.argAt(args, 0))))));
     o.set("delete", fn((thisArg, args) -> {
             V6SetObject st = (V6SetObject)thisArg.ref();
             Object k = V6MapObject.keyFor(V6Value.argAt(args, 0));
@@ -665,9 +670,9 @@ public final class V6Builtins {
 
   private static V6Object generatorPrototype() {
     V6Object o = new V6Object();
-    o.set("next", fn((thisArg, args)
-                         -> ((V6Generator)thisArg.ref())
-                                .next(V6Value.argAt(args, 0))));
+    o.set("next",
+          fn((thisArg, args)
+                 -> ((V6Generator)thisArg.ref()).next(V6Value.argAt(args, 0))));
     o.set("return", fn((thisArg, args)
                            -> ((V6Generator)thisArg.ref())
                                   .returnValue(V6Value.argAt(args, 0))));
@@ -701,13 +706,14 @@ public final class V6Builtins {
 
   private static V6Object promisePrototype() {
     V6Object o = new V6Object();
-    o.set("then", fn((thisArg, args)
-                         -> ((V6Promise)thisArg.ref())
-                                .then(V6Value.argAt(args, 0),
-                                     V6Value.argAt(args, 1))));
-    o.set("catch", fn((thisArg, args)
-                          -> ((V6Promise)thisArg.ref())
-                                 .then(UNDEF_FN_MARKER, V6Value.argAt(args, 0))));
+    o.set("then",
+          fn((thisArg, args)
+                 -> ((V6Promise)thisArg.ref())
+                        .then(V6Value.argAt(args, 0), V6Value.argAt(args, 1))));
+    o.set("catch",
+          fn((thisArg, args)
+                 -> ((V6Promise)thisArg.ref())
+                        .then(UNDEF_FN_MARKER, V6Value.argAt(args, 0))));
     o.set("finally", fn((thisArg, args) -> {
             V6Value cb = V6Value.argAt(args, 0);
             V6Value onOk = fn((t, a) -> {
@@ -745,16 +751,17 @@ public final class V6Builtins {
             V6Regex re = (V6Regex)thisArg.ref();
             String input = V6Value.argAt(args, 0).toString();
             int start = (re.global || re.sticky)
-                ? (int)re.get("lastIndex").toNumber()
-                : 0;
+                            ? (int)re.get("lastIndex").toNumber()
+                            : 0;
             if (start < 0 || start > input.length()) {
               if (re.global || re.sticky)
                 re.set("lastIndex", num(0));
               return boolValue(false);
             }
             java.util.regex.Matcher m = re.pattern.matcher(input);
-            boolean found = re.sticky ? m.region(start, input.length()).lookingAt()
-                                      : m.find(start);
+            boolean found = re.sticky
+                                ? m.region(start, input.length()).lookingAt()
+                                : m.find(start);
             if (re.global || re.sticky)
               re.set("lastIndex", num(found ? m.end() : 0));
             return boolValue(found);
@@ -763,16 +770,17 @@ public final class V6Builtins {
             V6Regex re = (V6Regex)thisArg.ref();
             String input = V6Value.argAt(args, 0).toString();
             int start = (re.global || re.sticky)
-                ? (int)re.get("lastIndex").toNumber()
-                : 0;
+                            ? (int)re.get("lastIndex").toNumber()
+                            : 0;
             if (start < 0 || start > input.length()) {
               if (re.global || re.sticky)
                 re.set("lastIndex", num(0));
               return V6Value.NUL;
             }
             java.util.regex.Matcher m = re.pattern.matcher(input);
-            boolean found = re.sticky ? m.region(start, input.length()).lookingAt()
-                                      : m.find(start);
+            boolean found = re.sticky
+                                ? m.region(start, input.length()).lookingAt()
+                                : m.find(start);
             if (!found) {
               if (re.global || re.sticky)
                 re.set("lastIndex", num(0));
@@ -814,7 +822,8 @@ public final class V6Builtins {
     return o;
   }
 
-  private static V6Value applyReviver(V6Object holder, String key, V6Callable reviver) {
+  private static V6Value applyReviver(V6Object holder, String key,
+                                      V6Callable reviver) {
     V6Value value = holder.get(key);
     if (value.tag() == V6Value.TAG_OBJ && value.ref() instanceof V6Object) {
       V6Object obj = (V6Object)value.ref();
@@ -842,8 +851,9 @@ public final class V6Builtins {
         }
       }
     }
-    return reviver.call(objValue(holder),
-                        new V6Value[] {new V6Value(V6Value.TAG_STR, 0, key), value});
+    return reviver.call(
+        objValue(holder),
+        new V6Value[] {new V6Value(V6Value.TAG_STR, 0, key), value});
   }
 
   public static final V6Value JSON = objValue(jsonObject());

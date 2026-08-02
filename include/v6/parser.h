@@ -3,6 +3,8 @@
 #include "v6/bytecode.h"
 #include "v6/lexer.h"
 
+struct module_ctx;
+
 #define v6_max_params 16
 #define v6_max_locals 128
 #define v6_max_loops 32
@@ -90,6 +92,11 @@ typedef struct compiler {
   int finally_depth;
   int is_async_gen;
   int pending_async_gen;
+  int is_module;
+  uint16_t exports_slot;
+  const char* this_class_name;
+  struct module_ctx* modctx;
+  const char* module_dir;
 } compiler;
 
 typedef struct parser {
@@ -109,4 +116,6 @@ typedef struct compile_result {
 
 void parser_init(parser* p, const char* src);
 int compile_expr(parser* p, compiler* c);
-compile_result compile_program(const char* src, class_file* cf);
+compile_result compile_program(const char* src, class_file* cf,
+                               const char* entry_path,
+                               struct module_ctx* modctx);

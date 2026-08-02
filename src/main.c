@@ -1,6 +1,7 @@
 #include "v6/bytecode.h"
 #include "v6/jar.h"
 #include "v6/jvm.h"
+#include "v6/module.h"
 #include "v6/parser.h"
 #include "v6/runtime.h"
 
@@ -62,7 +63,8 @@ int main(int argc, char** argv) {
   class_file cf;
   cf_init(&cf, "Main", "java/lang/Object");
 
-  compile_result rc = compile_program(src, &cf);
+  module_ctx modctx;
+  compile_result rc = compile_program(src, &cf, in_path, &modctx);
   free(src);
 
   if (!rc.ok) {
@@ -76,9 +78,19 @@ int main(int argc, char** argv) {
   cf_emit(&cf, &out);
   cf_free(&cf);
 
+  buf* mod_bufs =
+      modctx.count > 0 ? malloc(sizeof(buf) * (size_t)modctx.count) : NULL;
+  for (int i = 0; i < modctx.count; i++) {
+    buf_init(&mod_bufs[i]);
+    cf_emit(modctx.modules[i].cf, &mod_bufs[i]);
+    cf_free(modctx.modules[i].cf);
+    free(modctx.modules[i].cf);
+  }
+
   if (out_path) {
     size_t n = v6_runtime_class_count;
-    jar_entry* entries = malloc((n + 1) * sizeof(jar_entry));
+    size_t total = n + 1 + (size_t)modctx.count;
+    jar_entry* entries = malloc(total * sizeof(jar_entry));
     entries[0].name = "Main.class";
     entries[0].data = out.data;
     entries[0].len = out.len;
@@ -89,11 +101,21 @@ int main(int argc, char** argv) {
       entries[i + 1].data = v6_runtime_classes[i].data;
       entries[i + 1].len = v6_runtime_classes[i].len;
     }
+    for (int i = 0; i < modctx.count; i++) {
+      char* name = malloc(strlen(modctx.modules[i].class_name) + 7);
+      sprintf(name, "%s.class", modctx.modules[i].class_name);
+      entries[n + 1 + (size_t)i].name = name;
+      entries[n + 1 + (size_t)i].data = mod_bufs[i].data;
+      entries[n + 1 + (size_t)i].len = mod_bufs[i].len;
+    }
 
     buf jar;
     buf_init(&jar);
-    jar_write(&jar, entries, n + 1, "Main");
+    jar_write(&jar, entries, total, "Main");
     buf_free(&out);
+    for (int i = 0; i < modctx.count; i++)
+      buf_free(&mod_bufs[i]);
+    free(mod_bufs);
 
     FILE* outf = fopen(out_path, "wb");
     if (!outf) {
@@ -111,6 +133,9 @@ int main(int argc, char** argv) {
   if (!v6_jvm_available()) {
     fprintf(stderr, "error: no JVM available (built without JAVA_HOME?)\n");
     buf_free(&out);
+    for (int i = 0; i < modctx.count; i++)
+      buf_free(&mod_bufs[i]);
+    free(mod_bufs);
     return 1;
   }
 
@@ -118,11 +143,34 @@ int main(int argc, char** argv) {
   if (!jvm) {
     fprintf(stderr, "error: failed to create JVM\n");
     buf_free(&out);
+    for (int i = 0; i < modctx.count; i++)
+      buf_free(&mod_bufs[i]);
+    free(mod_bufs);
     return 1;
   }
 
   if (v6_jvm_load_runtime(jvm) != 0) {
     fprintf(stderr, "error: failed to load runtime\n");
+    v6_jvm_destroy(jvm);
+    buf_free(&out);
+    for (int i = 0; i < modctx.count; i++)
+      buf_free(&mod_bufs[i]);
+    free(mod_bufs);
+    return 1;
+  }
+
+  int mods_ok = 1;
+  for (int i = 0; i < modctx.count; i++) {
+    if (v6_jvm_define_extra(jvm, modctx.modules[i].class_name, mod_bufs[i].data,
+                            mod_bufs[i].len) != 0) {
+      mods_ok = 0;
+    }
+    buf_free(&mod_bufs[i]);
+  }
+  free(mod_bufs);
+
+  if (!mods_ok) {
+    fprintf(stderr, "error: failed to load module classes\n");
     v6_jvm_destroy(jvm);
     buf_free(&out);
     return 1;

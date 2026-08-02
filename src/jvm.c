@@ -129,6 +129,14 @@ int v6_jvm_load_runtime(v6_jvm* jvm) {
   return jvm->value_class ? 0 : -1;
 }
 
+int v6_jvm_define_extra(v6_jvm* jvm, const char* name,
+                        const unsigned char* class_bytes, size_t len) {
+  JNIEnv* env = jvm->env;
+  jclass cls = (*env)->DefineClass(env, name, NULL, (const jbyte*)class_bytes,
+                                   (jsize)len);
+  return cls ? 0 : -1;
+}
+
 int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len) {
   JNIEnv* env = jvm->env;
 
@@ -187,6 +195,15 @@ v6_jvm* v6_jvm_create(void) {
 
 int v6_jvm_load_runtime(v6_jvm* jvm) {
   (void)jvm;
+  return -1;
+}
+
+int v6_jvm_define_extra(v6_jvm* jvm, const char* name,
+                        const unsigned char* class_bytes, size_t len) {
+  (void)jvm;
+  (void)name;
+  (void)class_bytes;
+  (void)len;
   return -1;
 }
 

@@ -47,6 +47,10 @@ static const keyword keywords[] = {
     {"async", tok_kw_async},
     {"await", tok_kw_await},
     {"yield", tok_kw_yield},
+    {"import", tok_kw_import},
+    {"export", tok_kw_export},
+    {"from", tok_kw_from},
+    {"as", tok_kw_as},
 };
 
 void lex_init(lexer* lx, const char* src) {

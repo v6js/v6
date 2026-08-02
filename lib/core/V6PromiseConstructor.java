@@ -1,4 +1,5 @@
-public final class V6PromiseConstructor extends V6Object implements V6NativeConstructor {
+public final class V6PromiseConstructor
+    extends V6Object implements V6NativeConstructor {
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
 
   private static V6Value fn(V6Callable c) {
@@ -16,8 +17,10 @@ public final class V6PromiseConstructor extends V6Object implements V6NativeCons
   }
 
   public V6PromiseConstructor() {
-    set("resolve", fn((t, a) -> objValue(V6Promise.resolved(V6Value.argAt(a, 0)))));
-    set("reject", fn((t, a) -> objValue(V6Promise.rejected(V6Value.argAt(a, 0)))));
+    set("resolve",
+        fn((t, a) -> objValue(V6Promise.resolved(V6Value.argAt(a, 0)))));
+    set("reject",
+        fn((t, a) -> objValue(V6Promise.rejected(V6Value.argAt(a, 0)))));
 
     set("all", fn((t, a) -> {
           V6Array items = collect(V6Value.argAt(a, 0));
@@ -34,7 +37,8 @@ public final class V6PromiseConstructor extends V6Object implements V6NativeCons
             final int idx = i;
             V6Promise p = V6Promise.resolved(items.get(Integer.toString(i)));
             p.addCallbacks(
-                v -> {
+                v
+                -> {
                   if (settled[0])
                     return;
                   results[idx] = v;
@@ -64,7 +68,8 @@ public final class V6PromiseConstructor extends V6Object implements V6NativeCons
           for (int i = 0; i < n; i++) {
             V6Promise p = V6Promise.resolved(items.get(Integer.toString(i)));
             p.addCallbacks(
-                v -> {
+                v
+                -> {
                   if (!settled[0]) {
                     settled[0] = true;
                     result.resolve(v);
@@ -94,7 +99,8 @@ public final class V6PromiseConstructor extends V6Object implements V6NativeCons
             final int idx = i;
             V6Promise p = V6Promise.resolved(items.get(Integer.toString(i)));
             p.addCallbacks(
-                v -> {
+                v
+                -> {
                   V6Object o = new V6Object();
                   o.set("status", new V6Value(V6Value.TAG_STR, 0, "fulfilled"));
                   o.set("value", v);
@@ -127,7 +133,9 @@ public final class V6PromiseConstructor extends V6Object implements V6NativeCons
           int n = (int)items.get("length").num();
           V6Promise result = new V6Promise();
           if (n == 0) {
-            result.reject(new V6Value(V6Value.TAG_STR, 0, "AggregateError: All promises were rejected"));
+            result.reject(
+                new V6Value(V6Value.TAG_STR, 0,
+                            "AggregateError: All promises were rejected"));
             return objValue(result);
           }
           V6Value[] errors = new V6Value[n];
@@ -137,7 +145,8 @@ public final class V6PromiseConstructor extends V6Object implements V6NativeCons
             final int idx = i;
             V6Promise p = V6Promise.resolved(items.get(Integer.toString(i)));
             p.addCallbacks(
-                v -> {
+                v
+                -> {
                   if (!settled[0]) {
                     settled[0] = true;
                     result.resolve(v);
@@ -146,8 +155,9 @@ public final class V6PromiseConstructor extends V6Object implements V6NativeCons
                 err -> {
                   errors[idx] = err;
                   if (--remaining[0] == 0 && !settled[0]) {
-                    result.reject(new V6Value(V6Value.TAG_STR, 0,
-                                              "AggregateError: All promises were rejected"));
+                    result.reject(new V6Value(
+                        V6Value.TAG_STR, 0,
+                        "AggregateError: All promises were rejected"));
                   }
                 });
           }
@@ -174,7 +184,8 @@ public final class V6PromiseConstructor extends V6Object implements V6NativeCons
       } catch (V6Throw e) {
         p.reject(e.value);
       } catch (RuntimeException e) {
-        p.reject(new V6Value(V6Value.TAG_STR, 0, String.valueOf(e.getMessage())));
+        p.reject(
+            new V6Value(V6Value.TAG_STR, 0, String.valueOf(e.getMessage())));
       }
     }
     return objValue(p);

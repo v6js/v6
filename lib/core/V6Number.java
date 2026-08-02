@@ -13,9 +13,8 @@ public final class V6Number extends V6Object {
     set("toFixed", fn((thisArg, args) -> {
           double n = thisArg.toNumber();
           int digits = args.length > 0 ? (int)args[0].toNumber() : 0;
-          java.math.BigDecimal bd =
-              new java.math.BigDecimal(n).setScale(digits,
-                                                   java.math.RoundingMode.HALF_UP);
+          java.math.BigDecimal bd = new java.math.BigDecimal(n).setScale(
+              digits, java.math.RoundingMode.HALF_UP);
           return str(bd.toPlainString());
         }));
     set("toPrecision", fn((thisArg, args) -> {
@@ -23,8 +22,8 @@ public final class V6Number extends V6Object {
           if (args.length == 0 || args[0].isUndefined())
             return str(thisArg.toString());
           int precision = (int)args[0].toNumber();
-          java.math.BigDecimal bd = new java.math.BigDecimal(n)
-                                        .round(new java.math.MathContext(precision));
+          java.math.BigDecimal bd = new java.math.BigDecimal(n).round(
+              new java.math.MathContext(precision));
           return str(bd.toPlainString());
         }));
     set("toString", fn((thisArg, args) -> {
@@ -39,6 +38,7 @@ public final class V6Number extends V6Object {
           return str(thisArg.toString());
         }));
     set("valueOf",
-        fn((thisArg, args) -> new V6Value(V6Value.TAG_NUM, thisArg.toNumber(), null)));
+        fn((thisArg,
+            args) -> new V6Value(V6Value.TAG_NUM, thisArg.toNumber(), null)));
   }
 }

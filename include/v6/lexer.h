@@ -104,6 +104,10 @@ typedef enum {
   tok_regex,
   tok_amp_amp_eq,
   tok_pipe_pipe_eq,
+  tok_kw_import,
+  tok_kw_export,
+  tok_kw_from,
+  tok_kw_as,
 } tok_kind;
 
 typedef struct tok {

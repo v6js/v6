@@ -11,8 +11,10 @@ public final class V6Generator extends V6Object {
 
   private static final ThreadLocal<V6Generator> CURRENT = new ThreadLocal<>();
 
-  private final SynchronousQueue<Object[]> toCoroutine = new SynchronousQueue<>();
-  private final SynchronousQueue<Object[]> fromCoroutine = new SynchronousQueue<>();
+  private final SynchronousQueue<Object[]> toCoroutine =
+      new SynchronousQueue<>();
+  private final SynchronousQueue<Object[]> fromCoroutine =
+      new SynchronousQueue<>();
   private final V6Callable body;
   private final V6Value thisArg;
   private final V6Value[] args;

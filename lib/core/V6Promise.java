@@ -49,21 +49,21 @@ public final class V6Promise extends V6Object {
         V6Callable then = thenFn.asCallable();
         V6MicrotaskQueue.enqueue(() -> {
           try {
-            then.call(v, new V6Value[] {
-              new V6Value(V6Value.TAG_FUNC, 0,
-                         (V6Callable)(t, a) -> {
-                           resolve(V6Value.argAt(a, 0));
-                           return UNDEF;
-                         }),
-              new V6Value(V6Value.TAG_FUNC, 0,
-                         (V6Callable)(t, a) -> {
-                           reject(V6Value.argAt(a, 0));
-                           return UNDEF;
-                         })});
+            then.call(
+                v,
+                new V6Value[] {
+                    new V6Value(V6Value.TAG_FUNC, 0, (V6Callable)(t, a) -> {
+                      resolve(V6Value.argAt(a, 0));
+                      return UNDEF;
+                    }), new V6Value(V6Value.TAG_FUNC, 0, (V6Callable)(t, a) -> {
+                      reject(V6Value.argAt(a, 0));
+                      return UNDEF;
+                    })});
           } catch (V6Throw e) {
             reject(e.value);
           } catch (RuntimeException e) {
-            reject(new V6Value(V6Value.TAG_STR, 0, String.valueOf(e.getMessage())));
+            reject(new V6Value(V6Value.TAG_STR, 0,
+                               String.valueOf(e.getMessage())));
           }
         });
         return;
@@ -109,14 +109,17 @@ public final class V6Promise extends V6Object {
     boolean hasOk = onFulfilled.tag() == V6Value.TAG_FUNC;
     boolean hasErr = onRejected.tag() == V6Value.TAG_FUNC;
     addCallbacks(
-        v -> {
+        v
+        -> {
           if (hasOk) {
             try {
-              result.resolve(onFulfilled.asCallable().call(UNDEF, new V6Value[] {v}));
+              result.resolve(
+                  onFulfilled.asCallable().call(UNDEF, new V6Value[] {v}));
             } catch (V6Throw e) {
               result.reject(e.value);
             } catch (RuntimeException e) {
-              result.reject(new V6Value(V6Value.TAG_STR, 0, String.valueOf(e.getMessage())));
+              result.reject(new V6Value(V6Value.TAG_STR, 0,
+                                        String.valueOf(e.getMessage())));
             }
           } else {
             result.resolve(v);
@@ -125,11 +128,13 @@ public final class V6Promise extends V6Object {
         v -> {
           if (hasErr) {
             try {
-              result.resolve(onRejected.asCallable().call(UNDEF, new V6Value[] {v}));
+              result.resolve(
+                  onRejected.asCallable().call(UNDEF, new V6Value[] {v}));
             } catch (V6Throw e) {
               result.reject(e.value);
             } catch (RuntimeException e) {
-              result.reject(new V6Value(V6Value.TAG_STR, 0, String.valueOf(e.getMessage())));
+              result.reject(new V6Value(V6Value.TAG_STR, 0,
+                                        String.valueOf(e.getMessage())));
             }
           } else {
             result.reject(v);
