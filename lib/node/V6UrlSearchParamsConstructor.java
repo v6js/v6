@@ -2,8 +2,8 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 
-public final class V6UrlSearchParamsConstructor extends V6Object
-    implements V6NativeConstructor {
+public final class V6UrlSearchParamsConstructor
+    extends V6Object implements V6NativeConstructor {
   public static final V6Object PROTOTYPE = buildPrototype();
 
   public V6UrlSearchParamsConstructor() {
@@ -50,12 +50,14 @@ public final class V6UrlSearchParamsConstructor extends V6Object
     V6UrlSearchParamsObject o;
     if (first.tag() == V6Value.TAG_STR) {
       o = parseInto(first.toString());
-    } else if (first.tag() == V6Value.TAG_OBJ && first.ref() instanceof V6UrlSearchParamsObject) {
+    } else if (first.tag() == V6Value.TAG_OBJ && first.ref() instanceof
+                                                     V6UrlSearchParamsObject) {
       o = new V6UrlSearchParamsObject();
       o.setProto(PROTOTYPE);
       for (String[] p : ((V6UrlSearchParamsObject)first.ref()).pairs)
         o.pairs.add(new String[] {p[0], p[1]});
-    } else if (first.tag() == V6Value.TAG_OBJ && first.ref() instanceof V6Array) {
+    } else if (first.tag() == V6Value.TAG_OBJ && first.ref() instanceof
+                                                     V6Array) {
       o = new V6UrlSearchParamsObject();
       o.setProto(PROTOTYPE);
       V6Array arr = (V6Array)first.ref();
@@ -64,7 +66,8 @@ public final class V6UrlSearchParamsConstructor extends V6Object
         V6Value entry = arr.get(Integer.toString(i));
         if (entry.tag() == V6Value.TAG_OBJ) {
           V6Object pair = (V6Object)entry.ref();
-          o.pairs.add(new String[] {pair.get("0").toString(), pair.get("1").toString()});
+          o.pairs.add(new String[] {pair.get("0").toString(),
+                                    pair.get("1").toString()});
         }
       }
     } else if (first.tag() == V6Value.TAG_OBJ) {
@@ -194,7 +197,7 @@ public final class V6UrlSearchParamsConstructor extends V6Object
             V6Callable cb = V6Value.argAt(a, 0).asCallable();
             for (String[] p : self(t).pairs)
               cb.call(new V6Value(V6Value.TAG_UNDEF, 0, null),
-                     new V6Value[] {str(p[1]), str(p[0]), t});
+                      new V6Value[] {str(p[1]), str(p[0]), t});
             return new V6Value(V6Value.TAG_UNDEF, 0, null);
           }));
 

@@ -4,7 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class V6ChildProcess {
-  private V6ChildProcess() {}
+  private V6ChildProcess() {
+  }
 
   private static V6Value str(String s) {
     return new V6Value(V6Value.TAG_STR, 0, s);
@@ -66,7 +67,8 @@ public final class V6ChildProcess {
           V6EventLoop.postExternal(
               ()
                   -> target.get("push").asCallable().call(
-                      objValue(target), new V6Value[] {objValue(new V6Buffer(chunk))}));
+                      objValue(target),
+                      new V6Value[] {objValue(new V6Buffer(chunk))}));
         }
       } catch (IOException ignored) {
       } finally {
@@ -89,10 +91,12 @@ public final class V6ChildProcess {
         V6EventLoop.postExternal(() -> {
           cp.get("emit").asCallable().call(
               objValue(cp),
-              new V6Value[] {str("exit"), new V6Value(V6Value.TAG_NUM, code, null), NUL});
+              new V6Value[] {str("exit"),
+                             new V6Value(V6Value.TAG_NUM, code, null), NUL});
           cp.get("emit").asCallable().call(
               objValue(cp),
-              new V6Value[] {str("close"), new V6Value(V6Value.TAG_NUM, code, null), NUL});
+              new V6Value[] {str("close"),
+                             new V6Value(V6Value.TAG_NUM, code, null), NUL});
         });
       } catch (InterruptedException ignored) {
       } finally {
@@ -115,7 +119,8 @@ public final class V6ChildProcess {
                 options = (V6Object)a.ref();
             boolean shell = options != null && options.get("shell").truthy();
 
-            List<String> cmd = shell ? shellCommand(command) : argvCommand(command, argsVal);
+            List<String> cmd =
+                shell ? shellCommand(command) : argvCommand(command, argsVal);
             ProcessBuilder pb = new ProcessBuilder(cmd);
             if (options != null) {
               V6Value cwdVal = options.get("cwd");
@@ -134,7 +139,8 @@ public final class V6ChildProcess {
                   ()
                       -> cp.get("emit").asCallable().call(
                           objValue(cp),
-                          new V6Value[] {str("error"), str(String.valueOf(e.getMessage()))}));
+                          new V6Value[] {str("error"),
+                                         str(String.valueOf(e.getMessage()))}));
               return objValue(cp);
             }
 
@@ -153,13 +159,15 @@ public final class V6ChildProcess {
             final Process fproc = proc;
             stdin.set("_write", fn((t, a2) -> {
                         try {
-                          fproc.getOutputStream().write(bytesOf(V6Value.argAt(a2, 0)));
+                          fproc.getOutputStream().write(
+                              bytesOf(V6Value.argAt(a2, 0)));
                           fproc.getOutputStream().flush();
                         } catch (IOException ignored) {
                         }
-                        V6Callable cb = a2.length > 2 && a2[2].tag() == V6Value.TAG_FUNC
-                            ? a2[2].asCallable()
-                            : null;
+                        V6Callable cb =
+                            a2.length > 2 && a2[2].tag() == V6Value.TAG_FUNC
+                                ? a2[2].asCallable()
+                                : null;
                         if (cb != null)
                           cb.call(UNDEF, new V6Value[0]);
                         return UNDEF;
@@ -170,9 +178,9 @@ public final class V6ChildProcess {
             waitForExit(proc, cp);
 
             cp.set("kill", fn((t, a2) -> {
-                    fproc.destroy();
-                    return new V6Value(V6Value.TAG_BOOL, 1, null);
-                  }));
+                     fproc.destroy();
+                     return new V6Value(V6Value.TAG_BOOL, 1, null);
+                   }));
 
             return objValue(cp);
           }));
@@ -200,15 +208,18 @@ public final class V6ChildProcess {
                     V6Value errVal =
                         code == 0 ? NUL : str("Command failed: " + command);
                     fcb.call(UNDEF,
-                            new V6Value[] {errVal, str(new String(out, StandardCharsets.UTF_8)),
-                                          str(new String(err, StandardCharsets.UTF_8))});
+                             new V6Value[] {
+                                 errVal,
+                                 str(new String(out, StandardCharsets.UTF_8)),
+                                 str(new String(err, StandardCharsets.UTF_8))});
                   }
                 });
               } catch (Exception e) {
                 V6EventLoop.postExternal(() -> {
                   if (fcb != null)
                     fcb.call(UNDEF,
-                            new V6Value[] {str(String.valueOf(e.getMessage())), str(""), str("")});
+                             new V6Value[] {str(String.valueOf(e.getMessage())),
+                                            str(""), str("")});
                 });
               } finally {
                 V6EventLoop.unref();
@@ -256,6 +267,126 @@ public final class V6ChildProcess {
               result.set("error", str(String.valueOf(e.getMessage())));
             }
             return objValue(result);
+          }));
+
+    o.set("execFile", fn((thisArg, args) -> {
+            String file = V6Value.argAt(args, 0).toString();
+            V6Value argsVal = V6Value.argAt(args, 1);
+            V6Callable cb = null;
+            for (int i = 1; i < args.length; i++)
+              if (args[i].tag() == V6Value.TAG_FUNC) {
+                cb = args[i].asCallable();
+                break;
+              }
+            final V6Callable fcb = cb;
+            List<String> cmd = argvCommand(file, argsVal);
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            V6EventLoop.ref();
+            Thread th = new Thread(() -> {
+              try {
+                Process proc = pb.start();
+                byte[] out = proc.getInputStream().readAllBytes();
+                byte[] err = proc.getErrorStream().readAllBytes();
+                int code = proc.waitFor();
+                V6EventLoop.postExternal(() -> {
+                  if (fcb != null) {
+                    V6Value errVal =
+                        code == 0 ? NUL : str("Command failed: " + file);
+                    fcb.call(UNDEF,
+                             new V6Value[] {
+                                 errVal,
+                                 str(new String(out, StandardCharsets.UTF_8)),
+                                 str(new String(err, StandardCharsets.UTF_8))});
+                  }
+                });
+              } catch (Exception e) {
+                V6EventLoop.postExternal(() -> {
+                  if (fcb != null)
+                    fcb.call(UNDEF,
+                             new V6Value[] {str(String.valueOf(e.getMessage())),
+                                            str(""), str("")});
+                });
+              } finally {
+                V6EventLoop.unref();
+              }
+            });
+            th.setDaemon(true);
+            th.start();
+            return UNDEF;
+          }));
+
+    o.set("fork", fn((thisArg, args) -> {
+            String modulePath = V6Value.argAt(args, 0).toString();
+            V6Value argsVal = V6Value.argAt(args, 1);
+            List<String> extraArgs = new ArrayList<>();
+            if (argsVal.tag() == V6Value.TAG_OBJ && argsVal.ref() instanceof
+                                                        V6Array) {
+              V6Array arr = (V6Array)argsVal.ref();
+              int n = (int)arr.get("length").num();
+              for (int i = 0; i < n; i++)
+                extraArgs.add(arr.get(Integer.toString(i)).toString());
+            }
+
+            String exePath = V6IpcUtil.detectV6ExecutablePath();
+            V6EventEmitterObject cp = new V6EventEmitterObject();
+            cp.setProto(V6EventEmitterConstructor.PROTOTYPE);
+
+            if (exePath == null) {
+              V6MicrotaskQueue.enqueue(
+                  ()
+                      -> cp.get("emit").asCallable().call(
+                          objValue(cp),
+                          new V6Value[] {str("error"),
+                                         str("child_process.fork is not " +
+                                             "supported when running via "
+                                             + "'java -jar' (no compiler " +
+                                               "available to run a second "
+                                             + "script)")}));
+              return objValue(cp);
+            }
+
+            List<String> cmd = new ArrayList<>();
+            cmd.add(exePath);
+            cmd.add(modulePath);
+            cmd.addAll(extraArgs);
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.environment().put("V6_FORK_MODE", "1");
+
+            Process proc;
+            try {
+              proc = pb.start();
+            } catch (IOException e) {
+              V6MicrotaskQueue.enqueue(
+                  ()
+                      -> cp.get("emit").asCallable().call(
+                          objValue(cp),
+                          new V6Value[] {str("error"),
+                                         str(String.valueOf(e.getMessage()))}));
+              return objValue(cp);
+            }
+
+            final Process fproc = proc;
+            cp.set("pid", new V6Value(V6Value.TAG_NUM, proc.pid(), null));
+            cp.set("send", fn((t, a) -> {
+                     V6IpcUtil.sendMessage(fproc.getOutputStream(),
+                                           V6Value.argAt(a, 0));
+                     return new V6Value(V6Value.TAG_BOOL, 1, null);
+                   }));
+            cp.set("kill", fn((t, a) -> {
+                     fproc.destroy();
+                     return new V6Value(V6Value.TAG_BOOL, 1, null);
+                   }));
+
+            V6IpcUtil.pumpMessages(
+                proc.getInputStream(), System.out,
+                msg
+                -> cp.get("emit").asCallable().call(
+                    objValue(cp), new V6Value[] {str("message"), msg}));
+            V6IpcUtil.pumpMessages(proc.getErrorStream(), System.err,
+                                   msg -> {});
+            waitForExit(proc, cp);
+
+            return objValue(cp);
           }));
 
     return o;

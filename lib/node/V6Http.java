@@ -11,7 +11,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 
 public final class V6Http {
-  private V6Http() {}
+  private V6Http() {
+  }
 
   private static V6Value str(String s) {
     return new V6Value(V6Value.TAG_STR, 0, s);
@@ -45,8 +46,9 @@ public final class V6Http {
     return keys;
   }
 
-  private static void handleHttpExchange(com.sun.net.httpserver.HttpExchange exchange,
-                                         V6EventEmitterObject server) throws IOException {
+  private static void
+  handleHttpExchange(com.sun.net.httpserver.HttpExchange exchange,
+                     V6EventEmitterObject server) throws IOException {
     V6EventEmitterObject req = new V6EventEmitterObject();
     req.setProto(V6EventEmitterConstructor.PROTOTYPE);
     req.set("method", str(exchange.getRequestMethod()));
@@ -54,7 +56,8 @@ public final class V6Http {
     V6Object reqHeaders = new V6Object();
     for (Map.Entry<String, java.util.List<String>> e :
          exchange.getRequestHeaders().entrySet())
-      reqHeaders.set(e.getKey().toLowerCase(), str(String.join(", ", e.getValue())));
+      reqHeaders.set(e.getKey().toLowerCase(),
+                     str(String.join(", ", e.getValue())));
     req.set("headers", objValue(reqHeaders));
     byte[] bodyBytes = exchange.getRequestBody().readAllBytes();
 
@@ -66,62 +69,69 @@ public final class V6Http {
     boolean[] ended = {false};
 
     res.set("setHeader", fn((t, a) -> {
-            resHeaders.put(V6Value.argAt(a, 0).toString(), V6Value.argAt(a, 1).toString());
-            return UNDEF;
-          }));
+              resHeaders.put(V6Value.argAt(a, 0).toString(),
+                             V6Value.argAt(a, 1).toString());
+              return UNDEF;
+            }));
     res.set("getHeader", fn((t, a) -> {
-            String v = resHeaders.get(V6Value.argAt(a, 0).toString());
-            return v != null ? str(v) : UNDEF;
-          }));
+              String v = resHeaders.get(V6Value.argAt(a, 0).toString());
+              return v != null ? str(v) : UNDEF;
+            }));
     res.set("writeHead", fn((t, a) -> {
-            ((V6Object)t.ref()).set("statusCode", num(V6Value.argAt(a, 0).toNumber()));
-            for (V6Value v : a)
-              if (v.tag() == V6Value.TAG_OBJ && v.ref() instanceof V6Object &&
-                  !(v.ref() instanceof V6Array)) {
-                V6Object h = (V6Object)v.ref();
-                for (String k : keysOf(h))
-                  resHeaders.put(k, h.get(k).toString());
-              }
-            return t;
-          }));
+              ((V6Object)t.ref())
+                  .set("statusCode", num(V6Value.argAt(a, 0).toNumber()));
+              for (V6Value v : a)
+                if (v.tag() == V6Value.TAG_OBJ && v.ref() instanceof V6Object &&
+                    !(v.ref() instanceof V6Array)) {
+                  V6Object h = (V6Object)v.ref();
+                  for (String k : keysOf(h))
+                    resHeaders.put(k, h.get(k).toString());
+                }
+              return t;
+            }));
     res.set("write", fn((t, a) -> {
-            byte[] bytes = bytesOf(V6Value.argAt(a, 0));
-            bodyBuf.write(bytes, 0, bytes.length);
-            return new V6Value(V6Value.TAG_BOOL, 1, null);
-          }));
-    res.set("end", fn((t, a) -> {
-            if (a.length > 0 && a[0].tag() != V6Value.TAG_FUNC) {
-              byte[] bytes = bytesOf(a[0]);
+              byte[] bytes = bytesOf(V6Value.argAt(a, 0));
               bodyBuf.write(bytes, 0, bytes.length);
-            }
-            try {
-              byte[] body = bodyBuf.toByteArray();
-              for (Map.Entry<String, String> e : resHeaders.entrySet())
-                exchange.getResponseHeaders().add(e.getKey(), e.getValue());
-              exchange.sendResponseHeaders(
-                  (int)((V6Object)t.ref()).get("statusCode").toNumber(), body.length);
-              exchange.getResponseBody().write(body);
-              exchange.getResponseBody().close();
-            } catch (IOException ignored) {
-            } finally {
-              exchange.close();
-              ended[0] = true;
-            }
-            V6Callable cb = a.length > 0 && a[a.length - 1].tag() == V6Value.TAG_FUNC
-                ? a[a.length - 1].asCallable()
-                : null;
-            if (cb != null)
-              cb.call(UNDEF, new V6Value[0]);
-            return UNDEF;
-          }));
+              return new V6Value(V6Value.TAG_BOOL, 1, null);
+            }));
+    res.set("end", fn((t, a) -> {
+              if (a.length > 0 && a[0].tag() != V6Value.TAG_FUNC) {
+                byte[] bytes = bytesOf(a[0]);
+                bodyBuf.write(bytes, 0, bytes.length);
+              }
+              try {
+                byte[] body = bodyBuf.toByteArray();
+                for (Map.Entry<String, String> e : resHeaders.entrySet())
+                  exchange.getResponseHeaders().add(e.getKey(), e.getValue());
+                exchange.sendResponseHeaders(
+                    (int)((V6Object)t.ref()).get("statusCode").toNumber(),
+                    body.length);
+                exchange.getResponseBody().write(body);
+                exchange.getResponseBody().close();
+              } catch (IOException ignored) {
+              } finally {
+                exchange.close();
+                ended[0] = true;
+              }
+              V6Callable cb =
+                  a.length > 0 && a[a.length - 1].tag() == V6Value.TAG_FUNC
+                      ? a[a.length - 1].asCallable()
+                      : null;
+              if (cb != null)
+                cb.call(UNDEF, new V6Value[0]);
+              return UNDEF;
+            }));
 
     server.get("emit").asCallable().call(
-        objValue(server), new V6Value[] {str("request"), objValue(req), objValue(res)});
+        objValue(server),
+        new V6Value[] {str("request"), objValue(req), objValue(res)});
 
     if (bodyBytes.length > 0)
       req.get("emit").asCallable().call(
-          objValue(req), new V6Value[] {str("data"), objValue(new V6Buffer(bodyBytes))});
-    req.get("emit").asCallable().call(objValue(req), new V6Value[] {str("end")});
+          objValue(req),
+          new V6Value[] {str("data"), objValue(new V6Buffer(bodyBytes))});
+    req.get("emit").asCallable().call(objValue(req),
+                                      new V6Value[] {str("end")});
 
     if (!ended[0]) {
       try {
@@ -133,109 +143,164 @@ public final class V6Http {
     }
   }
 
-  private static V6Object buildCreateServerModule() {
+  private static byte[] pemBytesOf(V6Value v) {
+    if (v.tag() == V6Value.TAG_OBJ && v.ref() instanceof V6Buffer)
+      return ((V6Buffer)v.ref()).toBytes();
+    if (v.isUndefined())
+      return new byte[0];
+    return v.toString().getBytes(StandardCharsets.UTF_8);
+  }
+
+  private static V6Object buildCreateServerModule(boolean isHttps) {
     V6Object o = new V6Object();
     o.set("createServer", fn((thisArg, args) -> {
             V6Callable requestListener = null;
-            for (V6Value a : args)
+            V6Object tlsOptions = null;
+            for (V6Value a : args) {
               if (a.tag() == V6Value.TAG_FUNC)
                 requestListener = a.asCallable();
+              else if (a.tag() == V6Value.TAG_OBJ)
+                tlsOptions = (V6Object)a.ref();
+            }
             final V6Callable fReqListener = requestListener;
+
+            javax.net.ssl.SSLContext sslCtx = null;
+            if (isHttps) {
+              if (tlsOptions == null)
+                throw new V6Throw(str("https.createServer requires { key, " +
+                                      "cert } options (PEM-encoded)"));
+              try {
+                sslCtx = V6TlsUtil.buildServerContext(
+                    pemBytesOf(tlsOptions.get("key")),
+                    pemBytesOf(tlsOptions.get("cert")));
+              } catch (Exception e) {
+                throw new V6Throw(
+                    str("https.createServer: failed to load TLS key/cert: " +
+                        e.getMessage()));
+              }
+            }
+            final javax.net.ssl.SSLContext fSslCtx = sslCtx;
 
             V6EventEmitterObject server = new V6EventEmitterObject();
             server.setProto(V6EventEmitterConstructor.PROTOTYPE);
             if (fReqListener != null)
               server.get("on").asCallable().call(
-                  objValue(server), new V6Value[] {str("request"), fn(fReqListener)});
+                  objValue(server),
+                  new V6Value[] {str("request"), fn(fReqListener)});
 
             com.sun.net.httpserver.HttpServer[] httpServerHolder =
                 new com.sun.net.httpserver.HttpServer[1];
 
             server.set("listen", fn((t, a) -> {
-                        int port = (int)V6Value.argAt(a, 0).toNumber();
-                        V6Callable listenCb = null;
-                        for (V6Value v : a)
-                          if (v.tag() == V6Value.TAG_FUNC)
-                            listenCb = v.asCallable();
-                        final V6Callable fListenCb = listenCb;
-                        try {
-                          com.sun.net.httpserver.HttpServer hs =
-                              com.sun.net.httpserver.HttpServer.create(
-                                  new InetSocketAddress(port), 0);
-                          httpServerHolder[0] = hs;
-                          hs.createContext("/", exchange -> {
-                            CountDownLatch latch = new CountDownLatch(1);
-                            V6EventLoop.postExternal(() -> {
-                              try {
-                                handleHttpExchange(exchange, server);
-                              } catch (IOException ignored) {
-                              } finally {
-                                latch.countDown();
-                              }
-                            });
-                            try {
-                              latch.await();
-                            } catch (InterruptedException ignored) {
-                            }
-                          });
-                          hs.setExecutor(Executors.newCachedThreadPool(r -> {
-                            Thread th = new Thread(r);
-                            th.setDaemon(true);
-                            return th;
-                          }));
-                          hs.start();
-                          V6EventLoop.ref();
-                          if (fListenCb != null)
-                            V6MicrotaskQueue.enqueue(
-                                () -> fListenCb.call(UNDEF, new V6Value[0]));
-                          V6MicrotaskQueue.enqueue(
-                              ()
-                                  -> server.get("emit").asCallable().call(
-                                      objValue(server), new V6Value[] {str("listening")}));
-                        } catch (IOException e) {
-                          V6MicrotaskQueue.enqueue(
-                              ()
-                                  -> server.get("emit").asCallable().call(
-                                      objValue(server),
-                                      new V6Value[] {
-                                          str("error"), str(String.valueOf(e.getMessage()))}));
-                        }
-                        return t;
-                      }));
+                         int port = (int)V6Value.argAt(a, 0).toNumber();
+                         V6Callable listenCb = null;
+                         for (V6Value v : a)
+                           if (v.tag() == V6Value.TAG_FUNC)
+                             listenCb = v.asCallable();
+                         final V6Callable fListenCb = listenCb;
+                         try {
+                           com.sun.net.httpserver.HttpServer hs;
+                           if (fSslCtx != null) {
+                             com.sun.net.httpserver.HttpsServer hss =
+                                 com.sun.net.httpserver.HttpsServer.create(
+                                     new InetSocketAddress(port), 0);
+                             hss.setHttpsConfigurator(
+                                 new com.sun.net.httpserver.HttpsConfigurator(
+                                     fSslCtx));
+                             hs = hss;
+                           } else {
+                             hs = com.sun.net.httpserver.HttpServer.create(
+                                 new InetSocketAddress(port), 0);
+                           }
+                           httpServerHolder[0] = hs;
+                           hs.createContext("/", exchange -> {
+                             CountDownLatch latch = new CountDownLatch(1);
+                             V6EventLoop.postExternal(() -> {
+                               try {
+                                 handleHttpExchange(exchange, server);
+                               } catch (IOException ignored) {
+                               } finally {
+                                 latch.countDown();
+                               }
+                             });
+                             try {
+                               latch.await();
+                             } catch (InterruptedException ignored) {
+                             }
+                           });
+                           hs.setExecutor(Executors.newCachedThreadPool(r -> {
+                             Thread th = new Thread(r);
+                             th.setDaemon(true);
+                             return th;
+                           }));
+                           hs.start();
+                           V6EventLoop.ref();
+                           if (fListenCb != null)
+                             V6MicrotaskQueue.enqueue(
+                                 () -> fListenCb.call(UNDEF, new V6Value[0]));
+                           V6MicrotaskQueue.enqueue(
+                               ()
+                                   -> server.get("emit").asCallable().call(
+                                       objValue(server),
+                                       new V6Value[] {str("listening")}));
+                         } catch (IOException e) {
+                           V6MicrotaskQueue.enqueue(
+                               ()
+                                   -> server.get("emit").asCallable().call(
+                                       objValue(server),
+                                       new V6Value[] {str("error"),
+                                                      str(String.valueOf(
+                                                          e.getMessage()))}));
+                         }
+                         return t;
+                       }));
 
             server.set("close", fn((t, a) -> {
-                        if (httpServerHolder[0] != null) {
-                          httpServerHolder[0].stop(0);
-                          V6EventLoop.unref();
-                        }
-                        V6Callable cb = a.length > 0 && a[0].tag() == V6Value.TAG_FUNC
-                            ? a[0].asCallable()
-                            : null;
-                        server.get("emit").asCallable().call(objValue(server),
-                                                             new V6Value[] {str("close")});
-                        if (cb != null)
-                          cb.call(UNDEF, new V6Value[0]);
-                        return t;
-                      }));
+                         if (httpServerHolder[0] != null) {
+                           httpServerHolder[0].stop(0);
+                           V6EventLoop.unref();
+                         }
+                         V6Callable cb =
+                             a.length > 0 && a[0].tag() == V6Value.TAG_FUNC
+                                 ? a[0].asCallable()
+                                 : null;
+                         server.get("emit").asCallable().call(
+                             objValue(server), new V6Value[] {str("close")});
+                         if (cb != null)
+                           cb.call(UNDEF, new V6Value[0]);
+                         return t;
+                       }));
 
             return objValue(server);
           }));
     return o;
   }
 
-  private static void sendHttpRequest(String urlStr, String method, Map<String, String> headers,
-                                      byte[] body, V6EventEmitterObject reqObj,
-                                      V6Callable responseCb) {
+  private static final HttpClient DEFAULT_CLIENT = HttpClient.newHttpClient();
+
+  private static void sendHttpRequest(String urlStr, String method,
+                                      Map<String, String> headers, byte[] body,
+                                      V6EventEmitterObject reqObj,
+                                      V6Callable responseCb,
+                                      boolean rejectUnauthorized) {
     try {
       HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(urlStr));
       for (Map.Entry<String, String> e : headers.entrySet())
         builder.header(e.getKey(), e.getValue());
-      HttpRequest.BodyPublisher pub = body.length > 0
-          ? HttpRequest.BodyPublishers.ofByteArray(body)
-          : HttpRequest.BodyPublishers.noBody();
+      HttpRequest.BodyPublisher pub =
+          body.length > 0 ? HttpRequest.BodyPublishers.ofByteArray(body)
+                          : HttpRequest.BodyPublishers.noBody();
       builder.method(method, pub);
       HttpRequest req = builder.build();
-      HttpClient client = HttpClient.newHttpClient();
+      HttpClient client = DEFAULT_CLIENT;
+      if (urlStr.startsWith("https:") && !rejectUnauthorized) {
+        try {
+          client = HttpClient.newBuilder()
+                       .sslContext(V6TlsUtil.buildClientContext(false))
+                       .build();
+        } catch (Exception ignored) {
+        }
+      }
       V6EventLoop.ref();
       client.sendAsync(req, HttpResponse.BodyHandlers.ofByteArray())
           .whenComplete((resp, err) -> {
@@ -243,22 +308,26 @@ public final class V6Http {
               if (err != null) {
                 reqObj.get("emit").asCallable().call(
                     objValue(reqObj),
-                    new V6Value[] {str("error"), str(String.valueOf(err.getMessage()))});
+                    new V6Value[] {str("error"),
+                                   str(String.valueOf(err.getMessage()))});
               } else {
                 V6EventEmitterObject resObj = new V6EventEmitterObject();
                 resObj.setProto(V6EventEmitterConstructor.PROTOTYPE);
                 resObj.set("statusCode", num(resp.statusCode()));
                 V6Object headersOut = new V6Object();
                 resp.headers().map().forEach(
-                    (k, v) -> headersOut.set(k.toLowerCase(), str(String.join(", ", v))));
+                    (k, v)
+                        -> headersOut.set(k.toLowerCase(),
+                                          str(String.join(", ", v))));
                 resObj.set("headers", objValue(headersOut));
                 if (responseCb != null)
                   responseCb.call(UNDEF, new V6Value[] {objValue(resObj)});
                 resObj.get("emit").asCallable().call(
                     objValue(resObj),
-                    new V6Value[] {str("data"), objValue(new V6Buffer(resp.body()))});
-                resObj.get("emit").asCallable().call(objValue(resObj),
-                                                     new V6Value[] {str("end")});
+                    new V6Value[] {str("data"),
+                                   objValue(new V6Buffer(resp.body()))});
+                resObj.get("emit").asCallable().call(
+                    objValue(resObj), new V6Value[] {str("end")});
               }
               V6EventLoop.unref();
             });
@@ -268,33 +337,46 @@ public final class V6Http {
           ()
               -> reqObj.get("emit").asCallable().call(
                   objValue(reqObj),
-                  new V6Value[] {str("error"), str(String.valueOf(e.getMessage()))}));
+                  new V6Value[] {str("error"),
+                                 str(String.valueOf(e.getMessage()))}));
     }
   }
 
-  private static V6Value requestImpl(V6Value[] args, boolean autoEnd) {
+  private static V6Value requestImpl(V6Value[] args, boolean autoEnd,
+                                     boolean isHttps) {
     String urlStr;
     String method = "GET";
     Map<String, String> headers = new LinkedHashMap<>();
     V6Callable responseCb = null;
+    boolean rejectUnauthorized = true;
     V6Value firstArg = V6Value.argAt(args, 0);
+    String defaultProtocol = isHttps ? "https:" : "http:";
 
     if (firstArg.tag() == V6Value.TAG_STR) {
       urlStr = firstArg.toString();
-    } else if (firstArg.tag() == V6Value.TAG_OBJ && firstArg.ref() instanceof V6UrlObject) {
+    } else if (firstArg.tag() == V6Value.TAG_OBJ && firstArg.ref() instanceof
+                                                        V6UrlObject) {
       urlStr = ((V6UrlObject)firstArg.ref()).href();
     } else if (firstArg.tag() == V6Value.TAG_OBJ) {
       V6Object opts = (V6Object)firstArg.ref();
-      String protocol = opts.get("protocol").isUndefined() ? "http:" : opts.get("protocol").toString();
+      String protocol = opts.get("protocol").isUndefined()
+                            ? defaultProtocol
+                            : opts.get("protocol").toString();
       String host = !opts.get("host").isUndefined()
-          ? opts.get("host").toString()
-          : (!opts.get("hostname").isUndefined() ? opts.get("hostname").toString() : "localhost");
-      String path = opts.get("path").isUndefined() ? "/" : opts.get("path").toString();
+                        ? opts.get("host").toString()
+                        : (!opts.get("hostname").isUndefined()
+                               ? opts.get("hostname").toString()
+                               : "localhost");
+      String path =
+          opts.get("path").isUndefined() ? "/" : opts.get("path").toString();
       V6Value portVal = opts.get("port");
-      String portPart = portVal.isUndefined() ? "" : ":" + (int)portVal.toNumber();
+      String portPart =
+          portVal.isUndefined() ? "" : ":" + (int)portVal.toNumber();
       urlStr = protocol + "//" + host + portPart + path;
       if (!opts.get("method").isUndefined())
         method = opts.get("method").toString();
+      if (!opts.get("rejectUnauthorized").isUndefined())
+        rejectUnauthorized = opts.get("rejectUnauthorized").truthy();
       V6Value headersVal = opts.get("headers");
       if (headersVal.tag() == V6Value.TAG_OBJ) {
         V6Object h = (V6Object)headersVal.ref();
@@ -302,7 +384,7 @@ public final class V6Http {
           headers.put(k, h.get(k).toString());
       }
     } else {
-      urlStr = "http://localhost/";
+      urlStr = defaultProtocol + "//localhost/";
     }
 
     for (V6Value a : args)
@@ -312,52 +394,58 @@ public final class V6Http {
     final V6Callable fResponseCb = responseCb;
     final String fMethod = method;
     final String fUrlStr = urlStr;
+    final boolean fRejectUnauthorized = rejectUnauthorized;
 
     V6EventEmitterObject reqObj = new V6EventEmitterObject();
     reqObj.setProto(V6EventEmitterConstructor.PROTOTYPE);
     java.io.ByteArrayOutputStream bodyBuf = new java.io.ByteArrayOutputStream();
 
     reqObj.set("write", fn((t, a) -> {
-            byte[] b = bytesOf(V6Value.argAt(a, 0));
-            bodyBuf.write(b, 0, b.length);
-            return new V6Value(V6Value.TAG_BOOL, 1, null);
-          }));
+                 byte[] b = bytesOf(V6Value.argAt(a, 0));
+                 bodyBuf.write(b, 0, b.length);
+                 return new V6Value(V6Value.TAG_BOOL, 1, null);
+               }));
     reqObj.set("setHeader", fn((t, a) -> {
-            headers.put(V6Value.argAt(a, 0).toString(), V6Value.argAt(a, 1).toString());
-            return t;
-          }));
+                 headers.put(V6Value.argAt(a, 0).toString(),
+                             V6Value.argAt(a, 1).toString());
+                 return t;
+               }));
     reqObj.set("end", fn((t, a) -> {
-            if (a.length > 0 && a[0].tag() != V6Value.TAG_FUNC) {
-              byte[] b = bytesOf(a[0]);
-              bodyBuf.write(b, 0, b.length);
-            }
-            sendHttpRequest(fUrlStr, fMethod, headers, bodyBuf.toByteArray(), reqObj,
-                           fResponseCb);
-            return UNDEF;
-          }));
+                 if (a.length > 0 && a[0].tag() != V6Value.TAG_FUNC) {
+                   byte[] b = bytesOf(a[0]);
+                   bodyBuf.write(b, 0, b.length);
+                 }
+                 sendHttpRequest(fUrlStr, fMethod, headers,
+                                 bodyBuf.toByteArray(), reqObj, fResponseCb,
+                                 fRejectUnauthorized);
+                 return UNDEF;
+               }));
     reqObj.set("abort", fn((t, a) -> UNDEF));
 
     if (autoEnd)
-      sendHttpRequest(urlStr, "GET", headers, new byte[0], reqObj, fResponseCb);
+      sendHttpRequest(urlStr, "GET", headers, new byte[0], reqObj, fResponseCb,
+                      rejectUnauthorized);
 
     return objValue(reqObj);
   }
 
   public static V6Object build() {
-    V6Object o = buildCreateServerModule();
-    o.set("request", fn((thisArg, args) -> requestImpl(args, false)));
-    o.set("get", fn((thisArg, args) -> requestImpl(args, true)));
+    V6Object o = buildCreateServerModule(false);
+    o.set("request", fn((thisArg, args) -> requestImpl(args, false, false)));
+    o.set("get", fn((thisArg, args) -> requestImpl(args, true, false)));
+    V6HttpAgentConstructor agentCtor = new V6HttpAgentConstructor();
+    o.set("Agent", objValue(agentCtor));
+    o.set("globalAgent", agentCtor.construct(new V6Value[0]));
     return o;
   }
 
   public static V6Object buildHttps() {
-    V6Object o = new V6Object();
-    o.set("request", fn((thisArg, args) -> requestImpl(args, false)));
-    o.set("get", fn((thisArg, args) -> requestImpl(args, true)));
-    o.set("createServer", fn((thisArg, args) -> {
-            throw new V6Throw(str(
-                "https.createServer is not supported (no TLS certificate support in this runtime)"));
-          }));
+    V6Object o = buildCreateServerModule(true);
+    o.set("request", fn((thisArg, args) -> requestImpl(args, false, true)));
+    o.set("get", fn((thisArg, args) -> requestImpl(args, true, true)));
+    V6HttpAgentConstructor agentCtor = new V6HttpAgentConstructor();
+    o.set("Agent", objValue(agentCtor));
+    o.set("globalAgent", agentCtor.construct(new V6Value[0]));
     return o;
   }
 }

@@ -76,7 +76,7 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/core/V6Iterator.java lib/core/V6Ref.java lib/core/V6Callable.java \
                 lib/core/V6Closure.java lib/core/V6Builtins.java lib/core/V6Class.java \
                 lib/core/V6Throw.java lib/core/V6Rope.java lib/core/V6NativeConstructor.java \
-                lib/core/V6MapObject.java lib/core/V6SetObject.java \
+                lib/core/V6MapObject.java lib/core/V6SetObject.java lib/core/V6MapKey.java \
                 lib/core/V6MapConstructor.java lib/core/V6SetConstructor.java \
                 lib/core/V6Symbol.java lib/core/V6SymbolFunction.java \
                 lib/core/V6Generator.java lib/core/V6GeneratorFunction.java \
@@ -87,22 +87,26 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/core/V6AsyncFunction.java lib/core/V6AsyncGenerator.java \
                 lib/core/V6AsyncGeneratorFunction.java \
                 lib/core/V6Regex.java lib/core/V6RegexConstructor.java \
+                lib/core/V6DateObject.java lib/core/V6DateConstructor.java \
                 lib/core/V6Json.java \
                 lib/node/V6Path.java \
                 lib/node/V6EventEmitterObject.java lib/node/V6EventEmitterConstructor.java \
+                lib/node/V6NativeFunctionObject.java \
                 lib/node/V6Util.java lib/node/V6Os.java lib/node/V6Process.java \
                 lib/node/V6Buffer.java lib/node/V6BufferConstructor.java \
                 lib/node/V6Fs.java \
                 lib/node/V6Assert.java lib/node/V6AssertFunction.java \
+                lib/node/V6CallTrackerConstructor.java \
                 lib/node/V6QueryString.java lib/node/V6PerfHooks.java \
-                lib/node/V6Dns.java \
+                lib/node/V6Dns.java lib/node/V6DnsResolverConstructor.java \
                 lib/node/V6StringDecoderObject.java \
                 lib/node/V6StringDecoderConstructor.java \
                 lib/node/V6UrlSearchParamsObject.java \
                 lib/node/V6UrlSearchParamsConstructor.java \
                 lib/node/V6UrlObject.java lib/node/V6UrlConstructor.java \
+                lib/node/V6UrlLegacy.java \
                 lib/node/V6Zlib.java lib/node/V6Crypto.java \
-                lib/node/V6StreamMethods.java \
+                lib/node/V6StreamMethods.java lib/node/V6StreamQueue.java \
                 lib/node/V6StreamReadableConstructor.java \
                 lib/node/V6StreamWritableConstructor.java \
                 lib/node/V6StreamDuplexConstructor.java \
@@ -110,7 +114,16 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/node/V6ChildProcess.java lib/node/V6Net.java lib/node/V6Http.java \
                 lib/node/V6Readline.java lib/node/V6WorkerThreads.java \
                 lib/node/V6WorkerConstructor.java \
-                lib/node/V6MessageChannelConstructor.java
+                lib/node/V6MessageChannelConstructor.java \
+                lib/node/V6TlsUtil.java lib/node/V6TrustAllManager.java lib/node/V6Tls.java \
+                lib/node/V6HttpAgentConstructor.java lib/node/V6IpcUtil.java \
+                lib/node/V6Cluster.java lib/node/V6Repl.java \
+                lib/node/V6Dgram.java lib/node/V6Http2.java \
+                lib/node/V6V8.java lib/node/V6ModuleModule.java \
+                lib/node/V6DiagnosticsChannel.java lib/node/V6AsyncHooks.java \
+                lib/node/V6AsyncLocalStorageConstructor.java \
+                lib/node/V6UnsupportedConstructor.java \
+                lib/node/V6Inspector.java lib/node/V6TraceEvents.java
 RT_CLASS_FILES := $(patsubst lib/node/%.java,$(GEN)/%.class,$(patsubst lib/core/%.java,$(GEN)/%.class,$(RT_JAVA_SRCS)))
 RT_TABLE_C := $(GEN)/runtime_classes.c
 

@@ -1,5 +1,5 @@
-public final class V6StreamTransformConstructor extends V6Object
-    implements V6NativeConstructor {
+public final class V6StreamTransformConstructor
+    extends V6Object implements V6NativeConstructor {
   public static final V6Object PROTOTYPE = buildPrototype();
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
 
@@ -52,11 +52,13 @@ public final class V6StreamTransformConstructor extends V6Object
             };
             if (transformFn.tag() == V6Value.TAG_FUNC) {
               transformFn.asCallable().call(
-                  t, new V6Value[] {chunk, new V6Value(V6Value.TAG_STR, 0, "utf8"),
-                                    fn(pushCb)});
+                  t,
+                  new V6Value[] {chunk, new V6Value(V6Value.TAG_STR, 0, "utf8"),
+                                 fn(pushCb)});
             } else {
               t.getProp("push").asCallable().call(t, new V6Value[] {chunk});
-              pushCb.call(UNDEF, new V6Value[] {new V6Value(V6Value.TAG_UNDEF, 0, null)});
+              pushCb.call(UNDEF, new V6Value[] {
+                                     new V6Value(V6Value.TAG_UNDEF, 0, null)});
             }
             return new V6Value(V6Value.TAG_BOOL, 1, null);
           }));

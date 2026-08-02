@@ -1,13 +1,14 @@
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
-public final class V6BufferConstructor extends V6Object
-    implements V6NativeConstructor {
+public final class V6BufferConstructor
+    extends V6Object implements V6NativeConstructor {
   public static final V6Object PROTOTYPE = buildPrototype();
 
   public V6BufferConstructor() {
     set("prototype", new V6Value(V6Value.TAG_OBJ, 0, PROTOTYPE));
-    set("from", fn((thisArg, args) -> objValue(new V6Buffer(decodeFrom(args)))));
+    set("from",
+        fn((thisArg, args) -> objValue(new V6Buffer(decodeFrom(args)))));
     set("alloc", fn((thisArg, args) -> {
           int size = (int)V6Value.argAt(args, 0).toNumber();
           byte[] bytes = new byte[Math.max(0, size)];
@@ -31,17 +32,19 @@ public final class V6BufferConstructor extends V6Object
         }));
     set("isBuffer", fn((thisArg, args) -> {
           V6Value v = V6Value.argAt(args, 0);
-          boolean is = v.tag() == V6Value.TAG_OBJ && v.ref() instanceof V6Buffer;
+          boolean is =
+              v.tag() == V6Value.TAG_OBJ && v.ref() instanceof V6Buffer;
           return new V6Value(V6Value.TAG_BOOL, is ? 1 : 0, null);
         }));
-    set("byteLength", fn((thisArg, args)
-                             -> new V6Value(V6Value.TAG_NUM,
-                                            decodeFrom(args).length, null)));
+    set("byteLength",
+        fn((thisArg, args)
+               -> new V6Value(V6Value.TAG_NUM, decodeFrom(args).length, null)));
     set("concat", fn((thisArg, args) -> {
           V6Value listVal = V6Value.argAt(args, 0);
           V6Object list = (V6Object)listVal.ref();
           int total = (int)list.get("length").num();
-          java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+          java.io.ByteArrayOutputStream out =
+              new java.io.ByteArrayOutputStream();
           for (int i = 0; i < total; i++) {
             V6Value item = list.get(Integer.toString(i));
             if (item.tag() == V6Value.TAG_OBJ && item.ref() instanceof V6Buffer)
@@ -55,7 +58,8 @@ public final class V6BufferConstructor extends V6Object
   public V6Value construct(V6Value[] args) {
     V6Value first = V6Value.argAt(args, 0);
     if (first.tag() == V6Value.TAG_NUM)
-      return objValue(new V6Buffer(new byte[Math.max(0, (int)first.toNumber())]));
+      return objValue(
+          new V6Buffer(new byte[Math.max(0, (int)first.toNumber())]));
     return objValue(new V6Buffer(decodeFrom(args)));
   }
 
@@ -141,23 +145,27 @@ public final class V6BufferConstructor extends V6Object
     o.set("write", fn((thisArg, args) -> {
             V6Buffer buf = (V6Buffer)thisArg.ref();
             String s = V6Value.argAt(args, 0).toString();
-            String encoding = args.length > 1 && args[1].tag() == V6Value.TAG_STR
-                ? args[1].toString()
-                : "utf8";
+            String encoding =
+                args.length > 1 && args[1].tag() == V6Value.TAG_STR
+                    ? args[1].toString()
+                    : "utf8";
             byte[] bytes = decodeString(s, encoding);
             int n = (int)buf.get("length").num();
             int written = Math.min(bytes.length, n);
             for (int i = 0; i < written; i++)
               buf.set(Integer.toString(i),
-                     new V6Value(V6Value.TAG_NUM, bytes[i] & 0xFF, null));
+                      new V6Value(V6Value.TAG_NUM, bytes[i] & 0xFF, null));
             return new V6Value(V6Value.TAG_NUM, written, null);
           }));
     o.set("slice", fn((thisArg, args) -> {
             V6Buffer buf = (V6Buffer)thisArg.ref();
             byte[] bytes = buf.toBytes();
-            int start = args.length > 0 ? normIndex((int)args[0].toNumber(), bytes.length) : 0;
-            int end = args.length > 1 ? normIndex((int)args[1].toNumber(), bytes.length)
-                                      : bytes.length;
+            int start = args.length > 0
+                            ? normIndex((int)args[0].toNumber(), bytes.length)
+                            : 0;
+            int end = args.length > 1
+                          ? normIndex((int)args[1].toNumber(), bytes.length)
+                          : bytes.length;
             if (start > end)
               start = end;
             byte[] out = java.util.Arrays.copyOfRange(bytes, start, end);
@@ -166,8 +174,10 @@ public final class V6BufferConstructor extends V6Object
     o.set("equals", fn((thisArg, args) -> {
             V6Buffer buf = (V6Buffer)thisArg.ref();
             V6Value other = V6Value.argAt(args, 0);
-            boolean eq = other.tag() == V6Value.TAG_OBJ && other.ref() instanceof V6Buffer &&
-                java.util.Arrays.equals(buf.toBytes(), ((V6Buffer)other.ref()).toBytes());
+            boolean eq = other.tag() == V6Value.TAG_OBJ &&
+                         other.ref() instanceof V6Buffer &&
+                         java.util.Arrays.equals(
+                             buf.toBytes(), ((V6Buffer)other.ref()).toBytes());
             return new V6Value(V6Value.TAG_BOOL, eq ? 1 : 0, null);
           }));
     o.set("toJSON", fn((thisArg, args) -> {

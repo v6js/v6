@@ -1,5 +1,5 @@
-public final class V6StreamDuplexConstructor extends V6Object
-    implements V6NativeConstructor {
+public final class V6StreamDuplexConstructor
+    extends V6Object implements V6NativeConstructor {
   public static final V6Object PROTOTYPE = buildPrototype();
 
   public V6StreamDuplexConstructor() {

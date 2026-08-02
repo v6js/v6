@@ -1,5 +1,5 @@
-public final class V6StringDecoderConstructor extends V6Object
-    implements V6NativeConstructor {
+public final class V6StringDecoderConstructor
+    extends V6Object implements V6NativeConstructor {
   public static final V6Object PROTOTYPE = buildPrototype();
 
   public V6StringDecoderConstructor() {
@@ -38,10 +38,12 @@ public final class V6StringDecoderConstructor extends V6Object
 
   private static V6Object buildPrototype() {
     V6Object o = new V6Object();
-    o.set("write", fn((t, a) -> str(((V6StringDecoderObject)t.ref())
-                                        .write(bytesOf(V6Value.argAt(a, 0))))));
-    o.set("end", fn((t, a) -> str(((V6StringDecoderObject)t.ref())
-                                      .end(bytesOf(V6Value.argAt(a, 0))))));
+    o.set("write", fn((t, a)
+                          -> str(((V6StringDecoderObject)t.ref())
+                                     .write(bytesOf(V6Value.argAt(a, 0))))));
+    o.set("end", fn((t, a)
+                        -> str(((V6StringDecoderObject)t.ref())
+                                   .end(bytesOf(V6Value.argAt(a, 0))))));
     return o;
   }
 }

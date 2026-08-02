@@ -659,6 +659,8 @@ static void parse_unary(parser* p, compiler* c);
 static void parse_object_literal(parser* p, compiler* c);
 static void parse_array_literal(parser* p, compiler* c);
 static void parse_primary(parser* p, compiler* c);
+static void parse_class_decl(parser* p, compiler* c, int is_expr);
+static const char* g_entry_script_path = "";
 static void compile_closure_value(parser* p, compiler* c, int is_arrow,
                                   int parens_params, char* out_lambda_name);
 static void skip_balanced(parser* p, tok_kind open, tok_kind close);
@@ -2164,6 +2166,11 @@ static void parse_primary(parser* p, compiler* c) {
     compile_closure_value(p, c, 0, 1, NULL);
     if (is_gen)
       emit_wrap_generator(c);
+    return;
+  }
+
+  if (match(p, tok_kw_class)) {
+    parse_class_decl(p, c, 1);
     return;
   }
 
@@ -4421,10 +4428,22 @@ static void parse_function_decl(parser* p, compiler* c) {
   op_emit(c->m, op_pop);
 }
 
-static void parse_class_decl(parser* p, compiler* c) {
-  if (!expect(p, tok_ident))
-    return;
-  tok name = p->prev;
+static void parse_class_decl(parser* p, compiler* c, int is_expr) {
+  tok name;
+  if (is_expr && !check(p, tok_ident)) {
+    char* synth = malloc(24);
+    snprintf(synth, 24, "$anonclass%d", (*c->lambda_counter)++);
+    name.kind = tok_ident;
+    name.start = synth;
+    name.len = strlen(synth);
+    name.line = p->cur.line;
+    name.num = 0;
+    name.is_bigint = 0;
+  } else {
+    if (!expect(p, tok_ident))
+      return;
+    name = p->prev;
+  }
 
   tok base_name;
   int has_base = 0;
@@ -4674,6 +4693,10 @@ static void parse_class_decl(parser* p, compiler* c) {
 
   emit_aload(c->m, cls_tmp);
   emit_box_object_ref(c);
+
+  if (is_expr)
+    return;
+
   if (c->brace_depth == 0) {
     var_ref vr = resolve_var(c, name.start, name.len);
     if (vr.kind == var_not_found) {
@@ -4956,8 +4979,20 @@ static const node_builtin_ref v6_node_builtin_table[] = {
     {"net", "NODE_NET"},
     {"http", "NODE_HTTP"},
     {"https", "NODE_HTTPS"},
+    {"tls", "NODE_TLS"},
     {"readline", "NODE_READLINE"},
     {"worker_threads", "NODE_WORKER_THREADS"},
+    {"cluster", "NODE_CLUSTER"},
+    {"repl", "NODE_REPL"},
+    {"timers", "NODE_TIMERS"},
+    {"dgram", "NODE_DGRAM"},
+    {"http2", "NODE_HTTP2"},
+    {"v8", "NODE_V8"},
+    {"module", "NODE_MODULE"},
+    {"diagnostics_channel", "NODE_DIAGNOSTICS_CHANNEL"},
+    {"async_hooks", "NODE_ASYNC_HOOKS"},
+    {"inspector", "NODE_INSPECTOR"},
+    {"trace_events", "NODE_TRACE_EVENTS"},
 };
 
 static int emit_node_builtin_ref(compiler* c, const char* specifier) {
@@ -4966,8 +5001,8 @@ static int emit_node_builtin_ref(compiler* c, const char* specifier) {
   size_t n = sizeof(v6_node_builtin_table) / sizeof(v6_node_builtin_table[0]);
   for (size_t i = 0; i < n; i++) {
     if (strcmp(specifier, v6_node_builtin_table[i].name) == 0) {
-      uint16_t fidx = cf_fieldref(c->cf, "V6Builtins", v6_node_builtin_table[i].field,
-                                  "LV6Value;");
+      uint16_t fidx = cf_fieldref(c->cf, "V6Builtins",
+                                  v6_node_builtin_table[i].field, "LV6Value;");
       op_emit2(c->m, op_getstatic, fidx);
       return 1;
     }
@@ -5238,8 +5273,8 @@ static void parse_import_stmt(parser* p, compiler* c) {
 
   uint16_t get_obj_idx =
       cf_methodref(c->cf, "V6Object", "get", "(Ljava/lang/String;)LV6Value;");
-  uint16_t get_val_idx =
-      cf_methodref(c->cf, "V6Value", "getProp", "(Ljava/lang/String;)LV6Value;");
+  uint16_t get_val_idx = cf_methodref(c->cf, "V6Value", "getProp",
+                                      "(Ljava/lang/String;)LV6Value;");
   uint16_t get_idx = is_value_shape ? get_val_idx : get_obj_idx;
 
   if (has_default) {
@@ -5279,7 +5314,7 @@ static void parse_stmt(parser* p, compiler* c) {
   }
 
   if (match(p, tok_kw_class)) {
-    parse_class_decl(p, c);
+    parse_class_decl(p, c, 0);
     return;
   }
 
@@ -6261,6 +6296,7 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   bind_builtin(&c, "Symbol", "SYMBOL");
   bind_builtin(&c, "Promise", "PROMISE");
   bind_builtin(&c, "RegExp", "REGEXP");
+  bind_builtin(&c, "Date", "DATE");
   bind_builtin(&c, "JSON", "JSON");
   bind_builtin(&c, "Buffer", "BUFFER");
   bind_builtin(&c, "process", "PROCESS");
@@ -6275,10 +6311,16 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   bind_builtin(&c, "queueMicrotask", "QUEUE_MICROTASK");
 
   if (is_entry) {
-    uint16_t setargv_idx = cf_methodref(cf, "V6Process", "setArgv",
-                                        "([Ljava/lang/String;)V");
+    uint16_t setargv_idx =
+        cf_methodref(cf, "V6Process", "setArgv", "([Ljava/lang/String;)V");
     emit_aload(main_m, 0);
     op_emit2(main_m, op_invokestatic, setargv_idx);
+
+    uint16_t setpath_idx =
+        cf_methodref(cf, "V6Process", "setScriptPath", "(Ljava/lang/String;)V");
+    uint16_t path_str = cf_string(cf, g_entry_script_path);
+    op_emit2(main_m, op_ldc_w, path_str);
+    op_emit2(main_m, op_invokestatic, setpath_idx);
   }
 
   uint16_t this_slot = c.next_local_slot++;
@@ -6438,6 +6480,7 @@ compile_result compile_program(const char* src, class_file* cf,
   } else {
     snprintf(dir, sizeof(dir), ".");
   }
+  g_entry_script_path = entry_path ? entry_path : "";
   if (modctx)
     module_ctx_init(modctx);
   return compile_module_impl(cf, "Main", src, dir, modctx, 1, 0);

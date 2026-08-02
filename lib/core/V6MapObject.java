@@ -19,8 +19,10 @@ public final class V6MapObject extends V6Object {
       return NULL_KEY;
     case V6Value.TAG_UNDEF:
       return UNDEF_KEY;
-    default:
+    case V6Value.TAG_BIGINT:
       return v.ref();
+    default:
+      return new V6MapKey(v.tag(), v.ref());
     }
   }
 
@@ -35,9 +37,13 @@ public final class V6MapObject extends V6Object {
       return new V6Value(V6Value.TAG_NUM, (Double)rawKey, null);
     if (rawKey instanceof Boolean)
       return new V6Value(V6Value.TAG_BOOL, ((Boolean)rawKey) ? 1 : 0, null);
-    if (rawKey instanceof V6Object)
-      return new V6Value(V6Value.TAG_OBJ, 0, rawKey);
-    return new V6Value(V6Value.TAG_FUNC, 0, rawKey);
+    if (rawKey instanceof java.math.BigInteger)
+      return new V6Value(V6Value.TAG_BIGINT, 0, rawKey);
+    if (rawKey instanceof V6MapKey) {
+      V6MapKey k = (V6MapKey)rawKey;
+      return new V6Value(k.tag, 0, k.ref);
+    }
+    return new V6Value(V6Value.TAG_OBJ, 0, rawKey);
   }
 
   public V6MapObject() {

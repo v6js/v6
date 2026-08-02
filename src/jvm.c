@@ -98,7 +98,8 @@ v6_jvm* v6_jvm_create(void) {
     jmethodID get_sys = (*env)->GetStaticMethodID(
         env, loader_cls, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
     if (get_sys) {
-      jobject sys_loader = (*env)->CallStaticObjectMethod(env, loader_cls, get_sys);
+      jobject sys_loader =
+          (*env)->CallStaticObjectMethod(env, loader_cls, get_sys);
       if (sys_loader)
         jvm->loader = (*env)->NewGlobalRef(env, sys_loader);
     }
@@ -112,9 +113,10 @@ int v6_jvm_load_runtime(v6_jvm* jvm) {
   jclass value_cls = NULL;
 
   for (size_t i = 0; i < v6_runtime_class_count; i++) {
-    jclass cls = (*env)->DefineClass(env, v6_runtime_classes[i].name, jvm->loader,
-                                     (const jbyte*)v6_runtime_classes[i].data,
-                                     (jsize)v6_runtime_classes[i].len);
+    jclass cls =
+        (*env)->DefineClass(env, v6_runtime_classes[i].name, jvm->loader,
+                            (const jbyte*)v6_runtime_classes[i].data,
+                            (jsize)v6_runtime_classes[i].len);
     if (!cls)
       return -1;
     if (strcmp(v6_runtime_classes[i].name, "V6Value") == 0)
@@ -147,17 +149,17 @@ int v6_jvm_load_runtime(v6_jvm* jvm) {
 int v6_jvm_define_extra(v6_jvm* jvm, const char* name,
                         const unsigned char* class_bytes, size_t len) {
   JNIEnv* env = jvm->env;
-  jclass cls = (*env)->DefineClass(env, name, jvm->loader, (const jbyte*)class_bytes,
-                                   (jsize)len);
+  jclass cls = (*env)->DefineClass(env, name, jvm->loader,
+                                   (const jbyte*)class_bytes, (jsize)len);
   return cls ? 0 : -1;
 }
 
 int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
-              char** script_args, int script_argc) {
+               char** script_args, int script_argc) {
   JNIEnv* env = jvm->env;
 
-  jclass cls = (*env)->DefineClass(env, "Main", jvm->loader, (const jbyte*)class_bytes,
-                                   (jsize)len);
+  jclass cls = (*env)->DefineClass(env, "Main", jvm->loader,
+                                   (const jbyte*)class_bytes, (jsize)len);
   if (!cls)
     return -1;
 
@@ -232,7 +234,7 @@ int v6_jvm_define_extra(v6_jvm* jvm, const char* name,
 }
 
 int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
-              char** script_args, int script_argc) {
+               char** script_args, int script_argc) {
   (void)jvm;
   (void)class_bytes;
   (void)len;

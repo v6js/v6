@@ -102,8 +102,34 @@ public record V6Value(int tag, double num, Object ref) {
     }
   }
 
+  private V6Value tryCallMethod(String name) {
+    if (!(ref instanceof V6Object))
+      return null;
+    V6Value m = ((V6Object)ref).get(name);
+    if (m.tag() != TAG_FUNC)
+      return null;
+    try {
+      return m.asCallable().call(this, new V6Value[0]);
+    } catch (RuntimeException e) {
+      return null;
+    }
+  }
+
   private CharSequence asCharSeq() {
-    return tag == TAG_STR ? (CharSequence)ref : toString();
+    if (tag == TAG_STR)
+      return (CharSequence)ref;
+    if (tag == TAG_OBJ || tag == TAG_FUNC) {
+      boolean preferString = ref instanceof V6DateObject;
+      if (!preferString) {
+        V6Value vo = tryCallMethod("valueOf");
+        if (vo != null && vo.tag != TAG_OBJ && vo.tag != TAG_FUNC)
+          return vo.toString();
+      }
+      V6Value ts = tryCallMethod("toString");
+      if (ts != null)
+        return ts.toString();
+    }
+    return toString();
   }
 
   public static V6Value add(V6Value a, V6Value b) {
@@ -251,7 +277,8 @@ public record V6Value(int tag, double num, Object ref) {
 
   public static V6Object allocateInstance(V6Class cls) {
     Object protoRef = cls.get("prototype").ref;
-    V6Object protoObj = protoRef instanceof V6Object ? (V6Object)protoRef : null;
+    V6Object protoObj =
+        protoRef instanceof V6Object ? (V6Object)protoRef : null;
     V6NativeConstructor nativeAncestor = findNativeAncestor(protoObj);
     V6Object instance =
         nativeAncestor != null ? nativeAncestor.allocate() : null;
@@ -263,6 +290,19 @@ public record V6Value(int tag, double num, Object ref) {
   public static V6Value construct(V6Value classValue, V6Value[] args) {
     if (classValue.ref instanceof V6NativeConstructor)
       return ((V6NativeConstructor)classValue.ref).construct(args);
+    if (classValue.ref instanceof V6Closure) {
+      V6Closure fnClosure = (V6Closure)classValue.ref;
+      V6Value protoVal = fnClosure.get("prototype");
+      V6Object instance = new V6Object();
+      if (protoVal.tag == TAG_OBJ && protoVal.ref instanceof V6Object)
+        instance.setProto((V6Object)protoVal.ref);
+      instance.newTarget = classValue;
+      V6Value instanceValue = new V6Value(TAG_OBJ, 0, instance);
+      V6Value result = fnClosure.call(instanceValue, args);
+      if (result.tag == TAG_OBJ && result.ref instanceof V6Object)
+        return result;
+      return instanceValue;
+    }
     V6Class cls = (V6Class)classValue.ref;
     V6Object instance = allocateInstance(cls);
     Object protoRef = cls.get("prototype").ref;
@@ -280,6 +320,10 @@ public record V6Value(int tag, double num, Object ref) {
     if (classValue.ref instanceof V6NativeConstructor) {
       ((V6NativeConstructor)classValue.ref)
           .initInstance((V6Object)thisArg.ref, args);
+      return;
+    }
+    if (classValue.ref instanceof V6Closure) {
+      ((V6Closure)classValue.ref).call(thisArg, args);
       return;
     }
     V6Class cls = (V6Class)classValue.ref;
@@ -431,7 +475,9 @@ public record V6Value(int tag, double num, Object ref) {
   }
 
   public static boolean instanceOf(V6Value obj, V6Value ctor) {
-    if (obj.tag != TAG_OBJ || ctor.tag != TAG_OBJ)
+    if (obj.tag != TAG_OBJ)
+      return false;
+    if (ctor.tag != TAG_OBJ && ctor.tag != TAG_FUNC)
       return false;
     if (ctor.ref == V6Builtins.ARRAY.ref())
       return obj.ref instanceof V6Array;
@@ -447,6 +493,11 @@ public record V6Value(int tag, double num, Object ref) {
       targetProto = ((V6NativeConstructor)ctor.ref).prototypeObject();
       if (targetProto == null)
         return false;
+    } else if (ctor.ref instanceof V6Closure) {
+      Object protoRef = ((V6Closure)ctor.ref).get("prototype").ref();
+      if (!(protoRef instanceof V6Object))
+        return false;
+      targetProto = (V6Object)protoRef;
     } else {
       return false;
     }

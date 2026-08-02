@@ -35,3 +35,32 @@ try {
 
 const { URL: NamedURL } = require("url");
 console.log(new NamedURL("https://x.com/").href);
+
+const legacyUrl = require("url");
+const parsed = legacyUrl.parse(
+    "https://user:pass@example.com:8080/path/to/page?foo=bar&baz=qux#section");
+console.log(JSON.stringify(parsed));
+
+const parsedQ = legacyUrl.parse("https://example.com/search?q=hello&q=world", true);
+console.log(JSON.stringify(parsedQ.query));
+
+console.log(legacyUrl.format({
+  protocol: "https",
+  host: "example.com:8080",
+  pathname: "/a/b",
+  search: "?x=1",
+  hash: "#top",
+}));
+
+console.log(legacyUrl.format({
+  protocol: "http:",
+  hostname: "example.com",
+  pathname: "/q",
+  query: { a: "1", b: "2" },
+}));
+
+console.log(legacyUrl.format(new legacyUrl.URL("https://example.com/foo?bar=1")));
+
+console.log(legacyUrl.resolve("https://example.com/a/b/c", "../d"));
+console.log(legacyUrl.resolve("https://example.com/a/b/c", "/absolute"));
+console.log(legacyUrl.resolve("https://example.com/a/b/", "d"));

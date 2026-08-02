@@ -1,5 +1,6 @@
 public final class V6PerfHooks {
-  private V6PerfHooks() {}
+  private V6PerfHooks() {
+  }
 
   private static final long START_NANO = System.nanoTime();
   private static final long START_EPOCH_MS = System.currentTimeMillis();
@@ -20,7 +21,8 @@ public final class V6PerfHooks {
     V6Object o = new V6Object();
     V6Object performance = new V6Object();
     performance.set(
-        "now", fn((t, a) -> num((System.nanoTime() - START_NANO) / 1_000_000.0)));
+        "now",
+        fn((t, a) -> num((System.nanoTime() - START_NANO) / 1_000_000.0)));
     performance.set("timeOrigin", num(START_EPOCH_MS));
     o.set("performance", objValue(performance));
     return o;

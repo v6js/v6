@@ -1,5 +1,6 @@
 public final class V6Util {
-  private V6Util() {}
+  private V6Util() {
+  }
 
   private static V6Value str(String s) {
     return new V6Value(V6Value.TAG_STR, 0, s);
@@ -50,7 +51,8 @@ public final class V6Util {
             break;
           case 'o':
           case 'O':
-            out.append(V6Builtins.inspect(arg, new java.util.IdentityHashMap<>()));
+            out.append(
+                V6Builtins.inspect(arg, new java.util.IdentityHashMap<>()));
             break;
           }
           continue;
@@ -61,9 +63,10 @@ public final class V6Util {
     for (; argIdx < args.length; argIdx++) {
       out.append(' ');
       V6Value arg = args[argIdx];
-      out.append(arg.tag() == V6Value.TAG_STR
-                     ? arg.toString()
-                     : V6Builtins.inspect(arg, new java.util.IdentityHashMap<>()));
+      out.append(
+          arg.tag() == V6Value.TAG_STR
+              ? arg.toString()
+              : V6Builtins.inspect(arg, new java.util.IdentityHashMap<>()));
     }
     return out.toString();
   }
@@ -73,8 +76,11 @@ public final class V6Util {
 
     o.set("format", fn((thisArg, args) -> str(formatInternal(args))));
 
-    o.set("inspect", fn((thisArg, args) -> str(V6Builtins.inspect(
-                            V6Value.argAt(args, 0), new java.util.IdentityHashMap<>()))));
+    o.set(
+        "inspect",
+        fn((thisArg, args)
+               -> str(V6Builtins.inspect(V6Value.argAt(args, 0),
+                                         new java.util.IdentityHashMap<>()))));
 
     o.set("promisify", fn((thisArg, args) -> {
             V6Callable target = V6Value.argAt(args, 0).asCallable();
@@ -104,12 +110,13 @@ public final class V6Util {
             V6Value ctor = V6Value.argAt(args, 0);
             V6Value superCtor = V6Value.argAt(args, 1);
             V6Object superProtoHolder =
-                superCtor.tag() == V6Value.TAG_OBJ || superCtor.tag() == V6Value.TAG_FUNC
+                superCtor.tag() == V6Value.TAG_OBJ ||
+                        superCtor.tag() == V6Value.TAG_FUNC
                     ? asObjIfPresent(superCtor)
                     : null;
             V6Value superProto = superProtoHolder != null
-                ? superProtoHolder.get("prototype")
-                : UNDEF;
+                                     ? superProtoHolder.get("prototype")
+                                     : UNDEF;
             V6Object newProto = new V6Object();
             if (superProto.tag() == V6Value.TAG_OBJ)
               newProto.setProto((V6Object)superProto.ref());
@@ -126,7 +133,8 @@ public final class V6Util {
 
     o.set("deprecate", fn((thisArg, args) -> {
             V6Callable target = V6Value.argAt(args, 0).asCallable();
-            String msg = args.length > 1 ? args[1].toString() : "DeprecationWarning";
+            String msg =
+                args.length > 1 ? args[1].toString() : "DeprecationWarning";
             boolean[] warned = {false};
             return fn((t, a) -> {
               if (!warned[0]) {
@@ -150,18 +158,19 @@ public final class V6Util {
                 cb.call(UNDEF, new V6Value[] {e.value});
                 return UNDEF;
               }
-              if (result.tag() == V6Value.TAG_OBJ &&
-                  result.ref() instanceof V6Promise) {
+              if (result.tag() == V6Value.TAG_OBJ && result.ref() instanceof
+                                                         V6Promise) {
                 V6Promise p = (V6Promise)result.ref();
                 p.addCallbacks(
                     v
                     -> cb.call(UNDEF,
-                              new V6Value[] {new V6Value(V6Value.TAG_NULL, 0, null),
-                                             v}),
+                               new V6Value[] {
+                                   new V6Value(V6Value.TAG_NULL, 0, null), v}),
                     err -> cb.call(UNDEF, new V6Value[] {err}));
               } else {
                 cb.call(UNDEF,
-                        new V6Value[] {new V6Value(V6Value.TAG_NULL, 0, null), result});
+                        new V6Value[] {new V6Value(V6Value.TAG_NULL, 0, null),
+                                       result});
               }
               return UNDEF;
             });
@@ -176,27 +185,34 @@ public final class V6Util {
 
   private static V6Object buildTypes() {
     V6Object t = new V6Object();
-    t.set("isPromise", fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6Promise.class))));
-    t.set("isRegExp", fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6Regex.class))));
-    t.set("isMap", fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6MapObject.class))));
-    t.set("isSet", fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6SetObject.class))));
+    t.set("isPromise",
+          fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6Promise.class))));
+    t.set("isRegExp",
+          fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6Regex.class))));
+    t.set("isMap",
+          fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6MapObject.class))));
+    t.set("isSet",
+          fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6SetObject.class))));
     t.set("isWeakMap", fn((th, a) -> bool(false)));
     t.set("isWeakSet", fn((th, a) -> bool(false)));
     t.set("isDate", fn((th, a) -> bool(false)));
-    t.set("isAsyncFunction",
-          fn((th, a)
-                 -> bool(V6Value.argAt(a, 0).tag() == V6Value.TAG_FUNC &&
-                         V6Value.argAt(a, 0).ref() instanceof V6AsyncFunction)));
+    t.set(
+        "isAsyncFunction",
+        fn((th, a)
+               -> bool(V6Value.argAt(a, 0).tag() == V6Value.TAG_FUNC &&
+                       V6Value.argAt(a, 0).ref() instanceof V6AsyncFunction)));
     t.set("isGeneratorFunction",
           fn((th, a)
                  -> bool(V6Value.argAt(a, 0).tag() == V6Value.TAG_FUNC &&
-                         V6Value.argAt(a, 0).ref() instanceof V6GeneratorFunction)));
+                         V6Value.argAt(a, 0).ref() instanceof
+                             V6GeneratorFunction)));
     t.set("isAsyncGeneratorFunction",
           fn((th, a)
                  -> bool(V6Value.argAt(a, 0).tag() == V6Value.TAG_FUNC &&
                          V6Value.argAt(a, 0).ref() instanceof
                              V6AsyncGeneratorFunction)));
-    t.set("isGeneratorObject", fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6Generator.class))));
+    t.set("isGeneratorObject",
+          fn((th, a) -> bool(isa(V6Value.argAt(a, 0), V6Generator.class))));
     return t;
   }
 

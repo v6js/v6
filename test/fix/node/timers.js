@@ -17,3 +17,11 @@ queueMicrotask(() => console.log("microtask"));
 process.on("exit", (code) => console.log("exit event, code=" + code));
 
 console.log("end sync");
+
+const timersModule = require("timers");
+console.log(typeof timersModule.setTimeout, typeof timersModule.clearTimeout,
+            typeof timersModule.setInterval, typeof timersModule.clearInterval,
+            typeof timersModule.setImmediate, typeof timersModule.clearImmediate);
+
+timersModule.promises.setTimeout(5, "hello").then((v) => console.log("promise timeout:", v));
+timersModule.promises.setImmediate("world").then((v) => console.log("promise immediate:", v));

@@ -5,10 +5,12 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class V6EventLoop {
-  private V6EventLoop() {}
+  private V6EventLoop() {
+  }
 
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
-  private static final PriorityQueue<V6TimerTask> timers = new PriorityQueue<>();
+  private static final PriorityQueue<V6TimerTask> timers =
+      new PriorityQueue<>();
   private static final Map<Long, V6TimerTask> byId = new HashMap<>();
   private static final ConcurrentLinkedQueue<Runnable> external =
       new ConcurrentLinkedQueue<>();

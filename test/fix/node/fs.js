@@ -85,3 +85,50 @@ setTimeout(() => {
   console.log("watch saw a change:", watchSeen);
   fs.rmSync(gapsDir, { recursive: true, force: true });
 }, 350);
+
+const p2Dir = "test/fix/node/tmp_fs_p2";
+if (fs.existsSync(p2Dir)) fs.rmSync(p2Dir, { recursive: true, force: true });
+fs.mkdirSync(p2Dir, { recursive: true });
+const p2File = path.join(p2Dir, "a.txt");
+fs.writeFileSync(p2File, "hello");
+
+const st2 = fs.statSync(p2File);
+console.log(st2.mtime instanceof Date, st2.mtime.getTime() === st2.mtimeMs);
+
+fs.writeFileSync(path.join(p2Dir, "b.txt"), "b");
+fs.mkdirSync(path.join(p2Dir, "sub"));
+const dirents = fs.readdirSync(p2Dir, { withFileTypes: true });
+console.log(dirents.map((e) => e.name + ":" + (e.isDirectory() ? "dir" : "file")).sort());
+
+const dh = fs.opendirSync(p2Dir);
+let dnames = [];
+let dent;
+while ((dent = dh.readSync()) !== null) dnames.push(dent.name);
+dh.closeSync();
+console.log(dnames.sort());
+
+fs.accessSync(p2File, fs.constants.R_OK);
+console.log("access ok");
+try {
+  fs.accessSync(path.join(p2Dir, "nope.txt"), fs.constants.R_OK);
+  console.log("should not reach");
+} catch (e) {
+  console.log("access caught");
+}
+
+fs.chmodSync(p2File, 0o644);
+console.log("chmod ran");
+
+let p2ReadData = "";
+const p2rs = fs.createReadStream(p2File, "utf8");
+p2rs.on("data", (chunk) => (p2ReadData += chunk));
+p2rs.on("end", () => {
+  console.log("stream read:", p2ReadData);
+  const p2ws = fs.createWriteStream(path.join(p2Dir, "written.txt"));
+  p2ws.on("finish", () => {
+    console.log("stream write done:", fs.readFileSync(path.join(p2Dir, "written.txt"), "utf8"));
+    fs.rmSync(p2Dir, { recursive: true, force: true });
+  });
+  p2ws.write("streamed-");
+  p2ws.end("content");
+});

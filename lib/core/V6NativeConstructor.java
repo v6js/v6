@@ -9,5 +9,6 @@ public interface V6NativeConstructor {
     return null;
   }
 
-  default void initInstance(V6Object instance, V6Value[] args) {}
+  default void initInstance(V6Object instance, V6Value[] args) {
+  }
 }

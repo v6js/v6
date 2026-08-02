@@ -8,7 +8,8 @@ import java.util.zip.GZIPOutputStream;
 import java.util.zip.Inflater;
 
 public final class V6Zlib {
-  private V6Zlib() {}
+  private V6Zlib() {
+  }
 
   private static V6Value fn(V6Callable c) {
     return new V6Value(V6Value.TAG_FUNC, 0, c);
@@ -54,7 +55,8 @@ public final class V6Zlib {
         out.write(buf, 0, n);
       }
     } catch (DataFormatException e) {
-      throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "zlib: " + e.getMessage()));
+      throw new V6Throw(
+          new V6Value(V6Value.TAG_STR, 0, "zlib: " + e.getMessage()));
     } finally {
       inf.end();
     }
@@ -66,16 +68,19 @@ public final class V6Zlib {
     try (GZIPOutputStream gz = new GZIPOutputStream(bos)) {
       gz.write(input);
     } catch (IOException e) {
-      throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "zlib gzip: " + e.getMessage()));
+      throw new V6Throw(
+          new V6Value(V6Value.TAG_STR, 0, "zlib gzip: " + e.getMessage()));
     }
     return bos.toByteArray();
   }
 
   private static byte[] gunzipBytes(byte[] input) {
-    try (GZIPInputStream gis = new GZIPInputStream(new ByteArrayInputStream(input))) {
+    try (GZIPInputStream gis =
+             new GZIPInputStream(new ByteArrayInputStream(input))) {
       return gis.readAllBytes();
     } catch (IOException e) {
-      throw new V6Throw(new V6Value(V6Value.TAG_STR, 0, "zlib gunzip: " + e.getMessage()));
+      throw new V6Throw(
+          new V6Value(V6Value.TAG_STR, 0, "zlib gunzip: " + e.getMessage()));
     }
   }
 
@@ -84,10 +89,13 @@ public final class V6Zlib {
             V6Callable cb = args[args.length - 1].asCallable();
             V6Value[] syncArgs = java.util.Arrays.copyOf(args, args.length - 1);
             try {
-              V6Value result = o.get(syncName).asCallable().call(thisArg, syncArgs);
-              V6MicrotaskQueue.enqueue(() -> cb.call(UNDEF, new V6Value[] {NUL, result}));
+              V6Value result =
+                  o.get(syncName).asCallable().call(thisArg, syncArgs);
+              V6MicrotaskQueue.enqueue(
+                  () -> cb.call(UNDEF, new V6Value[] {NUL, result}));
             } catch (V6Throw e) {
-              V6MicrotaskQueue.enqueue(() -> cb.call(UNDEF, new V6Value[] {e.value, UNDEF}));
+              V6MicrotaskQueue.enqueue(
+                  () -> cb.call(UNDEF, new V6Value[] {e.value, UNDEF}));
             }
             return UNDEF;
           }));
@@ -96,21 +104,24 @@ public final class V6Zlib {
   public static V6Object build() {
     V6Object o = new V6Object();
 
-    o.set("gzipSync", fn((t, a) -> objValue(new V6Buffer(gzipBytes(bytesOf(V6Value.argAt(a, 0)))))));
-    o.set("gunzipSync",
-          fn((t, a) -> objValue(new V6Buffer(gunzipBytes(bytesOf(V6Value.argAt(a, 0)))))));
-    o.set("deflateSync",
-          fn((t, a)
-                 -> objValue(new V6Buffer(deflateBytes(bytesOf(V6Value.argAt(a, 0)), false)))));
-    o.set("inflateSync",
-          fn((t, a)
-                 -> objValue(new V6Buffer(inflateBytes(bytesOf(V6Value.argAt(a, 0)), false)))));
-    o.set("deflateRawSync",
-          fn((t, a)
-                 -> objValue(new V6Buffer(deflateBytes(bytesOf(V6Value.argAt(a, 0)), true)))));
-    o.set("inflateRawSync",
-          fn((t, a)
-                 -> objValue(new V6Buffer(inflateBytes(bytesOf(V6Value.argAt(a, 0)), true)))));
+    o.set("gzipSync", fn((t, a)
+                             -> objValue(new V6Buffer(
+                                 gzipBytes(bytesOf(V6Value.argAt(a, 0)))))));
+    o.set("gunzipSync", fn((t, a)
+                               -> objValue(new V6Buffer(gunzipBytes(
+                                   bytesOf(V6Value.argAt(a, 0)))))));
+    o.set("deflateSync", fn((t, a)
+                                -> objValue(new V6Buffer(deflateBytes(
+                                    bytesOf(V6Value.argAt(a, 0)), false)))));
+    o.set("inflateSync", fn((t, a)
+                                -> objValue(new V6Buffer(inflateBytes(
+                                    bytesOf(V6Value.argAt(a, 0)), false)))));
+    o.set("deflateRawSync", fn((t, a)
+                                   -> objValue(new V6Buffer(deflateBytes(
+                                       bytesOf(V6Value.argAt(a, 0)), true)))));
+    o.set("inflateRawSync", fn((t, a)
+                                   -> objValue(new V6Buffer(inflateBytes(
+                                       bytesOf(V6Value.argAt(a, 0)), true)))));
 
     wireAsync(o, "gzip", "gzipSync");
     wireAsync(o, "gunzip", "gunzipSync");

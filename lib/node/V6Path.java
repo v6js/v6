@@ -49,7 +49,8 @@ public final class V6Path {
     String drive = driveLetter(p);
     String rest = p.substring(drive.length());
     boolean abs = !rest.isEmpty() && isSlash(rest.charAt(0));
-    boolean trailingSlash = rest.length() > 1 && isSlash(rest.charAt(rest.length() - 1));
+    boolean trailingSlash =
+        rest.length() > 1 && isSlash(rest.charAt(rest.length() - 1));
 
     List<String> stack = new ArrayList<>();
     StringBuilder cur = new StringBuilder();
@@ -148,7 +149,8 @@ public final class V6Path {
       }
     }
     String base = rest.substring(slash + 1, end);
-    if (ext != null && !ext.isEmpty() && base.endsWith(ext) && !base.equals(ext))
+    if (ext != null && !ext.isEmpty() && base.endsWith(ext) &&
+        !base.equals(ext))
       base = base.substring(0, base.length() - ext.length());
     return base;
   }
@@ -222,16 +224,18 @@ public final class V6Path {
             return str(resolveInternal(parts));
           }));
 
-    o.set("normalize", fn((thisArg, args)
-                              -> str(normalizeInternal(s(V6Value.argAt(args, 0))))));
+    o.set("normalize",
+          fn((thisArg,
+              args) -> str(normalizeInternal(s(V6Value.argAt(args, 0))))));
 
     o.set("isAbsolute", fn((thisArg, args) -> {
             boolean b = isAbsoluteInternal(s(V6Value.argAt(args, 0)));
             return new V6Value(V6Value.TAG_BOOL, b ? 1 : 0, null);
           }));
 
-    o.set("dirname",
-          fn((thisArg, args) -> str(dirnameInternal(s(V6Value.argAt(args, 0))))));
+    o.set(
+        "dirname",
+        fn((thisArg, args) -> str(dirnameInternal(s(V6Value.argAt(args, 0))))));
 
     o.set("basename", fn((thisArg, args) -> {
             String p = s(V6Value.argAt(args, 0));
@@ -239,24 +243,28 @@ public final class V6Path {
             return str(basenameInternal(p, ext));
           }));
 
-    o.set("extname",
-          fn((thisArg, args) -> str(extnameInternal(s(V6Value.argAt(args, 0))))));
+    o.set(
+        "extname",
+        fn((thisArg, args) -> str(extnameInternal(s(V6Value.argAt(args, 0))))));
 
-    o.set("relative", fn((thisArg, args)
-                             -> str(relativeInternal(s(V6Value.argAt(args, 0)),
-                                                     s(V6Value.argAt(args, 1))))));
+    o.set("relative",
+          fn((thisArg, args)
+                 -> str(relativeInternal(s(V6Value.argAt(args, 0)),
+                                         s(V6Value.argAt(args, 1))))));
 
     o.set("parse", fn((thisArg, args) -> {
             String p = s(V6Value.argAt(args, 0));
             String drive = driveLetter(p);
             String rest = p.substring(drive.length());
             String root = (!rest.isEmpty() && isSlash(rest.charAt(0)))
-                ? drive + sepStr
-                : drive;
+                              ? drive + sepStr
+                              : drive;
             String dir = dirnameInternal(p);
             String base = basenameInternal(p, null);
             String ext = extnameInternal(p);
-            String name = ext.isEmpty() ? base : base.substring(0, base.length() - ext.length());
+            String name = ext.isEmpty()
+                              ? base
+                              : base.substring(0, base.length() - ext.length());
             V6Object result = new V6Object();
             result.set("root", str(root));
             result.set("dir", str(dir));
@@ -266,23 +274,24 @@ public final class V6Path {
             return new V6Value(V6Value.TAG_OBJ, 0, result);
           }));
 
-    o.set("format", fn((thisArg, args) -> {
-            V6Value arg = V6Value.argAt(args, 0);
-            if (arg.tag() != V6Value.TAG_OBJ)
-              return str("");
-            V6Object obj = (V6Object)arg.ref();
-            String dir = obj.get("dir").isUndefined() ? "" : s(obj.get("dir"));
-            String root = obj.get("root").isUndefined() ? "" : s(obj.get("root"));
-            String base = obj.get("base").isUndefined() ? "" : s(obj.get("base"));
-            String name = obj.get("name").isUndefined() ? "" : s(obj.get("name"));
-            String ext = obj.get("ext").isUndefined() ? "" : s(obj.get("ext"));
-            if (base.isEmpty())
-              base = name + ext;
-            String d = !dir.isEmpty() ? dir : root;
-            if (d.isEmpty())
-              return str(base);
-            return str(d.endsWith(sepStr) ? d + base : d + sepStr + base);
-          }));
+    o.set(
+        "format", fn((thisArg, args) -> {
+          V6Value arg = V6Value.argAt(args, 0);
+          if (arg.tag() != V6Value.TAG_OBJ)
+            return str("");
+          V6Object obj = (V6Object)arg.ref();
+          String dir = obj.get("dir").isUndefined() ? "" : s(obj.get("dir"));
+          String root = obj.get("root").isUndefined() ? "" : s(obj.get("root"));
+          String base = obj.get("base").isUndefined() ? "" : s(obj.get("base"));
+          String name = obj.get("name").isUndefined() ? "" : s(obj.get("name"));
+          String ext = obj.get("ext").isUndefined() ? "" : s(obj.get("ext"));
+          if (base.isEmpty())
+            base = name + ext;
+          String d = !dir.isEmpty() ? dir : root;
+          if (d.isEmpty())
+            return str(base);
+          return str(d.endsWith(sepStr) ? d + base : d + sepStr + base);
+        }));
 
     return o;
   }

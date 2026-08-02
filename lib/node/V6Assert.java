@@ -1,5 +1,6 @@
 public final class V6Assert {
-  private V6Assert() {}
+  private V6Assert() {
+  }
 
   private static V6Value str(String s) {
     return new V6Value(V6Value.TAG_STR, 0, s);
@@ -19,8 +20,9 @@ public final class V6Assert {
     return keys;
   }
 
-  private static boolean deepEqual(V6Value a, V6Value b,
-                                   java.util.IdentityHashMap<Object, Boolean> seen) {
+  private static boolean
+  deepEqual(V6Value a, V6Value b,
+            java.util.IdentityHashMap<Object, Boolean> seen) {
     if (a.tag() != b.tag()) {
       if ((a.tag() == V6Value.TAG_NULL || a.tag() == V6Value.TAG_UNDEF) &&
           (b.tag() == V6Value.TAG_NULL || b.tag() == V6Value.TAG_UNDEF))
@@ -60,11 +62,104 @@ public final class V6Assert {
     }
   }
 
-  private static RuntimeException fail(V6Value[] args, int msgIdx, String defaultMsg) {
+  private static V6Value objValue(V6Object o) {
+    return new V6Value(V6Value.TAG_OBJ, 0, o);
+  }
+
+  private static RuntimeException fail(V6Value[] args, int msgIdx,
+                                       String defaultMsg) {
     String msg = args.length > msgIdx && !args[msgIdx].isUndefined()
-        ? args[msgIdx].toString()
-        : defaultMsg;
+                     ? args[msgIdx].toString()
+                     : defaultMsg;
     return new V6Throw(str(msg));
+  }
+
+  private static boolean isConstructorLike(V6Value v) {
+    return v.tag() == V6Value.TAG_FUNC ||
+        (v.tag() == V6Value.TAG_OBJ &&
+         (v.ref() instanceof V6NativeConstructor || v.ref() instanceof
+                                                        V6Class));
+  }
+
+  private static boolean matchesError(V6Value errVal, V6Value matcher) {
+    if (matcher.isUndefined())
+      return true;
+    try {
+      if (V6Value.instanceOf(errVal, matcher))
+        return true;
+    } catch (RuntimeException ignored) {
+    }
+    if (matcher.tag() == V6Value.TAG_FUNC) {
+      try {
+        return matcher.asCallable()
+            .call(UNDEF, new V6Value[] {errVal})
+            .truthy();
+      } catch (RuntimeException e) {
+        return false;
+      }
+    }
+    if (isConstructorLike(matcher))
+      return false;
+    if (matcher.tag() == V6Value.TAG_OBJ && matcher.ref() instanceof V6Regex) {
+      String s =
+          errVal.tag() == V6Value.TAG_OBJ && errVal.ref() instanceof V6Object
+              ? ((V6Object)errVal.ref()).get("message").toString()
+              : errVal.toString();
+      return ((V6Regex)matcher.ref()).pattern.matcher(s).find();
+    }
+    if (matcher.tag() == V6Value.TAG_OBJ && matcher.ref() instanceof V6Object) {
+      V6Object mo = (V6Object)matcher.ref();
+      if (!(errVal.tag() == V6Value.TAG_OBJ && errVal.ref() instanceof
+                                                   V6Object))
+        return false;
+      V6Object eo = (V6Object)errVal.ref();
+      for (String k : mo.props.keySet())
+        if (!V6Value.looseEquals(mo.get(k), eo.get(k)))
+          return false;
+      return true;
+    }
+    return V6Value.strictEquals(errVal, matcher);
+  }
+
+  private static V6Value[] extractMatcherAndMessage(V6Value[] args,
+                                                    int startIdx) {
+    V6Value matcher = UNDEF;
+    V6Value message = UNDEF;
+    if (args.length > startIdx) {
+      V6Value a1 = args[startIdx];
+      if (args.length > startIdx + 1) {
+        matcher = a1;
+        message = args[startIdx + 1];
+      } else if (a1.tag() == V6Value.TAG_STR) {
+        message = a1;
+      } else {
+        matcher = a1;
+      }
+    }
+    return new V6Value[] {matcher, message};
+  }
+
+  private static V6Value messageOrDefault(V6Value message, String def) {
+    if (message.isUndefined())
+      return str(def);
+    return message.tag() == V6Value.TAG_STR
+        ? str("AssertionError: " + message.toString())
+        : message;
+  }
+
+  private static V6Promise coerceToPromise(V6Value v) {
+    if (v.tag() == V6Value.TAG_OBJ && v.ref() instanceof V6Promise)
+      return (V6Promise)v.ref();
+    if (v.tag() == V6Value.TAG_FUNC) {
+      try {
+        return coerceToPromise(v.asCallable().call(UNDEF, new V6Value[0]));
+      } catch (V6Throw e) {
+        return V6Promise.rejected(e.value);
+      } catch (RuntimeException e) {
+        return V6Promise.rejected(str(String.valueOf(e.getMessage())));
+      }
+    }
+    return V6Promise.resolved(v);
   }
 
   public static V6AssertFunction build() {
@@ -147,13 +242,78 @@ public final class V6Assert {
             try {
               target.call(UNDEF, new V6Value[0]);
             } catch (V6Throw e) {
-              throw fail(args, 1, "AssertionError: expected function not to throw");
+              throw fail(args, 1,
+                         "AssertionError: expected function not to throw");
             }
             return UNDEF;
           }));
 
-    o.set("fail",
-          fn((thisArg, args) -> { throw fail(args, 0, "AssertionError: failed"); }));
+    o.set("fail", fn((thisArg, args) -> {
+            throw fail(args, 0, "AssertionError: failed");
+          }));
+
+    o.set("match", fn((thisArg, args) -> {
+            String s = V6Value.argAt(args, 0).toString();
+            V6Value re = V6Value.argAt(args, 1);
+            boolean matches = re.tag() == V6Value.TAG_OBJ &&
+                              re.ref() instanceof V6Regex &&
+                              ((V6Regex)re.ref()).pattern.matcher(s).find();
+            if (!matches)
+              throw fail(args, 2,
+                         "AssertionError: " + s + " does not match " + re);
+            return UNDEF;
+          }));
+
+    o.set("doesNotMatch", fn((thisArg, args) -> {
+            String s = V6Value.argAt(args, 0).toString();
+            V6Value re = V6Value.argAt(args, 1);
+            boolean matches = re.tag() == V6Value.TAG_OBJ &&
+                              re.ref() instanceof V6Regex &&
+                              ((V6Regex)re.ref()).pattern.matcher(s).find();
+            if (matches)
+              throw fail(args, 2,
+                         "AssertionError: " + s + " should not match " + re);
+            return UNDEF;
+          }));
+
+    o.set(
+        "rejects", fn((thisArg, args) -> {
+          V6Value[] me = extractMatcherAndMessage(args, 1);
+          V6Value matcher = me[0];
+          V6Value message = me[1];
+          V6Promise resultPromise = new V6Promise();
+          V6Promise targetPromise = coerceToPromise(V6Value.argAt(args, 0));
+          targetPromise.addCallbacks(
+              (okVal)
+                  -> resultPromise.reject(messageOrDefault(
+                      message, "AssertionError: Missing expected rejection.")),
+              (errVal) -> {
+                if (matchesError(errVal, matcher))
+                  resultPromise.resolve(UNDEF);
+                else
+                  resultPromise.reject(messageOrDefault(
+                      message, "AssertionError: rejection did not match " +
+                               "expected error."));
+              });
+          return objValue(resultPromise);
+        }));
+
+    o.set("doesNotReject", fn((thisArg, args) -> {
+            V6Value[] me = extractMatcherAndMessage(args, 1);
+            V6Value message = me[1];
+            V6Promise resultPromise = new V6Promise();
+            V6Promise targetPromise = coerceToPromise(V6Value.argAt(args, 0));
+            targetPromise.addCallbacks(
+                (okVal)
+                    -> resultPromise.resolve(UNDEF),
+                (errVal)
+                    -> resultPromise.reject(messageOrDefault(
+                        message,
+                        "AssertionError: expected promise not to reject.")));
+            return objValue(resultPromise);
+          }));
+
+    o.set("CallTracker", objValue(new V6CallTrackerConstructor()));
 
     return o;
   }

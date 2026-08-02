@@ -1,8 +1,8 @@
 import java.util.ArrayList;
 import java.util.List;
 
-public final class V6EventEmitterConstructor extends V6Object
-    implements V6NativeConstructor {
+public final class V6EventEmitterConstructor
+    extends V6Object implements V6NativeConstructor {
   public static final V6Object PROTOTYPE = buildPrototype();
 
   public V6EventEmitterConstructor() {
@@ -107,10 +107,10 @@ public final class V6EventEmitterConstructor extends V6Object
             List<V6Value> list = e.listenersFor(event, false);
             if (list == null || list.isEmpty()) {
               if (event.equals("error"))
-                throw new V6Throw(args.length > 1
-                                       ? args[1]
-                                       : new V6Value(V6Value.TAG_STR, 0,
-                                                     "Unhandled error."));
+                throw new V6Throw(
+                    args.length > 1
+                        ? args[1]
+                        : new V6Value(V6Value.TAG_STR, 0, "Unhandled error."));
               return new V6Value(V6Value.TAG_BOOL, 0, null);
             }
             V6Value[] rest = new V6Value[args.length - 1];
@@ -134,7 +134,8 @@ public final class V6EventEmitterConstructor extends V6Object
             V6EventEmitterObject e = self(thisArg);
             List<V6Value> list =
                 e.listenersFor(V6Value.argAt(args, 0).toString(), false);
-            return new V6Value(V6Value.TAG_NUM, list == null ? 0 : list.size(), null);
+            return new V6Value(V6Value.TAG_NUM, list == null ? 0 : list.size(),
+                               null);
           }));
 
     o.set("listeners", fn((thisArg, args) -> {

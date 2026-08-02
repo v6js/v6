@@ -1,5 +1,6 @@
 public final class V6Timers {
-  private V6Timers() {}
+  private V6Timers() {
+  }
 
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
 
@@ -39,7 +40,8 @@ public final class V6Timers {
   public static final V6Value SET_INTERVAL = fn((t, a) -> {
     V6Callable cb = V6Value.argAt(a, 0).asCallable();
     double delay = a.length > 1 ? a[1].toNumber() : 0;
-    long id = V6EventLoop.schedule(cb, delay, Math.max(1, delay), restArgs(a, 2));
+    long id =
+        V6EventLoop.schedule(cb, delay, Math.max(1, delay), restArgs(a, 2));
     return num(id);
   });
 
@@ -64,4 +66,44 @@ public final class V6Timers {
     V6MicrotaskQueue.enqueue(() -> cb.call(UNDEF, new V6Value[0]));
     return UNDEF;
   });
+
+  private static V6Value objValue(V6Object o) {
+    return new V6Value(V6Value.TAG_OBJ, 0, o);
+  }
+
+  private static V6Object buildPromisesModule() {
+    V6Object p = new V6Object();
+    p.set("setTimeout", fn((t, a) -> {
+            double delay = a.length > 0 ? a[0].toNumber() : 0;
+            V6Value value = a.length > 1 ? a[1] : UNDEF;
+            V6Promise promise = new V6Promise();
+            V6EventLoop.schedule((t2, a2) -> {
+              promise.resolve(value);
+              return UNDEF;
+            }, delay, 0, new V6Value[0]);
+            return objValue(promise);
+          }));
+    p.set("setImmediate", fn((t, a) -> {
+            V6Value value = a.length > 0 ? a[0] : UNDEF;
+            V6Promise promise = new V6Promise();
+            V6EventLoop.schedule((t2, a2) -> {
+              promise.resolve(value);
+              return UNDEF;
+            }, 0, 0, new V6Value[0]);
+            return objValue(promise);
+          }));
+    return p;
+  }
+
+  public static V6Object buildModule() {
+    V6Object o = new V6Object();
+    o.set("setTimeout", SET_TIMEOUT);
+    o.set("clearTimeout", CLEAR_TIMEOUT);
+    o.set("setInterval", SET_INTERVAL);
+    o.set("clearInterval", CLEAR_INTERVAL);
+    o.set("setImmediate", SET_IMMEDIATE);
+    o.set("clearImmediate", CLEAR_IMMEDIATE);
+    o.set("promises", objValue(buildPromisesModule()));
+    return o;
+  }
 }

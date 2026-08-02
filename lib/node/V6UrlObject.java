@@ -12,7 +12,8 @@ public final class V6UrlObject extends V6Object {
   V6UrlSearchParamsObject searchParams;
 
   private static final Pattern URL_PATTERN = Pattern.compile(
-      "^([a-zA-Z][a-zA-Z0-9+.-]*):(?://(?:([^:@/]*)(?::([^@/]*))?@)?([^:/?#]*)(?::(\\d+))?)?([^?#]*)(?:\\?([^#]*))?(?:#(.*))?$");
+      "^([a-zA-Z][a-zA-Z0-9+.-]*):(?://(?:([^:@/]*)(?::([^@/]*))?@)?([^:/" +
+      "?#]*)(?::(\\d+))?)?([^?#]*)(?:\\?([^#]*))?(?:#(.*))?$");
 
   V6UrlObject(String href, String base) {
     Matcher m = URL_PATTERN.matcher(href);
@@ -24,8 +25,9 @@ public final class V6UrlObject extends V6Object {
       }
     }
     if (!m.matches())
-      throw new V6Throw(new V6Value(V6Value.TAG_STR, 0,
-                                    "TypeError [ERR_INVALID_URL]: Invalid URL: " + href));
+      throw new V6Throw(
+          new V6Value(V6Value.TAG_STR, 0,
+                      "TypeError [ERR_INVALID_URL]: Invalid URL: " + href));
     protocol = m.group(1) + ":";
     username = m.group(2) != null ? m.group(2) : "";
     password = m.group(3) != null ? m.group(3) : "";

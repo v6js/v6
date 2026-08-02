@@ -1,4 +1,5 @@
-public final class V6UrlConstructor extends V6Object implements V6NativeConstructor {
+public final class V6UrlConstructor
+    extends V6Object implements V6NativeConstructor {
   public static final V6Object PROTOTYPE = buildPrototype();
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
 
@@ -111,8 +112,9 @@ public final class V6UrlConstructor extends V6Object implements V6NativeConstruc
     });
 
     o.defineGetter("origin", (t, a) -> str(self(t).origin()));
-    o.defineGetter("searchParams",
-                   (t, a) -> new V6Value(V6Value.TAG_OBJ, 0, self(t).searchParams));
+    o.defineGetter(
+        "searchParams",
+        (t, a) -> new V6Value(V6Value.TAG_OBJ, 0, self(t).searchParams));
 
     o.set("toString", fn((t, a) -> str(self(t).href())));
     o.set("toJSON", fn((t, a) -> str(self(t).href())));

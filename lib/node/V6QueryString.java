@@ -3,7 +3,8 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 
 public final class V6QueryString {
-  private V6QueryString() {}
+  private V6QueryString() {
+  }
 
   private static V6Value str(String s) {
     return new V6Value(V6Value.TAG_STR, 0, s);
@@ -47,47 +48,56 @@ public final class V6QueryString {
     return args[idx].toString();
   }
 
+  public static V6Object parseToObject(String s, String sep, String eq) {
+    V6Object result = new V6Object();
+    if (s.isEmpty())
+      return result;
+    for (String pair : s.split(java.util.regex.Pattern.quote(sep), -1)) {
+      if (pair.isEmpty())
+        continue;
+      int idx = pair.indexOf(eq);
+      String key, val;
+      if (idx < 0) {
+        key = pair;
+        val = "";
+      } else {
+        key = pair.substring(0, idx);
+        val = pair.substring(idx + eq.length());
+      }
+      key = decodeComponent(key);
+      val = decodeComponent(val);
+      V6Value existing = result.get(key);
+      if (existing.isUndefined()) {
+        result.set(key, str(val));
+      } else if (existing.tag() == V6Value.TAG_OBJ && existing.ref() instanceof
+                                                          V6Array) {
+        ((V6Array)existing.ref()).push(str(val));
+      } else {
+        V6Array arr = new V6Array();
+        arr.push(existing);
+        arr.push(str(val));
+        result.set(key, objValue(arr));
+      }
+    }
+    return result;
+  }
+
   public static V6Object build() {
     V6Object o = new V6Object();
 
-    o.set("escape", fn((thisArg, args) -> str(escapeInternal(V6Value.argAt(args, 0).toString()))));
-    o.set("unescape", fn((thisArg, args) -> str(unescapeInternal(V6Value.argAt(args, 0).toString()))));
+    o.set("escape",
+          fn((thisArg,
+              args) -> str(escapeInternal(V6Value.argAt(args, 0).toString()))));
+    o.set(
+        "unescape",
+        fn((thisArg,
+            args) -> str(unescapeInternal(V6Value.argAt(args, 0).toString()))));
 
     o.set("parse", fn((thisArg, args) -> {
             String s = V6Value.argAt(args, 0).toString();
             String sep = argStr(args, 1, "&");
             String eq = argStr(args, 2, "=");
-            V6Object result = new V6Object();
-            if (s.isEmpty())
-              return objValue(result);
-            for (String pair : s.split(java.util.regex.Pattern.quote(sep), -1)) {
-              if (pair.isEmpty())
-                continue;
-              int idx = pair.indexOf(eq);
-              String key, val;
-              if (idx < 0) {
-                key = pair;
-                val = "";
-              } else {
-                key = pair.substring(0, idx);
-                val = pair.substring(idx + eq.length());
-              }
-              key = decodeComponent(key);
-              val = decodeComponent(val);
-              V6Value existing = result.get(key);
-              if (existing.isUndefined()) {
-                result.set(key, str(val));
-              } else if (existing.tag() == V6Value.TAG_OBJ &&
-                        existing.ref() instanceof V6Array) {
-                ((V6Array)existing.ref()).push(str(val));
-              } else {
-                V6Array arr = new V6Array();
-                arr.push(existing);
-                arr.push(str(val));
-                result.set(key, objValue(arr));
-              }
-            }
-            return objValue(result);
+            return objValue(parseToObject(s, sep, eq));
           }));
     o.set("decode", o.get("parse"));
 
@@ -104,7 +114,8 @@ public final class V6QueryString {
             for (int i = 0; i < n; i++) {
               String key = keys.get(Integer.toString(i)).toString();
               V6Value val = obj.get(key);
-              if (val.tag() == V6Value.TAG_OBJ && val.ref() instanceof V6Array) {
+              if (val.tag() == V6Value.TAG_OBJ && val.ref() instanceof
+                                                      V6Array) {
                 V6Array arr = (V6Array)val.ref();
                 int an = (int)arr.get("length").num();
                 for (int j = 0; j < an; j++) {
@@ -112,12 +123,15 @@ public final class V6QueryString {
                     sb.append(sep);
                   sb.append(escapeInternal(key))
                       .append(eq)
-                      .append(escapeInternal(arr.get(Integer.toString(j)).toString()));
+                      .append(escapeInternal(
+                          arr.get(Integer.toString(j)).toString()));
                 }
               } else {
                 if (sb.length() > 0)
                   sb.append(sep);
-                sb.append(escapeInternal(key)).append(eq).append(escapeInternal(val.toString()));
+                sb.append(escapeInternal(key))
+                    .append(eq)
+                    .append(escapeInternal(val.toString()));
               }
             }
             return str(sb.toString());

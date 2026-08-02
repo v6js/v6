@@ -1,5 +1,6 @@
 public final class V6Os {
-  private V6Os() {}
+  private V6Os() {
+  }
 
   private static V6Value str(String s) {
     return new V6Value(V6Value.TAG_STR, 0, s);
@@ -50,8 +51,8 @@ public final class V6Os {
   }
 
   private static com.sun.management.OperatingSystemMXBean osBean() {
-    return (com.sun.management.OperatingSystemMXBean)java.lang.management
-        .ManagementFactory.getOperatingSystemMXBean();
+    return (com.sun.management.OperatingSystemMXBean)
+        java.lang.management.ManagementFactory.getOperatingSystemMXBean();
   }
 
   private static String cpuModel() {
@@ -60,8 +61,8 @@ public final class V6Os {
       return id != null ? id : "unknown";
     }
     try {
-      for (String line :
-           java.nio.file.Files.readAllLines(java.nio.file.Paths.get("/proc/cpuinfo"))) {
+      for (String line : java.nio.file.Files.readAllLines(
+               java.nio.file.Paths.get("/proc/cpuinfo"))) {
         if (line.startsWith("model name")) {
           int idx = line.indexOf(':');
           if (idx >= 0)
@@ -96,8 +97,10 @@ public final class V6Os {
     o.set("platform", fn((thisArg, args) -> str(platformName())));
     o.set("arch", fn((thisArg, args) -> str(archName())));
     o.set("type", fn((thisArg, args) -> str(typeName())));
-    o.set("release", fn((thisArg, args) -> str(System.getProperty("os.version", ""))));
-    o.set("homedir", fn((thisArg, args) -> str(System.getProperty("user.home", ""))));
+    o.set("release",
+          fn((thisArg, args) -> str(System.getProperty("os.version", ""))));
+    o.set("homedir",
+          fn((thisArg, args) -> str(System.getProperty("user.home", ""))));
     o.set("tmpdir",
           fn((thisArg, args) -> str(System.getProperty("java.io.tmpdir", ""))));
     o.set("hostname", fn((thisArg, args) -> {
@@ -127,14 +130,15 @@ public final class V6Os {
             }
             return objValue(result);
           }));
-    o.set("totalmem", fn((thisArg, args) -> num(osBean().getTotalMemorySize())));
+    o.set("totalmem",
+          fn((thisArg, args) -> num(osBean().getTotalMemorySize())));
     o.set("freemem", fn((thisArg, args) -> num(osBean().getFreeMemorySize())));
     o.set("EOL", str(IS_WINDOWS ? "\r\n" : "\n"));
-    o.set("endianness",
-          fn((thisArg, args)
-                 -> str(java.nio.ByteOrder.nativeOrder() == java.nio.ByteOrder.BIG_ENDIAN
-                            ? "BE"
-                            : "LE")));
+    o.set("endianness", fn((thisArg, args)
+                               -> str(java.nio.ByteOrder.nativeOrder() ==
+                                              java.nio.ByteOrder.BIG_ENDIAN
+                                          ? "BE"
+                                          : "LE")));
 
     return o;
   }
