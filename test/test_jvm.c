@@ -7,7 +7,7 @@ int test_jvm(void) {
   if (!v6_jvm_available())
     return fails;
 
-  v6_jvm* jvm = v6_jvm_create();
+  v6_jvm* jvm = v6_jvm_create(NULL);
   v6_check(&fails, jvm != NULL);
   if (!jvm)
     return fails;

@@ -5010,6 +5010,30 @@ static int emit_node_builtin_ref(compiler* c, const char* specifier) {
   return 0;
 }
 
+static int java_specifier_is_class(const char* spec) {
+  const char* last_dot = strrchr(spec, '.');
+  const char* seg = last_dot ? last_dot + 1 : spec;
+  return seg[0] >= 'A' && seg[0] <= 'Z';
+}
+
+static int emit_java_import_ref(compiler* c, const char* specifier) {
+  if (strncmp(specifier, "java:", 5) != 0)
+    return 0;
+  const char* fqcn = specifier + 5;
+  uint16_t str_idx = cf_string(c->cf, fqcn);
+  op_emit2(c->m, op_ldc_w, str_idx);
+  if (java_specifier_is_class(fqcn)) {
+    uint16_t midx = cf_methodref(c->cf, "V6JavaInterop", "classFor",
+                                 "(Ljava/lang/String;)LV6Value;");
+    op_emit2(c->m, op_invokestatic, midx);
+  } else {
+    uint16_t midx = cf_methodref(c->cf, "V6JavaInterop", "packageFor",
+                                 "(Ljava/lang/String;)LV6Value;");
+    op_emit2(c->m, op_invokestatic, midx);
+  }
+  return 1;
+}
+
 static compiled_module* get_or_compile_module(module_ctx* modctx,
                                               const char* importer_dir,
                                               const char* specifier, int kind,
@@ -5076,7 +5100,7 @@ static void emit_require_expr(parser* p, compiler* c) {
   if (!expect(p, tok_rparen))
     return;
   char* spec = decode_string(spec_tok);
-  if (emit_node_builtin_ref(c, spec)) {
+  if (emit_node_builtin_ref(c, spec) || emit_java_import_ref(c, spec)) {
     free(spec);
     return;
   }
@@ -5122,7 +5146,7 @@ static void parse_import_stmt(parser* p, compiler* c) {
     tok spec_tok = p->cur;
     advance(p);
     char* spec = decode_string(spec_tok);
-    if (emit_node_builtin_ref(c, spec)) {
+    if (emit_node_builtin_ref(c, spec) || emit_java_import_ref(c, spec)) {
       free(spec);
       op_emit(c->m, op_pop);
       expect(p, tok_semi);
@@ -5244,7 +5268,7 @@ static void parse_import_stmt(parser* p, compiler* c) {
   int is_value_shape;
   uint16_t exports_slot = c->next_local_slot++;
 
-  if (emit_node_builtin_ref(c, spec)) {
+  if (emit_node_builtin_ref(c, spec) || emit_java_import_ref(c, spec)) {
     free(spec);
     is_value_shape = 1;
     emit_astore(c->m, exports_slot);

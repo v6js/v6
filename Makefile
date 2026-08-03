@@ -161,11 +161,15 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/web/V6WebMessageChannelConstructor.java \
                 lib/web/V6BroadcastChannelObject.java lib/web/V6BroadcastChannelConstructor.java \
                 lib/web/V6WebWorkerObject.java lib/web/V6WebWorkerConstructor.java \
-                lib/web/V6Navigator.java
-RT_CLASS_FILES := $(patsubst lib/web/%.java,$(GEN)/%.class,$(patsubst lib/shared/%.java,$(GEN)/%.class,$(patsubst lib/node/%.java,$(GEN)/%.class,$(patsubst lib/core/%.java,$(GEN)/%.class,$(RT_JAVA_SRCS)))))
+                lib/web/V6Navigator.java \
+                lib/interop/V6JavaInterop.java lib/interop/V6JavaMarshal.java \
+                lib/interop/V6JavaMatch.java \
+                lib/interop/V6JavaClassObject.java lib/interop/V6JavaInstanceObject.java \
+                lib/interop/V6JavaPackageObject.java lib/interop/V6JavaProxyHandler.java
+RT_CLASS_FILES := $(patsubst lib/interop/%.java,$(GEN)/%.class,$(patsubst lib/web/%.java,$(GEN)/%.class,$(patsubst lib/shared/%.java,$(GEN)/%.class,$(patsubst lib/node/%.java,$(GEN)/%.class,$(patsubst lib/core/%.java,$(GEN)/%.class,$(RT_JAVA_SRCS))))))
 RT_TABLE_C := $(GEN)/runtime_classes.c
 
-FMT_FILES := $(wildcard src/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java) $(wildcard lib/node/*.java) $(wildcard lib/shared/*.java) $(wildcard lib/web/*.java)
+FMT_FILES := $(wildcard src/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java) $(wildcard lib/node/*.java) $(wildcard lib/shared/*.java) $(wildcard lib/web/*.java) $(wildcard lib/interop/*.java)
 
 .PHONY: all test fmt clean dirs release bench
 

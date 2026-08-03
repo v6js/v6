@@ -31,19 +31,26 @@ static char* read_file(const char* path) {
 }
 
 static void usage(const char* prog) {
-  fprintf(stderr, "usage: %s <script.js> [-o <output.jar>] [script args...]\n",
+  fprintf(stderr,
+          "usage: %s <script.js> [-o <output.jar>] [-cp <classpath>] "
+          "[script args...]\n",
           prog);
 }
 
 int main(int argc, char** argv) {
   const char* in_path = NULL;
   const char* out_path = NULL;
+  const char* classpath = NULL;
   char** script_args = argc > 1 ? malloc(sizeof(char*) * (size_t)argc) : NULL;
   int script_argc = 0;
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
       out_path = argv[++i];
+    } else if ((strcmp(argv[i], "-cp") == 0 ||
+                strcmp(argv[i], "--classpath") == 0) &&
+               i + 1 < argc) {
+      classpath = argv[++i];
     } else if (!in_path) {
       in_path = argv[i];
     } else {
@@ -141,7 +148,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  v6_jvm* jvm = v6_jvm_create();
+  v6_jvm* jvm = v6_jvm_create(classpath);
   if (!jvm) {
     fprintf(stderr, "error: failed to create JVM\n");
     buf_free(&out);

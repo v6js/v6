@@ -59,7 +59,7 @@ int v6_jvm_available(void) {
   return 1;
 }
 
-v6_jvm* v6_jvm_create(void) {
+v6_jvm* v6_jvm_create(const char* classpath) {
   v6_lib lib = v6_open_jvm_lib();
   if (!lib)
     return NULL;
@@ -82,11 +82,25 @@ v6_jvm* v6_jvm_create(void) {
 
   JavaVMInitArgs args;
   args.version = JNI_VERSION_1_8;
-  args.nOptions = 0;
-  args.options = NULL;
   args.ignoreUnrecognized = JNI_TRUE;
 
+  JavaVMOption opts[1];
+  char* cp_opt = NULL;
+  if (classpath && classpath[0] != '\0') {
+    size_t n = strlen(classpath) + 32;
+    cp_opt = malloc(n);
+    snprintf(cp_opt, n, "-Djava.class.path=%s", classpath);
+    opts[0].optionString = cp_opt;
+    opts[0].extraInfo = NULL;
+    args.nOptions = 1;
+    args.options = opts;
+  } else {
+    args.nOptions = 0;
+    args.options = NULL;
+  }
+
   jint rc = sym.fn(&jvm->vm, (void**)&jvm->env, &args);
+  free(cp_opt);
   if (rc != JNI_OK) {
     free(jvm);
     return NULL;
@@ -215,7 +229,8 @@ int v6_jvm_available(void) {
   return 0;
 }
 
-v6_jvm* v6_jvm_create(void) {
+v6_jvm* v6_jvm_create(const char* classpath) {
+  (void)classpath;
   return NULL;
 }
 

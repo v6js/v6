@@ -48,6 +48,21 @@ public final class V6EventLoop {
     external.add(r);
   }
 
+  private static boolean hasOtherNonDaemonThreads() {
+    ThreadGroup root = Thread.currentThread().getThreadGroup();
+    while (root.getParent() != null)
+      root = root.getParent();
+    Thread[] threads = new Thread[root.activeCount() + 16];
+    int n = root.enumerate(threads, true);
+    Thread me = Thread.currentThread();
+    for (int i = 0; i < n; i++) {
+      Thread th = threads[i];
+      if (th != null && th != me && th.isAlive() && !th.isDaemon())
+        return true;
+    }
+    return false;
+  }
+
   private static void sleepQuiet(long ms) {
     if (ms <= 0)
       return;
@@ -72,7 +87,14 @@ public final class V6EventLoop {
     }
   }
 
+  private static volatile boolean started = false;
+
+  public static boolean hasStarted() {
+    return started;
+  }
+
   public static void run() {
+    started = true;
     V6MicrotaskQueue.drain();
     while (true) {
       Runnable ext;
@@ -86,7 +108,7 @@ public final class V6EventLoop {
         t = timers.peek();
       }
       if (t == null) {
-        if (refCount.get() > 0) {
+        if (refCount.get() > 0 || hasOtherNonDaemonThreads()) {
           sleepQuiet(15);
           continue;
         }
