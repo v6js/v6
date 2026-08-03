@@ -375,6 +375,8 @@ public record V6Value(int tag, double num, Object ref) {
       return V6Number.PROTOTYPE.get(key);
     case TAG_BOOL:
       return V6Boolean.PROTOTYPE.get(key);
+    case TAG_BIGINT:
+      return V6BigInt.PROTOTYPE.get(key);
     case TAG_FUNC:
       if (ref instanceof V6Object)
         return ((V6Object)ref).get(key);

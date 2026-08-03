@@ -46,6 +46,8 @@ public final class V6JavaMarshal {
       return new V6Value(V6Value.TAG_BOOL, ((Boolean)o) ? 1 : 0, null);
     if (o instanceof BigInteger)
       return new V6Value(V6Value.TAG_BIGINT, 0, o);
+    if (o instanceof java.math.BigDecimal)
+      return objValue(new V6JavaInstanceObject(o));
     if (o instanceof Number)
       return new V6Value(V6Value.TAG_NUM, ((Number)o).doubleValue(), null);
     if (o instanceof Class)
@@ -94,6 +96,12 @@ public final class V6JavaMarshal {
       return arg.tag() == V6Value.TAG_BIGINT ? SCORE_EXACT
       : arg.tag() == V6Value.TAG_NUM         ? SCORE_COERCE
                                              : SCORE_REJECT;
+    if (type == java.math.BigDecimal.class) {
+      if (arg.tag() == V6Value.TAG_STR)
+        return SCORE_EXACT;
+      if (arg.tag() == V6Value.TAG_NUM || arg.tag() == V6Value.TAG_BIGINT)
+        return SCORE_GOOD;
+    }
     if (type == char.class || type == Character.class)
       return arg.tag() == V6Value.TAG_STR && arg.toString().length() >= 1
           ? SCORE_GOOD
@@ -154,6 +162,14 @@ public final class V6JavaMarshal {
       return v.tag() == V6Value.TAG_BIGINT
           ? v.asBigInt()
           : BigInteger.valueOf((long)v.toNumber());
+    if (type == java.math.BigDecimal.class) {
+      if (v.tag() == V6Value.TAG_STR)
+        return new java.math.BigDecimal(v.toString());
+      if (v.tag() == V6Value.TAG_BIGINT)
+        return new java.math.BigDecimal(v.asBigInt());
+      if (v.tag() == V6Value.TAG_NUM)
+        return java.math.BigDecimal.valueOf(v.toNumber());
+    }
     if (type == char.class || type == Character.class) {
       String s = v.toString();
       return s.isEmpty() ? '\0' : s.charAt(0);
@@ -179,6 +195,18 @@ public final class V6JavaMarshal {
     if (type.isInterface() &&
         (v.tag() == V6Value.TAG_FUNC || v.tag() == V6Value.TAG_OBJ))
       return makeProxy(v, type);
+    if (type == Object.class) {
+      switch (v.tag()) {
+      case V6Value.TAG_NUM:
+        return v.toNumber();
+      case V6Value.TAG_BOOL:
+        return v.truthy();
+      case V6Value.TAG_BIGINT:
+        return v.asBigInt();
+      default:
+        return v.toString();
+      }
+    }
     return v.toString();
   }
 
@@ -290,15 +318,15 @@ public final class V6JavaMarshal {
     List<Method> out = new ArrayList<>();
     for (Method meth : cls.getMethods())
       if (meth.getName().equals(name))
-        out.add(publicEquivalent(meth));
+        out.add(publicEquivalent(cls, meth));
     return out.toArray(new Method[0]);
   }
 
-  private static Method publicEquivalent(Method m) {
+  private static Method publicEquivalent(Class<?> concreteClass, Method m) {
     if (Modifier.isPublic(m.getDeclaringClass().getModifiers()))
       return m;
-    Method found = findInHierarchy(m.getDeclaringClass(), m.getName(),
-                                   m.getParameterTypes());
+    Method found =
+        findInHierarchy(concreteClass, m.getName(), m.getParameterTypes());
     return found != null ? found : m;
   }
 
@@ -332,24 +360,28 @@ public final class V6JavaMarshal {
     }
   }
 
-  static V6Value resolveInstanceMember(Object instance, String name) {
+  static V6Value resolveInstanceMethod(Object instance, String name) {
     Class<?> cls = instance.getClass();
     Method[] methods = methodsNamed(cls, name);
-    if (methods.length > 0)
-      return fn(
-          (thisArg, args)
-              -> toJs(invokeBestOverload(instance, methods, args,
-                                         cls.getSimpleName() + "." + name)));
-    Field f = publicFieldNamed(cls, name);
-    if (f != null) {
-      try {
-        f.setAccessible(true);
-        return toJs(f.get(instance));
-      } catch (IllegalAccessException e) {
-        throw new V6Throw(str("Error: cannot read field " + name));
-      }
+    if (methods.length == 0)
+      return null;
+    return fn(
+        (thisArg, args)
+            -> toJs(invokeBestOverload(instance, methods, args,
+                                       cls.getSimpleName() + "." + name)));
+  }
+
+  static Field instanceFieldFor(Class<?> cls, String name) {
+    return publicFieldNamed(cls, name);
+  }
+
+  static V6Value readField(Field f, Object target) {
+    try {
+      f.setAccessible(true);
+      return toJs(f.get(target));
+    } catch (IllegalAccessException e) {
+      throw new V6Throw(str("Error: cannot read field " + f.getName()));
     }
-    return UNDEF;
   }
 
   static boolean trySetInstanceField(Object instance, String name,
@@ -366,30 +398,26 @@ public final class V6JavaMarshal {
     }
   }
 
-  static V6Value resolveStaticMember(Class<?> cls, String name) {
+  static V6Value resolveStaticMethodOrNested(Class<?> cls, String name) {
     List<Method> statics = new ArrayList<>();
     for (Method meth : cls.getMethods())
       if (meth.getName().equals(name) && Modifier.isStatic(meth.getModifiers()))
-        statics.add(publicEquivalent(meth));
+        statics.add(publicEquivalent(cls, meth));
     if (!statics.isEmpty()) {
       Method[] arr = statics.toArray(new Method[0]);
       return fn((thisArg, args)
                     -> toJs(invokeBestOverload(
                         null, arr, args, cls.getSimpleName() + "." + name)));
     }
-    Field f = publicFieldNamed(cls, name);
-    if (f != null && Modifier.isStatic(f.getModifiers())) {
-      try {
-        f.setAccessible(true);
-        return toJs(f.get(null));
-      } catch (IllegalAccessException e) {
-        throw new V6Throw(str("Error: cannot read static field " + name));
-      }
-    }
     for (Class<?> nested : cls.getClasses())
       if (nested.getSimpleName().equals(name))
         return V6JavaClassObject.wrap(nested);
-    return UNDEF;
+    return null;
+  }
+
+  static Field staticFieldFor(Class<?> cls, String name) {
+    Field f = publicFieldNamed(cls, name);
+    return (f != null && Modifier.isStatic(f.getModifiers())) ? f : null;
   }
 
   static boolean trySetStaticField(Class<?> cls, String name, V6Value value) {

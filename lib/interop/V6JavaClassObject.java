@@ -1,9 +1,12 @@
+import java.lang.reflect.Field;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class V6JavaClassObject
     extends V6Object implements V6NativeConstructor {
   final Class<?> clazz;
+  private final Map<String, Field> fieldCache = new HashMap<>();
 
   private static final Map<Class<?>, V6JavaClassObject> CACHE =
       new ConcurrentHashMap<>();
@@ -20,11 +23,22 @@ public final class V6JavaClassObject
 
   @Override
   public V6Value get(String key) {
+    Field cachedField = fieldCache.get(key);
+    if (cachedField != null)
+      return V6JavaMarshal.readField(cachedField, null);
     if (props.containsKey(key))
       return props.get(key);
-    V6Value resolved = V6JavaMarshal.resolveStaticMember(clazz, key);
-    props.put(key, resolved);
-    return resolved;
+    V6Value resolved = V6JavaMarshal.resolveStaticMethodOrNested(clazz, key);
+    if (resolved != null) {
+      props.put(key, resolved);
+      return resolved;
+    }
+    Field f = V6JavaMarshal.staticFieldFor(clazz, key);
+    if (f != null) {
+      fieldCache.put(key, f);
+      return V6JavaMarshal.readField(f, null);
+    }
+    return new V6Value(V6Value.TAG_UNDEF, 0, null);
   }
 
   @Override

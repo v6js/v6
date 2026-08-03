@@ -73,6 +73,7 @@ PACK_CLASS_BIN := $(BIN)/pack_class$(EXE)
 
 RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.java \
                 lib/core/V6String.java lib/core/V6Number.java lib/core/V6Boolean.java \
+                lib/core/V6BigInt.java \
                 lib/core/V6Iterator.java lib/core/V6Ref.java lib/core/V6Callable.java \
                 lib/core/V6Closure.java lib/core/V6Builtins.java lib/core/V6Class.java \
                 lib/core/V6Throw.java lib/core/V6Rope.java lib/core/V6NativeConstructor.java \
