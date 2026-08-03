@@ -1,0 +1,27 @@
+plugins {
+  id 'java'
+}
+
+sourceSets {
+  main {
+    java {
+      srcDirs = ['core', 'node', 'web', 'shared', 'interop']
+    }
+    resources {
+      srcDirs = []
+    }
+  }
+}
+
+def destDir = project.findProperty('destDir')
+
+tasks.named('compileJava') {
+  options.incremental = true
+  if (destDir) {
+    destinationDirectory = file(destDir)
+  }
+}
+
+tasks.named('jar') {
+  enabled = false
+}

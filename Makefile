@@ -167,13 +167,25 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/interop/V6JavaClassObject.java lib/interop/V6JavaInstanceObject.java \
                 lib/interop/V6JavaPackageObject.java lib/interop/V6JavaProxyHandler.java
 RT_CLASS_FILES := $(patsubst lib/interop/%.java,$(GEN)/%.class,$(patsubst lib/web/%.java,$(GEN)/%.class,$(patsubst lib/shared/%.java,$(GEN)/%.class,$(patsubst lib/node/%.java,$(GEN)/%.class,$(patsubst lib/core/%.java,$(GEN)/%.class,$(RT_JAVA_SRCS))))))
+RT_CLASS_NAMES := $(basename $(notdir $(RT_JAVA_SRCS)))
+RT_GEN_C := $(patsubst %,$(GEN)/rt/%.c,$(RT_CLASS_NAMES))
+RT_CLASS_OBJS := $(patsubst %,$(OBJ)/rt/%.o,$(RT_CLASS_NAMES))
 RT_TABLE_C := $(GEN)/runtime_classes.c
+GEN_ABS := $(abspath $(GEN))
+
+ifeq ($(PLATFORM),windows)
+  GRADLE ?= C:/Users/abdi/Downloads/gradle-9.6.1/bin/gradle.bat
+else
+  GRADLE ?= gradle
+endif
 
 FMT_FILES := $(wildcard src/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java) $(wildcard lib/node/*.java) $(wildcard lib/shared/*.java) $(wildcard lib/web/*.java) $(wildcard lib/interop/*.java)
 
-.PHONY: all test fmt clean dirs release bench
+.PHONY: all test fmt clean dirs release bench javaclasses
 
-all: $(V6_BIN)
+all: | dirs
+	$(MAKE) --no-print-directory BUILD_TYPE=$(BUILD_TYPE) javaclasses
+	$(MAKE) --no-print-directory BUILD_TYPE=$(BUILD_TYPE) $(V6_BIN)
 
 release:
 	$(MAKE) BUILD_TYPE=release all
@@ -181,13 +193,15 @@ release:
 bench: release
 	bash bench/run.sh
 
-$(V6_BIN): $(RT_OBJS) $(OBJ)/main.o $(OBJ)/runtime_classes.o | dirs
-	$(CC) $(LDFLAGS) $(RT_OBJS) $(OBJ)/main.o $(OBJ)/runtime_classes.o -o $@ $(LDLIBS)
+$(V6_BIN): $(RT_OBJS) $(OBJ)/main.o $(RT_CLASS_OBJS) $(OBJ)/runtime_classes.o | dirs
+	$(CC) $(LDFLAGS) $(RT_OBJS) $(OBJ)/main.o $(RT_CLASS_OBJS) $(OBJ)/runtime_classes.o -o $@ $(LDLIBS)
 
-$(TEST_BIN): $(RT_OBJS) $(TEST_OBJS) $(OBJ)/runtime_classes.o | dirs
-	$(CC) $(LDFLAGS) $(RT_OBJS) $(TEST_OBJS) $(OBJ)/runtime_classes.o -o $@ $(LDLIBS)
+$(TEST_BIN): $(RT_OBJS) $(TEST_OBJS) $(RT_CLASS_OBJS) $(OBJ)/runtime_classes.o | dirs
+	$(CC) $(LDFLAGS) $(RT_OBJS) $(TEST_OBJS) $(RT_CLASS_OBJS) $(OBJ)/runtime_classes.o -o $@ $(LDLIBS)
 
-test: $(TEST_BIN)
+test: | dirs
+	$(MAKE) --no-print-directory BUILD_TYPE=$(BUILD_TYPE) javaclasses
+	$(MAKE) --no-print-directory BUILD_TYPE=$(BUILD_TYPE) $(TEST_BIN)
 	$(TEST_BIN)
 
 $(PACK_CLASS_BIN): $(OBJ)/tool_pack_class.o | dirs
@@ -196,11 +210,12 @@ $(PACK_CLASS_BIN): $(OBJ)/tool_pack_class.o | dirs
 $(OBJ)/tool_pack_class.o: tools/pack_class.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(RT_CLASS_FILES): $(RT_JAVA_SRCS) | dirs
-	$(JAVAC) -d $(GEN) $(RT_JAVA_SRCS)
+javaclasses: $(PACK_CLASS_BIN) | dirs
+	$(GRADLE) -p lib compileJava -PdestDir=$(GEN_ABS) -q --console=plain
+	$(PACK_CLASS_BIN) $(GEN)/rt $(RT_TABLE_C) $(RT_CLASS_FILES)
 
-$(RT_TABLE_C): $(RT_CLASS_FILES) $(PACK_CLASS_BIN) | dirs
-	$(PACK_CLASS_BIN) $(RT_TABLE_C) $(RT_CLASS_FILES)
+$(OBJ)/rt/%.o: $(GEN)/rt/%.c | dirs
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ)/runtime_classes.o: $(RT_TABLE_C) | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -215,6 +230,8 @@ dirs:
 	@$(call MKDIR_P,$(OBJ))
 	@$(call MKDIR_P,$(BIN))
 	@$(call MKDIR_P,$(GEN))
+	@$(call MKDIR_P,$(GEN)/rt)
+	@$(call MKDIR_P,$(OBJ)/rt)
 
 fmt:
 	clang-format -i $(FMT_FILES)
@@ -223,3 +240,4 @@ clean:
 	@$(call RM_RF,build)
 
 -include $(wildcard $(OBJ)/*.d)
+-include $(wildcard $(OBJ)/rt/*.d)

@@ -84,20 +84,22 @@ v6_jvm* v6_jvm_create(const char* classpath) {
   args.version = JNI_VERSION_1_8;
   args.ignoreUnrecognized = JNI_TRUE;
 
-  JavaVMOption opts[1];
+  JavaVMOption opts[2];
+  int nopts = 0;
   char* cp_opt = NULL;
   if (classpath && classpath[0] != '\0') {
     size_t n = strlen(classpath) + 32;
     cp_opt = malloc(n);
     snprintf(cp_opt, n, "-Djava.class.path=%s", classpath);
-    opts[0].optionString = cp_opt;
-    opts[0].extraInfo = NULL;
-    args.nOptions = 1;
-    args.options = opts;
-  } else {
-    args.nOptions = 0;
-    args.options = NULL;
+    opts[nopts].optionString = cp_opt;
+    opts[nopts].extraInfo = NULL;
+    nopts++;
   }
+  opts[nopts].optionString = "-Dsun.java2d.dpiaware=true";
+  opts[nopts].extraInfo = NULL;
+  nopts++;
+  args.nOptions = nopts;
+  args.options = opts;
 
   jint rc = sym.fn(&jvm->vm, (void**)&jvm->env, &args);
   free(cp_opt);
