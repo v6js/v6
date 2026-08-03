@@ -104,6 +104,7 @@ typedef enum {
   op_athrow = 0xbf,
   op_ixor = 0x82,
   op_dup_x2 = 0x5b,
+  op_wide = 0xc4,
 } opcode;
 
 enum {
@@ -137,6 +138,44 @@ typedef struct field {
   uint16_t desc_idx;
 } field;
 
+typedef struct cp_utf8_entry {
+  char* s;
+  uint16_t idx;
+} cp_utf8_entry;
+
+typedef struct cp_class_entry {
+  char* name;
+  uint16_t idx;
+} cp_class_entry;
+
+typedef struct cp_nt_entry {
+  char* name;
+  char* desc;
+  uint16_t idx;
+} cp_nt_entry;
+
+typedef struct cp_ref_entry {
+  char* cls;
+  char* name;
+  char* desc;
+  uint16_t idx;
+} cp_ref_entry;
+
+typedef struct cp_str_entry {
+  char* s;
+  uint16_t idx;
+} cp_str_entry;
+
+typedef struct cp_int_entry {
+  int32_t v;
+  uint16_t idx;
+} cp_int_entry;
+
+typedef struct cp_dbl_entry {
+  double v;
+  uint16_t idx;
+} cp_dbl_entry;
+
 typedef struct class_file {
   buf cp;
   uint16_t cp_count;
@@ -150,6 +189,22 @@ typedef struct class_file {
   field* fields;
   size_t field_len;
   size_t field_cap;
+  cp_utf8_entry* utf8_cache;
+  size_t utf8_cache_len, utf8_cache_cap;
+  cp_class_entry* class_cache;
+  size_t class_cache_len, class_cache_cap;
+  cp_nt_entry* nt_cache;
+  size_t nt_cache_len, nt_cache_cap;
+  cp_ref_entry* methodref_cache;
+  size_t methodref_cache_len, methodref_cache_cap;
+  cp_ref_entry* fieldref_cache;
+  size_t fieldref_cache_len, fieldref_cache_cap;
+  cp_str_entry* str_cache;
+  size_t str_cache_len, str_cache_cap;
+  cp_int_entry* int_cache;
+  size_t int_cache_len, int_cache_cap;
+  cp_dbl_entry* dbl_cache;
+  size_t dbl_cache_len, dbl_cache_cap;
 } class_file;
 
 void cf_init(class_file* cf, const char* this_name, const char* super_name);

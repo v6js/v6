@@ -14,26 +14,62 @@ enum {
   cp_name_type = 12,
 };
 
+static char* cf_strdup(const char* s) {
+  size_t n = strlen(s) + 1;
+  char* out = malloc(n);
+  memcpy(out, s, n);
+  return out;
+}
+
 uint16_t cf_utf8(class_file* cf, const char* s) {
+  for (size_t i = 0; i < cf->utf8_cache_len; i++) {
+    if (strcmp(cf->utf8_cache[i].s, s) == 0)
+      return cf->utf8_cache[i].idx;
+  }
   size_t n = strlen(s);
   cf->cp_count++;
   uint16_t idx = cf->cp_count;
   buf_u8(&cf->cp, cp_utf8);
   buf_u16(&cf->cp, (uint16_t)n);
   buf_bytes(&cf->cp, (const uint8_t*)s, n);
+  if (cf->utf8_cache_len == cf->utf8_cache_cap) {
+    cf->utf8_cache_cap = cf->utf8_cache_cap ? cf->utf8_cache_cap * 2 : 64;
+    cf->utf8_cache =
+        realloc(cf->utf8_cache, cf->utf8_cache_cap * sizeof(cp_utf8_entry));
+  }
+  cf->utf8_cache[cf->utf8_cache_len].s = cf_strdup(s);
+  cf->utf8_cache[cf->utf8_cache_len].idx = idx;
+  cf->utf8_cache_len++;
   return idx;
 }
 
 uint16_t cf_class(class_file* cf, const char* name) {
+  for (size_t i = 0; i < cf->class_cache_len; i++) {
+    if (strcmp(cf->class_cache[i].name, name) == 0)
+      return cf->class_cache[i].idx;
+  }
   uint16_t name_idx = cf_utf8(cf, name);
   cf->cp_count++;
   uint16_t idx = cf->cp_count;
   buf_u8(&cf->cp, cp_class);
   buf_u16(&cf->cp, name_idx);
+  if (cf->class_cache_len == cf->class_cache_cap) {
+    cf->class_cache_cap = cf->class_cache_cap ? cf->class_cache_cap * 2 : 64;
+    cf->class_cache =
+        realloc(cf->class_cache, cf->class_cache_cap * sizeof(cp_class_entry));
+  }
+  cf->class_cache[cf->class_cache_len].name = cf_strdup(name);
+  cf->class_cache[cf->class_cache_len].idx = idx;
+  cf->class_cache_len++;
   return idx;
 }
 
 uint16_t cf_name_type(class_file* cf, const char* name, const char* desc) {
+  for (size_t i = 0; i < cf->nt_cache_len; i++) {
+    if (strcmp(cf->nt_cache[i].name, name) == 0 &&
+        strcmp(cf->nt_cache[i].desc, desc) == 0)
+      return cf->nt_cache[i].idx;
+  }
   uint16_t name_idx = cf_utf8(cf, name);
   uint16_t desc_idx = cf_utf8(cf, desc);
   cf->cp_count++;
@@ -41,51 +77,105 @@ uint16_t cf_name_type(class_file* cf, const char* name, const char* desc) {
   buf_u8(&cf->cp, cp_name_type);
   buf_u16(&cf->cp, name_idx);
   buf_u16(&cf->cp, desc_idx);
+  if (cf->nt_cache_len == cf->nt_cache_cap) {
+    cf->nt_cache_cap = cf->nt_cache_cap ? cf->nt_cache_cap * 2 : 64;
+    cf->nt_cache =
+        realloc(cf->nt_cache, cf->nt_cache_cap * sizeof(cp_nt_entry));
+  }
+  cf->nt_cache[cf->nt_cache_len].name = cf_strdup(name);
+  cf->nt_cache[cf->nt_cache_len].desc = cf_strdup(desc);
+  cf->nt_cache[cf->nt_cache_len].idx = idx;
+  cf->nt_cache_len++;
+  return idx;
+}
+
+static uint16_t cf_ref(class_file* cf, cp_ref_entry** cache, size_t* len,
+                       size_t* cap, uint8_t tag, const char* cls,
+                       const char* name, const char* desc) {
+  cp_ref_entry* arr = *cache;
+  for (size_t i = 0; i < *len; i++) {
+    if (strcmp(arr[i].cls, cls) == 0 && strcmp(arr[i].name, name) == 0 &&
+        strcmp(arr[i].desc, desc) == 0)
+      return arr[i].idx;
+  }
+  uint16_t cls_idx = cf_class(cf, cls);
+  uint16_t nt_idx = cf_name_type(cf, name, desc);
+  cf->cp_count++;
+  uint16_t idx = cf->cp_count;
+  buf_u8(&cf->cp, tag);
+  buf_u16(&cf->cp, cls_idx);
+  buf_u16(&cf->cp, nt_idx);
+  if (*len == *cap) {
+    *cap = *cap ? *cap * 2 : 64;
+    *cache = realloc(*cache, *cap * sizeof(cp_ref_entry));
+  }
+  arr = *cache;
+  arr[*len].cls = cf_strdup(cls);
+  arr[*len].name = cf_strdup(name);
+  arr[*len].desc = cf_strdup(desc);
+  arr[*len].idx = idx;
+  (*len)++;
   return idx;
 }
 
 uint16_t cf_methodref(class_file* cf, const char* cls, const char* name,
                       const char* desc) {
-  uint16_t cls_idx = cf_class(cf, cls);
-  uint16_t nt_idx = cf_name_type(cf, name, desc);
-  cf->cp_count++;
-  uint16_t idx = cf->cp_count;
-  buf_u8(&cf->cp, cp_methodref);
-  buf_u16(&cf->cp, cls_idx);
-  buf_u16(&cf->cp, nt_idx);
-  return idx;
+  return cf_ref(cf, &cf->methodref_cache, &cf->methodref_cache_len,
+                &cf->methodref_cache_cap, cp_methodref, cls, name, desc);
 }
 
 uint16_t cf_fieldref(class_file* cf, const char* cls, const char* name,
                      const char* desc) {
-  uint16_t cls_idx = cf_class(cf, cls);
-  uint16_t nt_idx = cf_name_type(cf, name, desc);
-  cf->cp_count++;
-  uint16_t idx = cf->cp_count;
-  buf_u8(&cf->cp, cp_fieldref);
-  buf_u16(&cf->cp, cls_idx);
-  buf_u16(&cf->cp, nt_idx);
-  return idx;
+  return cf_ref(cf, &cf->fieldref_cache, &cf->fieldref_cache_len,
+                &cf->fieldref_cache_cap, cp_fieldref, cls, name, desc);
 }
 
 uint16_t cf_string(class_file* cf, const char* s) {
+  for (size_t i = 0; i < cf->str_cache_len; i++) {
+    if (strcmp(cf->str_cache[i].s, s) == 0)
+      return cf->str_cache[i].idx;
+  }
   uint16_t str_idx = cf_utf8(cf, s);
   cf->cp_count++;
   uint16_t idx = cf->cp_count;
   buf_u8(&cf->cp, cp_string);
   buf_u16(&cf->cp, str_idx);
+  if (cf->str_cache_len == cf->str_cache_cap) {
+    cf->str_cache_cap = cf->str_cache_cap ? cf->str_cache_cap * 2 : 64;
+    cf->str_cache =
+        realloc(cf->str_cache, cf->str_cache_cap * sizeof(cp_str_entry));
+  }
+  cf->str_cache[cf->str_cache_len].s = cf_strdup(s);
+  cf->str_cache[cf->str_cache_len].idx = idx;
+  cf->str_cache_len++;
   return idx;
 }
 
 uint16_t cf_integer(class_file* cf, int32_t v) {
+  for (size_t i = 0; i < cf->int_cache_len; i++) {
+    if (cf->int_cache[i].v == v)
+      return cf->int_cache[i].idx;
+  }
   cf->cp_count++;
   uint16_t idx = cf->cp_count;
   buf_u8(&cf->cp, cp_integer);
   buf_u32(&cf->cp, (uint32_t)v);
+  if (cf->int_cache_len == cf->int_cache_cap) {
+    cf->int_cache_cap = cf->int_cache_cap ? cf->int_cache_cap * 2 : 64;
+    cf->int_cache =
+        realloc(cf->int_cache, cf->int_cache_cap * sizeof(cp_int_entry));
+  }
+  cf->int_cache[cf->int_cache_len].v = v;
+  cf->int_cache[cf->int_cache_len].idx = idx;
+  cf->int_cache_len++;
   return idx;
 }
 
 uint16_t cf_double(class_file* cf, double v) {
+  for (size_t i = 0; i < cf->dbl_cache_len; i++) {
+    if (cf->dbl_cache[i].v == v)
+      return cf->dbl_cache[i].idx;
+  }
   uint64_t bits;
   memcpy(&bits, &v, sizeof(bits));
   cf->cp_count++;
@@ -94,12 +184,44 @@ uint16_t cf_double(class_file* cf, double v) {
   buf_u32(&cf->cp, (uint32_t)(bits >> 32));
   buf_u32(&cf->cp, (uint32_t)bits);
   cf->cp_count++;
+  if (cf->dbl_cache_len == cf->dbl_cache_cap) {
+    cf->dbl_cache_cap = cf->dbl_cache_cap ? cf->dbl_cache_cap * 2 : 64;
+    cf->dbl_cache =
+        realloc(cf->dbl_cache, cf->dbl_cache_cap * sizeof(cp_dbl_entry));
+  }
+  cf->dbl_cache[cf->dbl_cache_len].v = v;
+  cf->dbl_cache[cf->dbl_cache_len].idx = idx;
+  cf->dbl_cache_len++;
   return idx;
 }
 
 void cf_init(class_file* cf, const char* this_name, const char* super_name) {
   buf_init(&cf->cp);
   cf->cp_count = 0;
+  cf->utf8_cache = NULL;
+  cf->utf8_cache_len = 0;
+  cf->utf8_cache_cap = 0;
+  cf->class_cache = NULL;
+  cf->class_cache_len = 0;
+  cf->class_cache_cap = 0;
+  cf->nt_cache = NULL;
+  cf->nt_cache_len = 0;
+  cf->nt_cache_cap = 0;
+  cf->methodref_cache = NULL;
+  cf->methodref_cache_len = 0;
+  cf->methodref_cache_cap = 0;
+  cf->fieldref_cache = NULL;
+  cf->fieldref_cache_len = 0;
+  cf->fieldref_cache_cap = 0;
+  cf->str_cache = NULL;
+  cf->str_cache_len = 0;
+  cf->str_cache_cap = 0;
+  cf->int_cache = NULL;
+  cf->int_cache_len = 0;
+  cf->int_cache_cap = 0;
+  cf->dbl_cache = NULL;
+  cf->dbl_cache_len = 0;
+  cf->dbl_cache_cap = 0;
   cf->access = acc_public | acc_super;
   cf->this_idx = cf_class(cf, this_name);
   cf->super_idx = cf_class(cf, super_name);
@@ -121,6 +243,34 @@ void cf_free(class_file* cf) {
   free(cf->methods);
   free(cf->fields);
   buf_free(&cf->cp);
+  for (size_t i = 0; i < cf->utf8_cache_len; i++)
+    free(cf->utf8_cache[i].s);
+  free(cf->utf8_cache);
+  for (size_t i = 0; i < cf->class_cache_len; i++)
+    free(cf->class_cache[i].name);
+  free(cf->class_cache);
+  for (size_t i = 0; i < cf->nt_cache_len; i++) {
+    free(cf->nt_cache[i].name);
+    free(cf->nt_cache[i].desc);
+  }
+  free(cf->nt_cache);
+  for (size_t i = 0; i < cf->methodref_cache_len; i++) {
+    free(cf->methodref_cache[i].cls);
+    free(cf->methodref_cache[i].name);
+    free(cf->methodref_cache[i].desc);
+  }
+  free(cf->methodref_cache);
+  for (size_t i = 0; i < cf->fieldref_cache_len; i++) {
+    free(cf->fieldref_cache[i].cls);
+    free(cf->fieldref_cache[i].name);
+    free(cf->fieldref_cache[i].desc);
+  }
+  free(cf->fieldref_cache);
+  for (size_t i = 0; i < cf->str_cache_len; i++)
+    free(cf->str_cache[i].s);
+  free(cf->str_cache);
+  free(cf->int_cache);
+  free(cf->dbl_cache);
 }
 
 method* cf_method(class_file* cf, uint16_t access, const char* name,

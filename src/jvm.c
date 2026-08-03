@@ -167,7 +167,14 @@ int v6_jvm_define_extra(v6_jvm* jvm, const char* name,
   JNIEnv* env = jvm->env;
   jclass cls = (*env)->DefineClass(env, name, jvm->loader,
                                    (const jbyte*)class_bytes, (jsize)len);
-  return cls ? 0 : -1;
+  if (!cls) {
+    if ((*env)->ExceptionCheck(env)) {
+      (*env)->ExceptionDescribe(env);
+      (*env)->ExceptionClear(env);
+    }
+    return -1;
+  }
+  return 0;
 }
 
 int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
@@ -200,8 +207,35 @@ int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
 
   (*env)->CallStaticVoidMethod(env, cls, main_m, args);
   if ((*env)->ExceptionCheck(env)) {
-    (*env)->ExceptionDescribe(env);
+    jthrowable exc = (*env)->ExceptionOccurred(env);
     (*env)->ExceptionClear(env);
+    jclass throw_cls = (*env)->FindClass(env, "V6Throw");
+    if (throw_cls && (*env)->IsInstanceOf(env, exc, throw_cls)) {
+      jfieldID value_fld =
+          (*env)->GetFieldID(env, throw_cls, "value", "LV6Value;");
+      jobject value =
+          value_fld ? (*env)->GetObjectField(env, exc, value_fld) : NULL;
+      jclass value_cls = value ? (*env)->GetObjectClass(env, value) : NULL;
+      jmethodID to_string =
+          value_cls ? (*env)->GetMethodID(env, value_cls, "toString",
+                                          "()Ljava/lang/String;")
+                    : NULL;
+      jstring msg =
+          to_string ? (jstring)(*env)->CallObjectMethod(env, value, to_string)
+                    : NULL;
+      if (msg) {
+        const char* msg_c = (*env)->GetStringUTFChars(env, msg, NULL);
+        fprintf(stderr, "Uncaught %s\n", msg_c);
+        (*env)->ReleaseStringUTFChars(env, msg, msg_c);
+      } else {
+        fprintf(stderr, "Uncaught exception (V6Throw)\n");
+      }
+      (*env)->ExceptionClear(env);
+    } else {
+      (*env)->Throw(env, exc);
+      (*env)->ExceptionDescribe(env);
+      (*env)->ExceptionClear(env);
+    }
     return -1;
   }
 

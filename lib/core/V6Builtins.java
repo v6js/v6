@@ -128,6 +128,22 @@ public final class V6Builtins {
   public static final V6Value POW = fn2(Math::pow);
   public static final V6Value RANDOM =
       fn((thisArg, args) -> new V6Value(V6Value.TAG_NUM, Math.random(), null));
+  public static final V6Value LOG = fn1(Math::log);
+  public static final V6Value LOG2 = fn1(a -> Math.log(a) / Math.log(2));
+  public static final V6Value LOG10 = fn1(Math::log10);
+  public static final V6Value EXP = fn1(Math::exp);
+  public static final V6Value SIN = fn1(Math::sin);
+  public static final V6Value COS = fn1(Math::cos);
+  public static final V6Value TAN = fn1(Math::tan);
+  public static final V6Value ASIN = fn1(Math::asin);
+  public static final V6Value ACOS = fn1(Math::acos);
+  public static final V6Value ATAN = fn1(Math::atan);
+  public static final V6Value ATAN2 = fn2(Math::atan2);
+  public static final V6Value CLZ32 = fn((thisArg, args) -> {
+    long v = (long)V6Value.argAt(args, 0).toNumber();
+    int x = (int)(v & 0xFFFFFFFFL);
+    return new V6Value(V6Value.TAG_NUM, Integer.numberOfLeadingZeros(x), null);
+  });
 
   private static V6Object mathObject() {
     V6Object o = new V6Object();
@@ -143,8 +159,26 @@ public final class V6Builtins {
     o.set("min", MIN);
     o.set("pow", POW);
     o.set("random", RANDOM);
+    o.set("log", LOG);
+    o.set("log2", LOG2);
+    o.set("log10", LOG10);
+    o.set("exp", EXP);
+    o.set("sin", SIN);
+    o.set("cos", COS);
+    o.set("tan", TAN);
+    o.set("asin", ASIN);
+    o.set("acos", ACOS);
+    o.set("atan", ATAN);
+    o.set("atan2", ATAN2);
+    o.set("clz32", CLZ32);
     o.set("PI", new V6Value(V6Value.TAG_NUM, Math.PI, null));
     o.set("E", new V6Value(V6Value.TAG_NUM, Math.E, null));
+    o.set("LN2", new V6Value(V6Value.TAG_NUM, Math.log(2), null));
+    o.set("LN10", new V6Value(V6Value.TAG_NUM, Math.log(10), null));
+    o.set("LOG2E", new V6Value(V6Value.TAG_NUM, 1 / Math.log(2), null));
+    o.set("LOG10E", new V6Value(V6Value.TAG_NUM, 1 / Math.log(10), null));
+    o.set("SQRT2", new V6Value(V6Value.TAG_NUM, Math.sqrt(2), null));
+    o.set("SQRT1_2", new V6Value(V6Value.TAG_NUM, Math.sqrt(0.5), null));
     return o;
   }
 
@@ -172,6 +206,18 @@ public final class V6Builtins {
             int start = args.length > 0 ? (int)args[0].toNumber() : 0;
             int end = args.length > 1 ? (int)args[1].toNumber() : len;
             return objValue(a.slice(start, end));
+          }));
+    o.set("splice", fn((thisArg, args) -> {
+            V6Object a = asObj(thisArg);
+            int len = (int)a.get("length").num();
+            int start = args.length > 0 ? (int)args[0].toNumber() : 0;
+            int deleteCount =
+                args.length > 1 ? (int)args[1].toNumber() : len - start;
+            V6Value[] items =
+                args.length > 2
+                    ? java.util.Arrays.copyOfRange(args, 2, args.length)
+                    : new V6Value[0];
+            return objValue(a.splice(start, deleteCount, items));
           }));
     o.set("indexOf",
           fn((thisArg, args)
@@ -231,6 +277,7 @@ public final class V6Builtins {
 
   private static V6Object objectNamespace() {
     V6Object o = new V6Object();
+    o.set("prototype", objValue(V6Object.OBJECT_PROTOTYPE));
     o.set("keys", fn((thisArg, args) -> {
             V6Object obj = asObj(V6Value.argAt(args, 0));
             return objValue(obj != null ? obj.enumKeys() : new V6Array());
@@ -274,6 +321,18 @@ public final class V6Builtins {
     o.set("isFrozen", fn((thisArg, args) -> {
             V6Object obj = asObj(V6Value.argAt(args, 0));
             return boolValue(obj != null && obj.isFrozenFlag());
+          }));
+    o.set("getOwnPropertyDescriptor", fn((thisArg, args) -> {
+            V6Object obj = asObj(V6Value.argAt(args, 0));
+            String key = V6Value.argAt(args, 1).toString();
+            V6Object desc =
+                obj != null ? obj.getOwnPropertyDescriptor(key) : null;
+            return desc != null ? objValue(desc)
+                                : new V6Value(V6Value.TAG_UNDEF, 0, null);
+          }));
+    o.set("getOwnPropertyNames", fn((thisArg, args) -> {
+            V6Object obj = asObj(V6Value.argAt(args, 0));
+            return objValue(obj != null ? obj.enumKeys() : new V6Array());
           }));
     o.set("seal", fn((thisArg, args) -> {
             V6Value v = V6Value.argAt(args, 0);
@@ -361,29 +420,7 @@ public final class V6Builtins {
 
   public static final V6Value OBJECT = objValue(objectNamespace());
 
-  private static V6Object arrayNamespace() {
-    V6Object o = new V6Object();
-    o.set("prototype", objValue(ARRAY_PROTOTYPE));
-    o.set("isArray", fn((thisArg, args)
-                            -> boolValue(V6Value.argAt(args, 0).ref() instanceof
-                                         V6Array)));
-    o.set("from", fn((thisArg, args) -> {
-            V6Array result = new V6Array();
-            result.pushAll(V6Value.argAt(args, 0));
-            if (args.length > 1 && args[1].tag() == V6Value.TAG_FUNC)
-              return objValue(result.map(args[1].asCallable()));
-            return objValue(result);
-          }));
-    o.set("of", fn((thisArg, args) -> {
-            V6Array result = new V6Array();
-            for (V6Value v : args)
-              result.push(v);
-            return objValue(result);
-          }));
-    return o;
-  }
-
-  public static final V6Value ARRAY = objValue(arrayNamespace());
+  public static final V6Value ARRAY = objValue(new V6ArrayConstructor());
 
   public static final V6Value PARSE_INT = fn((thisArg, args) -> {
     String str = V6Value.argAt(args, 0).toString().strip();
@@ -818,6 +855,8 @@ public final class V6Builtins {
   public static final V6Object REGEXP_PROTOTYPE = regexPrototype();
   public static final V6Value REGEXP = objValue(new V6RegexConstructor());
   public static final V6Value DATE = objValue(new V6DateConstructor());
+  public static final V6Value FUNCTION = objValue(new V6FunctionConstructor());
+  public static final V6Value STRING = objValue(new V6StringConstructor());
 
   private static V6Object jsonObject() {
     V6Object o = new V6Object();

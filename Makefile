@@ -88,6 +88,9 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/core/V6AsyncFunction.java lib/core/V6AsyncGenerator.java \
                 lib/core/V6AsyncGeneratorFunction.java \
                 lib/core/V6Regex.java lib/core/V6RegexConstructor.java \
+                lib/core/V6FunctionConstructor.java \
+                lib/core/V6ArrayConstructor.java \
+                lib/core/V6StringConstructor.java \
                 lib/core/V6DateObject.java lib/core/V6DateConstructor.java \
                 lib/core/V6Json.java \
                 lib/node/V6Path.java \

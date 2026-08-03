@@ -6,10 +6,10 @@
 struct module_ctx;
 
 #define v6_max_params 16
-#define v6_max_locals 256
+#define v6_max_locals 512
 #define v6_max_loops 32
 #define v6_max_breaks 32
-#define v6_max_upvalues 64
+#define v6_max_upvalues 1024
 #define v6_max_catches 16
 #define v6_max_fields 32
 #define v6_max_labels 32
@@ -59,11 +59,11 @@ typedef struct compiler {
   int is_arrow;
   param params[v6_max_params];
   int param_count;
-  local locals[v6_max_locals];
+  local* locals;
   int local_count;
   uint16_t scratch_slot;
   uint16_t next_local_slot;
-  upvalue upvalues[v6_max_upvalues];
+  upvalue* upvalues;
   int upvalue_count;
   break_ctx breaks[v6_max_loops];
   int break_depth;

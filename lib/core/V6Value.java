@@ -253,7 +253,12 @@ public record V6Value(int tag, double num, Object ref) {
       case TAG_UNDEF -> "undefined";
       case TAG_FUNC -> "function";
       case TAG_BIGINT -> "bigint";
-      case TAG_OBJ -> ref instanceof V6Symbol ? "symbol" : "object";
+      case TAG_OBJ ->
+        ref instanceof V6Symbol
+            ? "symbol"
+            : (ref instanceof V6Class || ref instanceof V6NativeConstructor
+                   ? "function"
+                   : "object");
       default -> "object";
     };
   }
@@ -262,7 +267,8 @@ public record V6Value(int tag, double num, Object ref) {
     if (tag != TAG_FUNC) {
       if (ref instanceof V6NativeConstructor)
         return ((V6NativeConstructor)ref).construct(args);
-      throw new RuntimeException("not a function");
+      throw new V6Throw(new V6Value(
+          TAG_STR, 0, "TypeError: " + toString() + " is not a function"));
     }
     return ((V6Callable)ref).call(thisArg, args);
   }
@@ -306,6 +312,10 @@ public record V6Value(int tag, double num, Object ref) {
         return result;
       return instanceValue;
     }
+    if (!(classValue.ref instanceof V6Class))
+      throw new V6Throw(new V6Value(TAG_STR, 0,
+                                    "TypeError: " + classValue.toString() +
+                                        " is not a constructor"));
     V6Class cls = (V6Class)classValue.ref;
     V6Object instance = allocateInstance(cls);
     Object protoRef = cls.get("prototype").ref;

@@ -1,4 +1,5 @@
-public final class V6AsyncGeneratorFunction extends V6Object implements V6Callable {
+public final class V6AsyncGeneratorFunction
+    extends V6Object implements V6Callable {
   private final V6Callable underlying;
 
   public V6AsyncGeneratorFunction(V6Callable underlying) {

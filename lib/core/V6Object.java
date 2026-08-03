@@ -17,6 +17,96 @@ public class V6Object {
   public V6Value newTarget;
   public V6NativeConstructor nativeCtor;
 
+  public static final V6Object OBJECT_PROTOTYPE = buildObjectPrototype();
+
+  private static V6Object buildObjectPrototype() {
+    V6Object o = new V6Object();
+    o.set("hasOwnProperty",
+          new V6Value(V6Value.TAG_FUNC, 0, (V6Callable)(thisArg, args) -> {
+            if (thisArg.tag() != V6Value.TAG_OBJ ||
+                !(thisArg.ref() instanceof V6Object))
+              return new V6Value(V6Value.TAG_BOOL, 0, null);
+            V6Object obj = (V6Object)thisArg.ref();
+            String key = args.length > 0 ? args[0].toString() : "undefined";
+            return new V6Value(V6Value.TAG_BOOL, obj.hasOwn(key) ? 1 : 0, null);
+          }));
+    o.set("isPrototypeOf",
+          new V6Value(V6Value.TAG_FUNC, 0, (V6Callable)(thisArg, args) -> {
+            if (thisArg.tag() != V6Value.TAG_OBJ ||
+                !(thisArg.ref() instanceof V6Object))
+              return new V6Value(V6Value.TAG_BOOL, 0, null);
+            V6Object self = (V6Object)thisArg.ref();
+            V6Value target = args.length > 0
+                                 ? args[0]
+                                 : new V6Value(V6Value.TAG_UNDEF, 0, null);
+            if (target.tag() != V6Value.TAG_OBJ ||
+                !(target.ref() instanceof V6Object))
+              return new V6Value(V6Value.TAG_BOOL, 0, null);
+            for (V6Object p = ((V6Object)target.ref()).getProto(); p != null;
+                 p = p.getProto())
+              if (p == self)
+                return new V6Value(V6Value.TAG_BOOL, 1, null);
+            return new V6Value(V6Value.TAG_BOOL, 0, null);
+          }));
+    o.set("propertyIsEnumerable",
+          new V6Value(V6Value.TAG_FUNC, 0, (V6Callable)(thisArg, args) -> {
+            if (thisArg.tag() != V6Value.TAG_OBJ ||
+                !(thisArg.ref() instanceof V6Object))
+              return new V6Value(V6Value.TAG_BOOL, 0, null);
+            V6Object obj = (V6Object)thisArg.ref();
+            String key = args.length > 0 ? args[0].toString() : "undefined";
+            return new V6Value(V6Value.TAG_BOOL, obj.hasOwn(key) ? 1 : 0, null);
+          }));
+    o.set("toString", new V6Value(V6Value.TAG_FUNC, 0,
+                                  (V6Callable)(thisArg, args)
+                                      -> new V6Value(V6Value.TAG_STR, 0,
+                                                     "[object Object]")));
+    o.set("valueOf", new V6Value(V6Value.TAG_FUNC, 0,
+                                 (V6Callable)(thisArg, args) -> thisArg));
+    return o;
+  }
+
+  public V6Object() {
+    this.proto = OBJECT_PROTOTYPE;
+  }
+
+  public boolean hasOwn(String key) {
+    if (key.equals("length") && !props.containsKey("length"))
+      return true;
+    int idx = parseIndex(key);
+    if (idx >= 0 && idx < elemCount)
+      return true;
+    if (props.containsKey(key))
+      return true;
+    if ((getters != null && getters.containsKey(key)) ||
+        (setters != null && setters.containsKey(key)))
+      return true;
+    return false;
+  }
+
+  public V6Object getOwnPropertyDescriptor(String key) {
+    if (!hasOwn(key))
+      return null;
+    V6Object desc = new V6Object();
+    boolean hasGetter = getters != null && getters.containsKey(key);
+    boolean hasSetter = setters != null && setters.containsKey(key);
+    if (hasGetter || hasSetter) {
+      desc.set("get", hasGetter
+                          ? new V6Value(V6Value.TAG_FUNC, 0, getters.get(key))
+                          : new V6Value(V6Value.TAG_UNDEF, 0, null));
+      desc.set("set", hasSetter
+                          ? new V6Value(V6Value.TAG_FUNC, 0, setters.get(key))
+                          : new V6Value(V6Value.TAG_UNDEF, 0, null));
+    } else {
+      desc.set("value", get(key));
+      desc.set("writable", new V6Value(V6Value.TAG_BOOL, frozen ? 0 : 1, null));
+    }
+    desc.set("enumerable", new V6Value(V6Value.TAG_BOOL, 1, null));
+    desc.set("configurable",
+             new V6Value(V6Value.TAG_BOOL, frozen || sealed ? 0 : 1, null));
+    return desc;
+  }
+
   public void defineGetter(String key, V6Callable getter) {
     if (getters == null)
       getters = new LinkedHashMap<>();
@@ -223,6 +313,29 @@ public class V6Object {
     return result;
   }
 
+  public V6Array splice(int start, int deleteCount, V6Value[] items) {
+    if (start < 0)
+      start = Math.max(0, length + start);
+    start = Math.min(start, length);
+    deleteCount = Math.max(0, Math.min(deleteCount, length - start));
+    V6Array removed = new V6Array();
+    for (int i = 0; i < deleteCount; i++)
+      removed.push(get(Integer.toString(start + i)));
+    int tailLen = length - start - deleteCount;
+    V6Value[] tail = new V6Value[tailLen];
+    for (int i = 0; i < tailLen; i++)
+      tail[i] = get(Integer.toString(start + deleteCount + i));
+    int newLength = start + items.length + tailLen;
+    for (int i = 0; i < items.length; i++)
+      set(Integer.toString(start + i), items[i]);
+    for (int i = 0; i < tailLen; i++)
+      set(Integer.toString(start + items.length + i), tail[i]);
+    for (int i = newLength; i < length; i++)
+      delete(Integer.toString(i));
+    length = newLength;
+    return removed;
+  }
+
   public int indexOf(V6Value target) {
     for (int i = 0; i < length; i++)
       if (V6Value.strictEquals(get(Integer.toString(i)), target))
@@ -425,11 +538,9 @@ public class V6Object {
 
   public V6Array enumKeys() {
     java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
-    for (V6Object o = this; o != null; o = o.proto) {
-      for (int i = 0; i < o.elemCount; i++)
-        seen.add(Integer.toString(i));
-      seen.addAll(o.props.keySet());
-    }
+    for (int i = 0; i < elemCount; i++)
+      seen.add(Integer.toString(i));
+    seen.addAll(props.keySet());
     V6Array arr = new V6Array();
     for (String k : seen)
       arr.push(new V6Value(V6Value.TAG_STR, 0, k));

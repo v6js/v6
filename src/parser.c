@@ -174,6 +174,15 @@ static uint16_t value_ctor(class_file* cf) {
   return cf_methodref(cf, "V6Value", "<init>", "(IDLjava/lang/Object;)V");
 }
 
+static void emit_wide_slot_op(method* m, uint8_t opcode, uint16_t slot) {
+  if (slot > 255) {
+    op_emit(m, op_wide);
+    op_emit2(m, opcode, slot);
+  } else {
+    op_emit1(m, opcode, (uint8_t)slot);
+  }
+}
+
 static void emit_dstore(method* m, uint16_t slot) {
   switch (slot) {
   case 0:
@@ -189,7 +198,7 @@ static void emit_dstore(method* m, uint16_t slot) {
     op_emit(m, op_dstore_3);
     return;
   default:
-    op_emit1(m, op_dstore, (uint8_t)slot);
+    emit_wide_slot_op(m, op_dstore, slot);
     return;
   }
 }
@@ -209,7 +218,7 @@ static void emit_dload(method* m, uint16_t slot) {
     op_emit(m, op_dload_3);
     return;
   default:
-    op_emit1(m, op_dload, (uint8_t)slot);
+    emit_wide_slot_op(m, op_dload, slot);
     return;
   }
 }
@@ -229,7 +238,7 @@ static void emit_aload(method* m, uint16_t slot) {
     op_emit(m, op_aload_3);
     return;
   default:
-    op_emit1(m, op_aload, (uint8_t)slot);
+    emit_wide_slot_op(m, op_aload, slot);
     return;
   }
 }
@@ -249,7 +258,7 @@ static void emit_astore(method* m, uint16_t slot) {
     op_emit(m, op_astore_3);
     return;
   default:
-    op_emit1(m, op_astore, (uint8_t)slot);
+    emit_wide_slot_op(m, op_astore, slot);
     return;
   }
 }
@@ -648,6 +657,12 @@ static var_ref resolve_var(compiler* c, const char* name, size_t len) {
   var_ref pref = resolve_var(c->parent, name, len);
   if (pref.kind == var_not_found)
     return pref;
+  if (c->upvalue_count >= v6_max_upvalues) {
+    var_ref vr;
+    vr.kind = var_not_found;
+    vr.index = 0;
+    return vr;
+  }
   upvalue* uv = &c->upvalues[c->upvalue_count];
   uv->name = name;
   uv->len = len;
@@ -678,6 +693,7 @@ static void emit_var_write_ref(compiler* c, var_ref vr) {
 }
 
 static void parse_expr(parser* p, compiler* c);
+static void parse_seq_expr(parser* p, compiler* c);
 static void parse_unary(parser* p, compiler* c);
 static void parse_object_literal(parser* p, compiler* c);
 static void parse_array_literal(parser* p, compiler* c);
@@ -1940,11 +1956,10 @@ static void parse_ident_primary(parser* p, compiler* c, tok name) {
     return;
   }
 
-  if (check(p, tok_assign) || check(p, tok_plus_eq) ||
-      check(p, tok_minus_eq) || check(p, tok_star_eq) ||
-      check(p, tok_slash_eq) || check(p, tok_percent_eq) ||
-      check(p, tok_amp_eq) || check(p, tok_pipe_eq) ||
-      check(p, tok_caret_eq) || check(p, tok_shl_eq) ||
+  if (check(p, tok_assign) || check(p, tok_plus_eq) || check(p, tok_minus_eq) ||
+      check(p, tok_star_eq) || check(p, tok_slash_eq) ||
+      check(p, tok_percent_eq) || check(p, tok_amp_eq) ||
+      check(p, tok_pipe_eq) || check(p, tok_caret_eq) || check(p, tok_shl_eq) ||
       check(p, tok_shr_eq) || check(p, tok_ushr_eq)) {
     tok_kind op = p->cur.kind;
     advance(p);
@@ -1986,11 +2001,11 @@ static void parse_ident_primary(parser* p, compiler* c, tok name) {
       emit_to_number(c);
       parse_expr(p, c);
       emit_to_number(c);
-      uint8_t bop = op == tok_minus_eq
-                        ? op_dsub
-                        : (op == tok_star_eq
-                               ? op_dmul
-                               : (op == tok_slash_eq ? op_ddiv : op_drem));
+      uint8_t bop =
+          op == tok_minus_eq
+              ? op_dsub
+              : (op == tok_star_eq ? op_dmul
+                                   : (op == tok_slash_eq ? op_ddiv : op_drem));
       op_emit(c->m, bop);
       emit_box_tag(c, op_iconst_0);
     }
@@ -2381,7 +2396,7 @@ static void parse_primary(parser* p, compiler* c) {
       p->cur = save_cur;
       p->prev = save_prev;
     }
-    parse_expr(p, c);
+    parse_seq_expr(p, c);
     if (!match(p, tok_rparen))
       error_at(p, "expected ')'");
     return;
@@ -2508,8 +2523,15 @@ static void parse_unary(parser* p, compiler* c) {
   }
   if (match(p, tok_kw_typeof)) {
     if (check(p, tok_ident)) {
+      lexer save_lex = p->lex;
+      tok after = lex_next(&p->lex);
+      p->lex = save_lex;
+      int is_bare = after.kind != tok_dot && after.kind != tok_lbracket &&
+                    after.kind != tok_lparen && after.kind != tok_template &&
+                    after.kind != tok_plus_plus &&
+                    after.kind != tok_minus_minus;
       var_ref probe = resolve_var(c, p->cur.start, p->cur.len);
-      if (probe.kind == var_not_found) {
+      if (is_bare && probe.kind == var_not_found) {
         advance(p);
         emit_undef(c->cf, c->m);
       } else {
@@ -2747,6 +2769,15 @@ static void parse_ternary(parser* p, compiler* c) {
 
 static void parse_expr(parser* p, compiler* c) {
   parse_ternary(p, c);
+}
+
+static void parse_seq_expr(parser* p, compiler* c) {
+  parse_expr(p, c);
+  while (check(p, tok_comma)) {
+    advance(p);
+    op_emit(c->m, op_pop);
+    parse_expr(p, c);
+  }
 }
 
 int compile_expr(parser* p, compiler* c) {
@@ -3066,7 +3097,7 @@ static void parse_block(parser* p, compiler* c) {
 
 static void parse_if(parser* p, compiler* c) {
   expect(p, tok_lparen);
-  parse_expr(p, c);
+  parse_seq_expr(p, c);
   expect(p, tok_rparen);
   emit_truthy(c);
 
@@ -3124,7 +3155,7 @@ static void parse_while(parser* p, compiler* c) {
   size_t start_pos = op_pos(c->m);
 
   expect(p, tok_lparen);
-  parse_expr(p, c);
+  parse_seq_expr(p, c);
   expect(p, tok_rparen);
   emit_truthy(c);
 
@@ -3197,7 +3228,8 @@ static void parse_do_while(parser* p, compiler* c) {
   op_emit2(c->m, op_goto, 0);
 
   size_t body_pos = op_pos(c->m);
-  op_patch2(c->m, (uint16_t)(entry_jump + 1), (uint16_t)(body_pos - entry_jump));
+  op_patch2(c->m, (uint16_t)(entry_jump + 1),
+            (uint16_t)(body_pos - entry_jump));
   op_patch2(c->m, (uint16_t)(loop_back_jump + 1),
             (uint16_t)(body_pos - loop_back_jump));
 
@@ -3218,7 +3250,7 @@ static void parse_do_while(parser* p, compiler* c) {
 }
 
 static void parse_for_in(parser* p, compiler* c, tok_kind kind, tok name) {
-  parse_expr(p, c);
+  parse_seq_expr(p, c);
   expect(p, tok_rparen);
 
   uint16_t keys_slot = c->next_local_slot++;
@@ -4115,8 +4147,33 @@ static void parse_for(parser* p, compiler* c) {
     parse_one_declarator_named(p, c, kind, name);
     while (match(p, tok_comma))
       parse_one_declarator(p, c, kind);
+  } else if (is_contextual_ident(p->cur.kind)) {
+    lexer save_lex2 = p->lex;
+    tok save_cur2 = p->cur;
+    tok save_prev2 = p->prev;
+    tok name = p->cur;
+    advance(p);
+    if (match(p, tok_kw_in) || match(p, tok_kw_of)) {
+      int is_of = p->prev.kind == tok_kw_of;
+      if (is_of && is_await)
+        parse_for_await_of(p, c, tok_kw_var, name);
+      else if (is_of)
+        parse_for_of(p, c, tok_kw_var, name);
+      else
+        parse_for_in(p, c, tok_kw_var, name);
+      for (int i = saved_count; i < c->local_count; i++) {
+        if (!c->locals[i].is_var)
+          c->locals[i].dead = 1;
+      }
+      return;
+    }
+    p->lex = save_lex2;
+    p->cur = save_cur2;
+    p->prev = save_prev2;
+    parse_seq_expr(p, c);
+    op_emit(c->m, op_pop);
   } else if (!check(p, tok_semi)) {
-    parse_expr(p, c);
+    parse_seq_expr(p, c);
     op_emit(c->m, op_pop);
   }
   expect(p, tok_semi);
@@ -4125,7 +4182,7 @@ static void parse_for(parser* p, compiler* c) {
   int has_cond = !check(p, tok_semi);
   size_t exit_jump = 0;
   if (has_cond) {
-    parse_expr(p, c);
+    parse_seq_expr(p, c);
     emit_truthy(c);
     exit_jump = op_pos(c->m);
     op_emit2(c->m, op_ifeq, 0);
@@ -4137,7 +4194,7 @@ static void parse_for(parser* p, compiler* c) {
 
   size_t inc_pos = op_pos(c->m);
   if (!check(p, tok_rparen)) {
-    parse_expr(p, c);
+    parse_seq_expr(p, c);
     op_emit(c->m, op_pop);
   }
   size_t inc_to_cond = op_pos(c->m);
@@ -4171,7 +4228,7 @@ static void parse_for(parser* p, compiler* c) {
 
 static void parse_switch(parser* p, compiler* c) {
   expect(p, tok_lparen);
-  parse_expr(p, c);
+  parse_seq_expr(p, c);
   expect(p, tok_rparen);
   expect(p, tok_lbrace);
 
@@ -4503,9 +4560,11 @@ static void compile_closure_value(parser* p, compiler* c, int is_arrow,
   fc.lambda_counter = c->lambda_counter;
   fc.is_arrow = is_arrow;
   fc.param_count = 0;
+  fc.locals = malloc(sizeof(local) * v6_max_locals);
   fc.local_count = 0;
   fc.scratch_slot = 3;
   fc.next_local_slot = 5;
+  fc.upvalues = malloc(sizeof(upvalue) * v6_max_upvalues);
   fc.upvalue_count = 0;
   fc.break_depth = 0;
   fc.continue_depth = 0;
@@ -4781,8 +4840,8 @@ static void parse_class_decl(parser* p, compiler* c, int is_expr) {
       tok static_save_cur = p->cur;
       tok static_save_prev = p->prev;
       advance(p);
-      if (check(p, tok_lparen) || check(p, tok_assign) ||
-          check(p, tok_semi) || check(p, tok_rbrace)) {
+      if (check(p, tok_lparen) || check(p, tok_assign) || check(p, tok_semi) ||
+          check(p, tok_rbrace)) {
         p->lex = static_save_lex;
         p->cur = static_save_cur;
         p->prev = static_save_prev;
@@ -5305,8 +5364,7 @@ static int emit_java_import_ref(compiler* c, const char* specifier) {
   return 1;
 }
 
-static int sniff_module_kind(const char* importer_dir,
-                             const char* specifier) {
+static int sniff_module_kind(const char* importer_dir, const char* specifier) {
   char abs_path[v6_max_path];
   char err[256];
   if (resolve_module_specifier(importer_dir, specifier, abs_path,
@@ -5388,8 +5446,12 @@ static compiled_module* get_or_compile_module(module_ctx* modctx,
                                          moddir, modctx, 0, kind == 1);
   free(modsrc);
   mod->state = 2;
-  if (!r.ok)
-    error_at(p, r.message);
+  if (!r.ok) {
+    char combined[256];
+    snprintf(combined, sizeof(combined), "%s:%d: %s", abs_path, r.line,
+             r.message);
+    error_at(p, combined);
+  }
   return mod;
 }
 
@@ -5457,8 +5519,8 @@ static void parse_import_stmt(parser* p, compiler* c) {
       return;
     }
     int sniffed_kind = sniff_module_kind(c->module_dir, spec);
-    compiled_module* mod = get_or_compile_module(c->modctx, c->module_dir,
-                                                 spec, sniffed_kind, p);
+    compiled_module* mod =
+        get_or_compile_module(c->modctx, c->module_dir, spec, sniffed_kind, p);
     free(spec);
     expect_semi(p);
     if (!mod)
@@ -5579,8 +5641,8 @@ static void parse_import_stmt(parser* p, compiler* c) {
     emit_astore(c->m, exports_slot);
   } else {
     int sniffed_kind = sniff_module_kind(c->module_dir, spec);
-    compiled_module* mod = get_or_compile_module(c->modctx, c->module_dir,
-                                                 spec, sniffed_kind, p);
+    compiled_module* mod =
+        get_or_compile_module(c->modctx, c->module_dir, spec, sniffed_kind, p);
     free(spec);
     if (!mod) {
       expect_semi(p);
@@ -5644,6 +5706,25 @@ static void parse_stmt(parser* p, compiler* c) {
   if (match(p, tok_lbrace)) {
     parse_block(p, c);
     return;
+  }
+
+  if (match(p, tok_kw_function)) {
+    parse_function_decl(p, c);
+    return;
+  }
+
+  if (check(p, tok_kw_async)) {
+    lexer save_lex_fn = p->lex;
+    tok save_cur_fn = p->cur;
+    tok save_prev_fn = p->prev;
+    advance(p);
+    if (match(p, tok_kw_function)) {
+      parse_function_decl(p, c);
+      return;
+    }
+    p->lex = save_lex_fn;
+    p->cur = save_cur_fn;
+    p->prev = save_prev_fn;
   }
 
   if (match(p, tok_kw_class)) {
@@ -5823,7 +5904,7 @@ static void parse_stmt(parser* p, compiler* c) {
     p->prev = save_prev;
   }
 
-  parse_expr(p, c);
+  parse_seq_expr(p, c);
   op_emit(c->m, op_pop);
   expect_semi(p);
 }
@@ -5955,7 +6036,7 @@ static tok prescan_pattern_hoist(compiler* c, lexer* lx, int is_array) {
   return t;
 }
 
-#define v6_max_pending_fns 64
+#define v6_max_pending_fns 1024
 
 static void prescan_decls(compiler* c, const char* src, int hoist_functions) {
   const char* pending_fns[v6_max_pending_fns];
@@ -6574,9 +6655,11 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   c.lambda_counter = &lambda_counter;
   c.is_arrow = 0;
   c.param_count = 0;
+  c.locals = malloc(sizeof(local) * v6_max_locals);
   c.local_count = 0;
   c.scratch_slot = 1;
   c.next_local_slot = 3;
+  c.upvalues = malloc(sizeof(upvalue) * v6_max_upvalues);
   c.upvalue_count = 0;
   c.break_depth = 0;
   c.continue_depth = 0;
@@ -6634,6 +6717,8 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   bind_builtin(&c, "Symbol", "SYMBOL");
   bind_builtin(&c, "Promise", "PROMISE");
   bind_builtin(&c, "RegExp", "REGEXP");
+  bind_builtin(&c, "Function", "FUNCTION");
+  bind_builtin(&c, "String", "STRING");
   bind_builtin(&c, "Date", "DATE");
   bind_builtin(&c, "JSON", "JSON");
   bind_builtin(&c, "Buffer", "BUFFER");
