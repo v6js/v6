@@ -30,6 +30,7 @@ public final class V6Regex extends V6Object {
   private static String translate(String s) {
     StringBuilder out = new StringBuilder();
     int n = s.length();
+    boolean inClass = false;
     for (int i = 0; i < n; i++) {
       char c = s.charAt(i);
       if (c == '\\' && i + 1 < n) {
@@ -37,10 +38,24 @@ public final class V6Regex extends V6Object {
         i++;
         continue;
       }
-      if (c == '[' && i + 2 < n && s.charAt(i + 1) == '^' &&
+      if (!inClass && c == '[' && i + 2 < n && s.charAt(i + 1) == '^' &&
           s.charAt(i + 2) == ']') {
         out.append("[\\s\\S]");
         i += 2;
+        continue;
+      }
+      if (!inClass && c == '[') {
+        inClass = true;
+        out.append(c);
+        continue;
+      }
+      if (inClass && c == '[') {
+        out.append("\\[");
+        continue;
+      }
+      if (inClass && c == ']') {
+        inClass = false;
+        out.append(c);
         continue;
       }
       out.append(c);

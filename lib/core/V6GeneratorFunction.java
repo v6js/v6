@@ -1,8 +1,9 @@
-public final class V6GeneratorFunction implements V6Callable {
+public final class V6GeneratorFunction extends V6Object implements V6Callable {
   private final V6Callable underlying;
 
   public V6GeneratorFunction(V6Callable underlying) {
     this.underlying = underlying;
+    setProto(V6Closure.FUNCTION_PROTOTYPE);
   }
 
   @Override

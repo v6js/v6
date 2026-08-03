@@ -259,8 +259,11 @@ public record V6Value(int tag, double num, Object ref) {
   }
 
   public V6Value call(V6Value thisArg, V6Value[] args) {
-    if (tag != TAG_FUNC)
+    if (tag != TAG_FUNC) {
+      if (ref instanceof V6NativeConstructor)
+        return ((V6NativeConstructor)ref).construct(args);
       throw new RuntimeException("not a function");
+    }
     return ((V6Callable)ref).call(thisArg, args);
   }
 
@@ -380,7 +383,7 @@ public record V6Value(int tag, double num, Object ref) {
     case TAG_FUNC:
       if (ref instanceof V6Object)
         return ((V6Object)ref).get(key);
-      return new V6Value(TAG_UNDEF, 0, null);
+      return V6Closure.FUNCTION_PROTOTYPE.get(key);
     default:
       return new V6Value(TAG_UNDEF, 0, null);
     }
@@ -393,8 +396,14 @@ public record V6Value(int tag, double num, Object ref) {
   }
 
   public void setProp(String key, V6Value value) {
-    if (tag == TAG_OBJ)
+    if ((tag == TAG_OBJ || tag == TAG_FUNC) && ref instanceof V6Object)
       ((V6Object)ref).set(key, value);
+  }
+
+  public boolean deleteProp(String key) {
+    if ((tag == TAG_OBJ || tag == TAG_FUNC) && ref instanceof V6Object)
+      return ((V6Object)ref).delete(key);
+    return true;
   }
 
   public static int toInt32(double d) {

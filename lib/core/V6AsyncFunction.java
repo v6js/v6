@@ -1,10 +1,11 @@
-public final class V6AsyncFunction implements V6Callable {
+public final class V6AsyncFunction extends V6Object implements V6Callable {
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
 
   private final V6Callable underlying;
 
   public V6AsyncFunction(V6Callable underlying) {
     this.underlying = underlying;
+    setProto(V6Closure.FUNCTION_PROTOTYPE);
   }
 
   @Override

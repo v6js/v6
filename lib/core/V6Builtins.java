@@ -187,7 +187,8 @@ public final class V6Builtins {
           }));
     o.set("map", fn((thisArg, args)
                         -> objValue(asObj(thisArg).map(
-                            V6Value.argAt(args, 0).asCallable()))));
+                            V6Value.argAt(args, 0).asCallable(),
+                            V6Value.argAt(args, 1)))));
     o.set("filter", fn((thisArg, args)
                            -> objValue(asObj(thisArg).filter(
                                V6Value.argAt(args, 0).asCallable()))));
@@ -362,6 +363,7 @@ public final class V6Builtins {
 
   private static V6Object arrayNamespace() {
     V6Object o = new V6Object();
+    o.set("prototype", objValue(ARRAY_PROTOTYPE));
     o.set("isArray", fn((thisArg, args)
                             -> boolValue(V6Value.argAt(args, 0).ref() instanceof
                                          V6Array)));
@@ -895,6 +897,7 @@ public final class V6Builtins {
   public static final V6Value SET_IMMEDIATE = V6Timers.SET_IMMEDIATE;
   public static final V6Value CLEAR_IMMEDIATE = V6Timers.CLEAR_IMMEDIATE;
   public static final V6Value QUEUE_MICROTASK = V6Timers.QUEUE_MICROTASK;
+  public static final V6Value GLOBAL_OBJECT = objValue(new V6Object());
 
   public static final V6Value NODE_ASSERT =
       new V6Value(V6Value.TAG_FUNC, 0, V6Assert.build());
@@ -939,8 +942,10 @@ public final class V6Builtins {
           new V6Value(V6Value.TAG_OBJ, 0, new V6StreamWritableConstructor()));
     o.set("Duplex",
           new V6Value(V6Value.TAG_OBJ, 0, new V6StreamDuplexConstructor()));
-    o.set("Transform",
-          new V6Value(V6Value.TAG_OBJ, 0, new V6StreamTransformConstructor()));
+    V6StreamTransformConstructor transformCtor =
+        new V6StreamTransformConstructor();
+    o.set("Transform", new V6Value(V6Value.TAG_OBJ, 0, transformCtor));
+    o.set("PassThrough", new V6Value(V6Value.TAG_OBJ, 0, transformCtor));
     o.set("pipeline",
           fn((thisArg, args) -> V6StreamMethods.pipelineImpl(args)));
     o.set("finished",

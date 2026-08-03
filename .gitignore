@@ -58,3 +58,5 @@ dkms.conf
 build/
 lib/.gradle/
 lib/build/
+
+test/compat/node_modules/

@@ -12,6 +12,7 @@ public final class V6StreamTransformConstructor
   public V6Object allocate() {
     V6EventEmitterObject e = new V6EventEmitterObject();
     e.setProto(PROTOTYPE);
+    e.set("_readableState", new V6Value(V6Value.TAG_OBJ, 0, new V6Object()));
     return e;
   }
 

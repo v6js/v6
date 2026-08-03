@@ -117,6 +117,20 @@ public class V6Object {
     return new V6Value(V6Value.TAG_UNDEF, 0, null);
   }
 
+  public boolean delete(String key) {
+    int idx = parseIndex(key);
+    if (idx >= 0 && idx < elemCount) {
+      elements[idx] = new V6Value(V6Value.TAG_UNDEF, 0, null);
+      return true;
+    }
+    props.remove(key);
+    if (getters != null)
+      getters.remove(key);
+    if (setters != null)
+      setters.remove(key);
+    return true;
+  }
+
   public boolean has(String key) {
     if (key.equals("length") && !props.containsKey("length"))
       return true;
@@ -229,12 +243,15 @@ public class V6Object {
   }
 
   public V6Array map(V6Callable fn) {
+    return map(fn, new V6Value(V6Value.TAG_UNDEF, 0, null));
+  }
+
+  public V6Array map(V6Callable fn, V6Value thisArg) {
     V6Array result = new V6Array();
-    V6Value undef = new V6Value(V6Value.TAG_UNDEF, 0, null);
     for (int i = 0; i < length; i++) {
       V6Value el = get(Integer.toString(i));
       V6Value idx = new V6Value(V6Value.TAG_NUM, i, null);
-      result.push(fn.call(undef, new V6Value[] {el, idx}));
+      result.push(fn.call(thisArg, new V6Value[] {el, idx}));
     }
     return result;
   }
