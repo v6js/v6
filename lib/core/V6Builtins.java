@@ -34,8 +34,23 @@ public final class V6Builtins {
 
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
 
+  private static void flattenInto(V6Object arr, int depth, V6Array out) {
+    int len = (int)arr.get("length").num();
+    for (int i = 0; i < len; i++) {
+      V6Value v = arr.get(Integer.toString(i));
+      if (depth > 0 && v.tag() == V6Value.TAG_OBJ && v.ref() instanceof V6Array)
+        flattenInto((V6Array)v.ref(), depth - 1, out);
+      else
+        out.push(v);
+    }
+  }
+
   private static V6Object asObj(V6Value v) {
-    return v.tag() == V6Value.TAG_OBJ ? (V6Object)v.ref() : null;
+    if (v.tag() == V6Value.TAG_OBJ)
+      return (V6Object)v.ref();
+    if (v.tag() == V6Value.TAG_FUNC && v.ref() instanceof V6Object)
+      return (V6Object)v.ref();
+    return null;
   }
 
   static String inspect(V6Value v, java.util.Map<Object, Boolean> seen) {
@@ -272,6 +287,19 @@ public final class V6Builtins {
               return objValue((V6Array)a.sortWith(args[0].asCallable()));
             return objValue((V6Array)a.sortDefault());
           }));
+    o.set("flat", fn((thisArg, args) -> {
+            int depth = args.length > 0 ? (int)args[0].toNumber() : 1;
+            V6Array result = new V6Array();
+            flattenInto(asObj(thisArg), depth, result);
+            return objValue(result);
+          }));
+    o.set("flatMap", fn((thisArg, args) -> {
+            V6Array mapped = asObj(thisArg).map(
+                V6Value.argAt(args, 0).asCallable(), V6Value.argAt(args, 1));
+            V6Array result = new V6Array();
+            flattenInto(mapped, 1, result);
+            return objValue(result);
+          }));
     return o;
   }
 
@@ -334,6 +362,11 @@ public final class V6Builtins {
             V6Object obj = asObj(V6Value.argAt(args, 0));
             return objValue(obj != null ? obj.enumKeys() : new V6Array());
           }));
+    o.set("hasOwn", fn((thisArg, args) -> {
+            V6Object obj = asObj(V6Value.argAt(args, 0));
+            String key = V6Value.argAt(args, 1).toString();
+            return boolValue(obj != null && obj.hasOwn(key));
+          }));
     o.set("seal", fn((thisArg, args) -> {
             V6Value v = V6Value.argAt(args, 0);
             V6Object obj = asObj(v);
@@ -348,6 +381,13 @@ public final class V6Builtins {
     o.set("create", fn((thisArg, args) -> {
             V6Object obj = new V6Object();
             obj.setProtoFromValue(V6Value.argAt(args, 0));
+            V6Object descs = asObj(V6Value.argAt(args, 1));
+            if (descs != null) {
+              for (V6Value k : descs.enumKeys().toValueArray()) {
+                String key = k.toString();
+                applyDescriptor(obj, key, asObj(descs.get(key)));
+              }
+            }
             return objValue(obj);
           }));
     o.set("getPrototypeOf", fn((thisArg, args) -> {
@@ -512,55 +552,7 @@ public final class V6Builtins {
     return boolValue(!Double.isNaN(n) && !Double.isInfinite(n));
   });
 
-  private static V6Object numberNamespace() {
-    V6Object o = new V6Object();
-    o.set("isInteger", fn((thisArg, args) -> {
-            V6Value v = V6Value.argAt(args, 0);
-            if (v.tag() != V6Value.TAG_NUM)
-              return boolValue(false);
-            double n = v.toNumber();
-            return boolValue(!Double.isNaN(n) && !Double.isInfinite(n) &&
-                             n == Math.floor(n));
-          }));
-    o.set("isFinite", fn((thisArg, args) -> {
-            V6Value v = V6Value.argAt(args, 0);
-            if (v.tag() != V6Value.TAG_NUM)
-              return boolValue(false);
-            double n = v.toNumber();
-            return boolValue(!Double.isNaN(n) && !Double.isInfinite(n));
-          }));
-    o.set("isNaN", fn((thisArg, args) -> {
-            V6Value v = V6Value.argAt(args, 0);
-            return boolValue(v.tag() == V6Value.TAG_NUM &&
-                             Double.isNaN(v.toNumber()));
-          }));
-    o.set("isSafeInteger", fn((thisArg, args) -> {
-            V6Value v = V6Value.argAt(args, 0);
-            if (v.tag() != V6Value.TAG_NUM)
-              return boolValue(false);
-            double n = v.toNumber();
-            return boolValue(!Double.isNaN(n) && !Double.isInfinite(n) &&
-                             n == Math.floor(n) &&
-                             Math.abs(n) <= 9007199254740991.0);
-          }));
-    o.set("parseFloat", PARSE_FLOAT);
-    o.set("parseInt", PARSE_INT);
-    o.set("EPSILON", new V6Value(V6Value.TAG_NUM, Math.ulp(1.0), null));
-    o.set("MAX_SAFE_INTEGER",
-          new V6Value(V6Value.TAG_NUM, 9007199254740991.0, null));
-    o.set("MIN_SAFE_INTEGER",
-          new V6Value(V6Value.TAG_NUM, -9007199254740991.0, null));
-    o.set("MAX_VALUE", new V6Value(V6Value.TAG_NUM, Double.MAX_VALUE, null));
-    o.set("MIN_VALUE", new V6Value(V6Value.TAG_NUM, Double.MIN_VALUE, null));
-    o.set("POSITIVE_INFINITY",
-          new V6Value(V6Value.TAG_NUM, Double.POSITIVE_INFINITY, null));
-    o.set("NEGATIVE_INFINITY",
-          new V6Value(V6Value.TAG_NUM, Double.NEGATIVE_INFINITY, null));
-    o.set("NaN", new V6Value(V6Value.TAG_NUM, Double.NaN, null));
-    return o;
-  }
-
-  public static final V6Value NUMBER = objValue(numberNamespace());
+  public static final V6Value NUMBER = objValue(new V6NumberConstructor());
   public static final V6Value NAN_VALUE =
       new V6Value(V6Value.TAG_NUM, Double.NaN, null);
   public static final V6Value INFINITY_VALUE =
@@ -857,6 +849,7 @@ public final class V6Builtins {
   public static final V6Value DATE = objValue(new V6DateConstructor());
   public static final V6Value FUNCTION = objValue(new V6FunctionConstructor());
   public static final V6Value STRING = objValue(new V6StringConstructor());
+  public static final V6Value BOOLEAN = objValue(new V6BooleanConstructor());
 
   private static V6Object jsonObject() {
     V6Object o = new V6Object();
@@ -918,6 +911,7 @@ public final class V6Builtins {
   public static final V6Value NODE_PATH = objValue(V6Path.build());
   public static final V6Value NODE_UTIL = objValue(V6Util.build());
   public static final V6Value NODE_OS = objValue(V6Os.build());
+  public static final V6Value NODE_TTY = objValue(V6Tty.build());
   public static final V6Value NODE_FS = objValue(V6Fs.build());
 
   private static V6Value buildEventsModule() {
@@ -929,6 +923,19 @@ public final class V6Builtins {
   public static final V6Value NODE_EVENTS = buildEventsModule();
   public static final V6Value PROCESS = objValue(V6Process.build());
   public static final V6Value BUFFER = objValue(new V6BufferConstructor());
+
+  private static V6Object bufferNamespace() {
+    V6Object o = new V6Object();
+    o.set("Buffer", BUFFER);
+    o.set("kMaxLength", new V6Value(V6Value.TAG_NUM, 4294967295.0, null));
+    o.set("kStringMaxLength", new V6Value(V6Value.TAG_NUM, 1073741799.0, null));
+    o.set("INSPECT_MAX_BYTES", new V6Value(V6Value.TAG_NUM, 50, null));
+    return o;
+  }
+
+  public static final V6Value NODE_BUFFER = objValue(bufferNamespace());
+  public static final V6Value UINT8ARRAY_CTOR =
+      objValue(new V6Uint8ArrayConstructor());
   public static final V6Value SET_TIMEOUT = V6Timers.SET_TIMEOUT;
   public static final V6Value CLEAR_TIMEOUT = V6Timers.CLEAR_TIMEOUT;
   public static final V6Value SET_INTERVAL = V6Timers.SET_INTERVAL;
@@ -1137,5 +1144,78 @@ public final class V6Builtins {
     for (byte b : bytes)
       sb.append((char)(b & 0xFF));
     return new V6Value(V6Value.TAG_STR, 0, sb.toString());
+  });
+
+  private static final String URI_UNRESERVED =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()";
+  private static final String URI_RESERVED = ";/?:@&=+$,#";
+
+  private static String uriEncode(String s, String extraUnescaped) {
+    byte[] bytes = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    StringBuilder sb = new StringBuilder();
+    for (byte b : bytes) {
+      char c = (char)(b & 0xFF);
+      if ((b & 0xFF) < 128 &&
+          (URI_UNRESERVED.indexOf(c) >= 0 || extraUnescaped.indexOf(c) >= 0)) {
+        sb.append(c);
+      } else {
+        sb.append(String.format("%%%02X", b & 0xFF));
+      }
+    }
+    return sb.toString();
+  }
+
+  private static String uriDecode(String s) {
+    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+    for (int i = 0; i < s.length(); i++) {
+      char c = s.charAt(i);
+      if (c == '%' && i + 2 < s.length()) {
+        int hi = Character.digit(s.charAt(i + 1), 16);
+        int lo = Character.digit(s.charAt(i + 2), 16);
+        if (hi >= 0 && lo >= 0) {
+          out.write((hi << 4) | lo);
+          i += 2;
+          continue;
+        }
+      }
+      out.writeBytes(
+          String.valueOf(c).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    return new String(out.toByteArray(),
+                      java.nio.charset.StandardCharsets.UTF_8);
+  }
+
+  public static final V6Value ENCODE_URI_COMPONENT =
+      fn((thisArg, args)
+             -> new V6Value(V6Value.TAG_STR, 0,
+                            uriEncode(V6Value.argAt(args, 0).toString(), "")));
+  public static final V6Value DECODE_URI_COMPONENT =
+      fn((thisArg, args)
+             -> new V6Value(V6Value.TAG_STR, 0,
+                            uriDecode(V6Value.argAt(args, 0).toString())));
+  public static final V6Value ENCODE_URI =
+      fn((thisArg, args)
+             -> new V6Value(
+                 V6Value.TAG_STR, 0,
+                 uriEncode(V6Value.argAt(args, 0).toString(), URI_RESERVED)));
+  public static final V6Value DECODE_URI =
+      fn((thisArg, args)
+             -> new V6Value(V6Value.TAG_STR, 0,
+                            uriDecode(V6Value.argAt(args, 0).toString())));
+
+  public static final V6Value EVAL_STUB = fn((thisArg, args) -> {
+    throw new V6Throw(
+        new V6Value(V6Value.TAG_STR, 0, "EvalError: eval is not supported"));
+  });
+
+  public static final V6Value CAPTURE_CALL_SITES = fn((thisArg, args) -> {
+    java.util
+        .List<StackWalker.StackFrame> frames = StackWalker.getInstance().walk(
+        s -> s.skip(1).limit(32).collect(java.util.stream.Collectors.toList()));
+    V6Array result = new V6Array();
+    for (StackWalker.StackFrame f : frames)
+      result.push(
+          objValue(new V6CallSiteObject(f.getMethodName(), f.getClassName())));
+    return objValue(result);
   });
 }

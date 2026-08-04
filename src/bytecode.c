@@ -21,17 +21,60 @@ static char* cf_strdup(const char* s) {
   return out;
 }
 
+static int has_4byte_utf8(const uint8_t* s, size_t n) {
+  for (size_t i = 0; i < n; i++)
+    if ((s[i] & 0xf8) == 0xf0)
+      return 1;
+  return 0;
+}
+
+static uint8_t* to_modified_utf8(const uint8_t* s, size_t n, size_t* out_len) {
+  uint8_t* out = malloc(n * 2 + 1);
+  size_t oi = 0;
+  size_t i = 0;
+  while (i < n) {
+    if ((s[i] & 0xf8) == 0xf0 && i + 3 < n) {
+      uint32_t cp = ((uint32_t)(s[i] & 0x07) << 18) |
+                    ((uint32_t)(s[i + 1] & 0x3f) << 12) |
+                    ((uint32_t)(s[i + 2] & 0x3f) << 6) |
+                    (uint32_t)(s[i + 3] & 0x3f);
+      i += 4;
+      uint32_t v = cp - 0x10000;
+      uint32_t hi = 0xd800 + (v >> 10);
+      uint32_t lo = 0xdc00 + (v & 0x3ff);
+      out[oi++] = (uint8_t)(0xe0 | (hi >> 12));
+      out[oi++] = (uint8_t)(0x80 | ((hi >> 6) & 0x3f));
+      out[oi++] = (uint8_t)(0x80 | (hi & 0x3f));
+      out[oi++] = (uint8_t)(0xe0 | (lo >> 12));
+      out[oi++] = (uint8_t)(0x80 | ((lo >> 6) & 0x3f));
+      out[oi++] = (uint8_t)(0x80 | (lo & 0x3f));
+    } else {
+      out[oi++] = s[i++];
+    }
+  }
+  out[oi] = 0;
+  *out_len = oi;
+  return out;
+}
+
 uint16_t cf_utf8(class_file* cf, const char* s) {
   for (size_t i = 0; i < cf->utf8_cache_len; i++) {
     if (strcmp(cf->utf8_cache[i].s, s) == 0)
       return cf->utf8_cache[i].idx;
   }
   size_t n = strlen(s);
+  const uint8_t* bytes = (const uint8_t*)s;
+  uint8_t* transcoded = NULL;
+  if (has_4byte_utf8(bytes, n)) {
+    transcoded = to_modified_utf8(bytes, n, &n);
+    bytes = transcoded;
+  }
   cf->cp_count++;
   uint16_t idx = cf->cp_count;
   buf_u8(&cf->cp, cp_utf8);
   buf_u16(&cf->cp, (uint16_t)n);
-  buf_bytes(&cf->cp, (const uint8_t*)s, n);
+  buf_bytes(&cf->cp, bytes, n);
+  free(transcoded);
   if (cf->utf8_cache_len == cf->utf8_cache_cap) {
     cf->utf8_cache_cap = cf->utf8_cache_cap ? cf->utf8_cache_cap * 2 : 64;
     cf->utf8_cache =

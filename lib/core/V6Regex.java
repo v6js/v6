@@ -33,6 +33,24 @@ public final class V6Regex extends V6Object {
     boolean inClass = false;
     for (int i = 0; i < n; i++) {
       char c = s.charAt(i);
+      if (c == '\\' && i + 1 < n &&
+          (s.charAt(i + 1) == 'p' || s.charAt(i + 1) == 'P') && i + 2 < n &&
+          s.charAt(i + 2) == '{') {
+        int close = s.indexOf('}', i + 3);
+        if (close > 0) {
+          String prop = s.substring(i + 3, close);
+          String javaEquiv = null;
+          if (prop.equals("ID_Start"))
+            javaEquiv = "\\p{L}";
+          else if (prop.equals("ID_Continue"))
+            javaEquiv = "\\p{L}\\p{Mn}\\p{Mc}\\p{Nd}\\p{Pc}";
+          if (javaEquiv != null) {
+            out.append(inClass ? javaEquiv : "[" + javaEquiv + "]");
+            i = close;
+            continue;
+          }
+        }
+      }
       if (c == '\\' && i + 1 < n) {
         out.append(c).append(s.charAt(i + 1));
         i++;

@@ -60,6 +60,30 @@ void lex_init(lexer* lx, const char* src) {
   lx->src = src;
   lx->cur = src;
   lx->line = 1;
+  lx->auto_regex = 0;
+  lx->prev_kind = tok_eof;
+}
+
+static int lex_regex_allowed_after(tok_kind k) {
+  switch (k) {
+  case tok_ident:
+  case tok_num:
+  case tok_str:
+  case tok_regex:
+  case tok_rparen:
+  case tok_rbracket:
+  case tok_kw_this:
+  case tok_kw_true:
+  case tok_kw_false:
+  case tok_kw_null:
+  case tok_kw_undefined:
+  case tok_plus_plus:
+  case tok_minus_minus:
+  case tok_template:
+    return 0;
+  default:
+    return 1;
+  }
 }
 
 static int is_ident_start(char c) {
@@ -230,7 +254,7 @@ static tok lex_template(lexer* lx, const char* start) {
   return make(lx, tok_template, start);
 }
 
-tok lex_next(lexer* lx) {
+static tok lex_next_scan(lexer* lx) {
   skip_ws(lx);
   const char* start = lx->cur;
   char c = *lx->cur;
@@ -436,6 +460,18 @@ tok lex_next(lexer* lx) {
   default:
     return make(lx, tok_error, start);
   }
+}
+
+tok lex_next(lexer* lx) {
+  tok t = lex_next_scan(lx);
+  if (lx->auto_regex && (t.kind == tok_slash || t.kind == tok_slash_eq) &&
+      lex_regex_allowed_after(lx->prev_kind)) {
+    lx->cur = t.start;
+    lx->line = t.line;
+    t = lex_regex_literal(lx);
+  }
+  lx->prev_kind = t.kind;
+  return t;
 }
 
 tok lex_regex_literal(lexer* lx) {

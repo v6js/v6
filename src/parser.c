@@ -155,7 +155,7 @@ static int is_keyword_kind(tok_kind k) {
 
 static int is_contextual_ident(tok_kind k) {
   return k == tok_ident || k == tok_kw_async || k == tok_kw_get ||
-         k == tok_kw_set;
+         k == tok_kw_set || k == tok_kw_undefined;
 }
 
 static int match_property_name(parser* p) {
@@ -558,6 +558,7 @@ static int name_reassigned_in_scope(const char* src, const char* name,
                                     size_t name_len) {
   lexer lx;
   lex_init(&lx, src);
+  lx.auto_regex = 1;
   int depth = 0;
   tok t = lex_next(&lx);
   while (t.kind != tok_eof) {
@@ -1758,24 +1759,33 @@ static void emit_tagged_template_call(parser* p, compiler* c) {
 }
 
 static void parse_new(parser* p, compiler* c) {
-  if (!expect(p, tok_ident))
-    return;
-  tok name = p->prev;
-  var_ref vr = resolve_var(c, name.start, name.len);
-  if (vr.kind == var_not_found) {
-    error_at(p, "undeclared variable");
-    return;
-  }
-
-  if (!check(p, tok_dot) && !check(p, tok_lbracket)) {
-    const char* lambda_name = find_direct_fn(c, name.start, name.len);
-    if (lambda_name) {
-      compile_direct_new(p, c, vr, lambda_name);
+  if (match(p, tok_kw_this)) {
+    var_ref this_vr = resolve_var(c, "this", 4);
+    if (this_vr.kind == var_not_found) {
+      error_at(p, "'this' outside function");
       return;
     }
-  }
+    emit_var_read_ref(c, this_vr);
+  } else {
+    if (!expect(p, tok_ident))
+      return;
+    tok name = p->prev;
+    var_ref vr = resolve_var(c, name.start, name.len);
+    if (vr.kind == var_not_found) {
+      error_at(p, "undeclared variable");
+      return;
+    }
 
-  emit_var_read_ref(c, vr);
+    if (!check(p, tok_dot) && !check(p, tok_lbracket)) {
+      const char* lambda_name = find_direct_fn(c, name.start, name.len);
+      if (lambda_name) {
+        compile_direct_new(p, c, vr, lambda_name);
+        return;
+      }
+    }
+
+    emit_var_read_ref(c, vr);
+  }
 
   while (check(p, tok_dot) || check(p, tok_lbracket)) {
     if (match(p, tok_dot)) {
@@ -2145,6 +2155,11 @@ static void parse_primary(parser* p, compiler* c) {
   }
 
   if (match(p, tok_kw_undefined)) {
+    var_ref undef_vr = resolve_var(c, "undefined", 9);
+    if (undef_vr.kind != var_not_found) {
+      emit_var_read_ref(c, undef_vr);
+      return;
+    }
     emit_undef(c->cf, c->m);
     return;
   }
@@ -2413,8 +2428,7 @@ static void parse_primary(parser* p, compiler* c) {
   }
 
   if (check(p, tok_slash) || check(p, tok_slash_eq)) {
-    lexer regex_lex;
-    regex_lex.src = p->lex.src;
+    lexer regex_lex = p->lex;
     regex_lex.cur = p->cur.start;
     regex_lex.line = p->cur.line;
     tok regex_tok = lex_regex_literal(&regex_lex);
@@ -4334,10 +4348,12 @@ static void bind_param(compiler* fc, parser* p, tok name, int idx) {
   }
 
   emit_var_declare(fc, slot);
-  fc->params[fc->param_count].name = name.start;
-  fc->params[fc->param_count].len = name.len;
-  fc->params[fc->param_count].slot = slot;
-  fc->param_count++;
+  if (fc->param_count < v6_max_params) {
+    fc->params[fc->param_count].name = name.start;
+    fc->params[fc->param_count].len = name.len;
+    fc->params[fc->param_count].slot = slot;
+    fc->param_count++;
+  }
 }
 
 static void bind_rest_param(compiler* fc, tok name, int idx) {
@@ -4349,10 +4365,12 @@ static void bind_rest_param(compiler* fc, tok name, int idx) {
   op_emit2(fc->m, op_invokestatic, restargs_idx);
   emit_box_object_ref(fc);
   emit_var_declare(fc, slot);
-  fc->params[fc->param_count].name = name.start;
-  fc->params[fc->param_count].len = name.len;
-  fc->params[fc->param_count].slot = slot;
-  fc->param_count++;
+  if (fc->param_count < v6_max_params) {
+    fc->params[fc->param_count].name = name.start;
+    fc->params[fc->param_count].len = name.len;
+    fc->params[fc->param_count].slot = slot;
+    fc->param_count++;
+  }
 }
 
 static void parse_function_params(parser* p, compiler* fc) {
@@ -5292,8 +5310,10 @@ typedef struct {
 
 static const node_builtin_ref v6_node_builtin_table[] = {
     {"path", "NODE_PATH"},
+    {"buffer", "NODE_BUFFER"},
     {"util", "NODE_UTIL"},
     {"os", "NODE_OS"},
+    {"tty", "NODE_TTY"},
     {"fs", "NODE_FS"},
     {"events", "NODE_EVENTS"},
     {"assert", "NODE_ASSERT"},
@@ -5383,6 +5403,7 @@ static int sniff_module_kind(const char* importer_dir, const char* specifier) {
 
   lexer lx;
   lex_init(&lx, src);
+  lx.auto_regex = 1;
   int is_esm = 0;
   tok t = lex_next(&lx);
   while (t.kind != tok_eof) {
@@ -5439,6 +5460,44 @@ static compiled_module* get_or_compile_module(module_ctx* modctx,
   modsrc[n] = '\0';
   fclose(f);
 
+  size_t abs_len = strlen(abs_path);
+  if (abs_len >= 5 && strcmp(abs_path + abs_len - 5, ".json") == 0) {
+    method* json_m = cf_method(mod->cf, acc_public | acc_static,
+                               "moduleExports", "()LV6Value;");
+    json_m->max_stack = 2;
+    size_t total = strlen(modsrc);
+    const size_t chunk_limit = 60000;
+    size_t pos = 0;
+    int first = 1;
+    uint16_t concat_idx =
+        cf_methodref(mod->cf, "java/lang/String", "concat",
+                     "(Ljava/lang/String;)Ljava/lang/String;");
+    while (pos < total || first) {
+      size_t take = total - pos;
+      if (take > chunk_limit) {
+        take = chunk_limit;
+        while (take > 0 && (((uint8_t)modsrc[pos + take]) & 0xc0) == 0x80)
+          take--;
+      }
+      char save = modsrc[pos + take];
+      modsrc[pos + take] = '\0';
+      uint16_t str_idx = cf_string(mod->cf, modsrc + pos);
+      modsrc[pos + take] = save;
+      op_emit2(json_m, op_ldc_w, str_idx);
+      if (!first)
+        op_emit2(json_m, op_invokevirtual, concat_idx);
+      first = 0;
+      pos += take;
+    }
+    uint16_t parse_idx = cf_methodref(mod->cf, "V6Json", "parse",
+                                      "(Ljava/lang/String;)LV6Value;");
+    op_emit2(json_m, op_invokestatic, parse_idx);
+    op_emit(json_m, op_areturn);
+    free(modsrc);
+    mod->state = 2;
+    return mod;
+  }
+
   char moddir[v6_max_path];
   path_dirname(abs_path, moddir, sizeof(moddir));
 
@@ -5447,7 +5506,7 @@ static compiled_module* get_or_compile_module(module_ctx* modctx,
   free(modsrc);
   mod->state = 2;
   if (!r.ok) {
-    char combined[256];
+    char combined[1024];
     snprintf(combined, sizeof(combined), "%s:%d: %s", abs_path, r.line,
              r.message);
     error_at(p, combined);
@@ -5458,7 +5517,20 @@ static compiled_module* get_or_compile_module(module_ctx* modctx,
 static void emit_require_expr(parser* p, compiler* c) {
   advance(p);
   if (!check(p, tok_str)) {
-    error_at(p, "require() only supports a string literal argument");
+    parse_seq_expr(p, c);
+    op_emit(c->m, op_pop);
+    if (!expect(p, tok_rparen))
+      return;
+    char msg[] = "Error: dynamic require() arguments are not supported";
+    emit_string_value(c, msg);
+    uint16_t throw_cls = cf_class(c->cf, "V6Throw");
+    uint16_t throw_ctor =
+        cf_methodref(c->cf, "V6Throw", "<init>", "(LV6Value;)V");
+    op_emit2(c->m, op_new, throw_cls);
+    op_emit(c->m, op_dup_x1);
+    op_emit(c->m, op_swap);
+    op_emit2(c->m, op_invokespecial, throw_ctor);
+    op_emit(c->m, op_athrow);
     return;
   }
   tok spec_tok = p->cur;
@@ -5473,6 +5545,24 @@ static void emit_require_expr(parser* p, compiler* c) {
   if (!c->modctx) {
     error_at(p, "require() is not supported in this context");
     free(spec);
+    return;
+  }
+  char abs_path[v6_max_path];
+  char resolve_err[256];
+  if (resolve_module_specifier(c->module_dir, spec, abs_path, sizeof(abs_path),
+                               resolve_err, sizeof(resolve_err)) != 0) {
+    char msg[320];
+    snprintf(msg, sizeof(msg), "Error: Cannot find module '%s'", spec);
+    free(spec);
+    emit_string_value(c, msg);
+    uint16_t throw_cls = cf_class(c->cf, "V6Throw");
+    uint16_t throw_ctor =
+        cf_methodref(c->cf, "V6Throw", "<init>", "(LV6Value;)V");
+    op_emit2(c->m, op_new, throw_cls);
+    op_emit(c->m, op_dup_x1);
+    op_emit(c->m, op_swap);
+    op_emit2(c->m, op_invokespecial, throw_ctor);
+    op_emit(c->m, op_athrow);
     return;
   }
   compiled_module* mod =
@@ -5946,8 +6036,7 @@ static tok prescan_skip_initializer(lexer* lx, tok t) {
   while (t.kind != tok_eof) {
     if ((t.kind == tok_slash || t.kind == tok_slash_eq) &&
         !prescan_tok_ends_value(prev_kind)) {
-      lexer regex_lex;
-      regex_lex.src = lx->src;
+      lexer regex_lex = *lx;
       regex_lex.cur = t.start;
       regex_lex.line = t.line;
       t = lex_regex_literal(&regex_lex);
@@ -6045,6 +6134,7 @@ static void prescan_decls(compiler* c, const char* src, int hoist_functions) {
 
   lexer lx;
   lex_init(&lx, src);
+  lx.auto_regex = 1;
   int depth = 0;
   tok t = lex_next(&lx);
   while (t.kind != tok_eof) {
@@ -6389,6 +6479,7 @@ static void preprocess_exports(char* src, export_binding* bindings,
                                int* count) {
   lexer lx;
   lex_init(&lx, src);
+  lx.auto_regex = 1;
   int depth = 0;
   tok t = lex_next(&lx);
   while (t.kind != tok_eof) {
@@ -6559,12 +6650,30 @@ static const char* const v6_prelude_src =
     "  constructor(message) {\n"
     "    this.message = message === undefined ? \"\" : message;\n"
     "    this.name = \"Error\";\n"
+    "    this.stack = this.message ? (this.name + \": \" + this.message) : "
+    "this.name;\n"
     "  }\n"
     "  toString() {\n"
     "    return this.message ? (this.name + \": \" + this.message) : "
     "this.name;\n"
     "  }\n"
     "}\n"
+    "Error.captureStackTrace = function(targetObject, constructorOpt) {\n"
+    "  var frames = __v6CaptureCallSites();\n"
+    "  if (typeof Error.prepareStackTrace === \"function\") {\n"
+    "    targetObject.stack = Error.prepareStackTrace(targetObject, frames);\n"
+    "    return;\n"
+    "  }\n"
+    "  var head = targetObject.name ? targetObject.name : \"Error\";\n"
+    "  if (targetObject.message) head = head + \": \" + targetObject.message;\n"
+    "  var lines = [head];\n"
+    "  for (var i = 0; i < frames.length; i++) {\n"
+    "    lines.push(\"    at \" + (frames[i].getFunctionName() || "
+    "\"<anonymous>\"));\n"
+    "  }\n"
+    "  targetObject.stack = lines.join(\"\\n\");\n"
+    "};\n"
+    "Error.stackTraceLimit = 10;\n"
     "class TypeError extends Error {\n"
     "  constructor(message) {\n"
     "    super(message);\n"
@@ -6702,6 +6811,13 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   bind_builtin(&c, "Array", "ARRAY");
   bind_builtin(&c, "atob", "ATOB");
   bind_builtin(&c, "btoa", "BTOA");
+  bind_builtin(&c, "Uint8Array", "UINT8ARRAY_CTOR");
+  bind_builtin(&c, "encodeURIComponent", "ENCODE_URI_COMPONENT");
+  bind_builtin(&c, "decodeURIComponent", "DECODE_URI_COMPONENT");
+  bind_builtin(&c, "encodeURI", "ENCODE_URI");
+  bind_builtin(&c, "decodeURI", "DECODE_URI");
+  bind_builtin(&c, "eval", "EVAL_STUB");
+  bind_builtin(&c, "__v6CaptureCallSites", "CAPTURE_CALL_SITES");
   bind_builtin(&c, "Number", "NUMBER");
   bind_builtin(&c, "parseInt", "PARSE_INT");
   bind_builtin(&c, "BigInt", "BIGINT");
@@ -6719,6 +6835,7 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   bind_builtin(&c, "RegExp", "REGEXP");
   bind_builtin(&c, "Function", "FUNCTION");
   bind_builtin(&c, "String", "STRING");
+  bind_builtin(&c, "Boolean", "BOOLEAN");
   bind_builtin(&c, "Date", "DATE");
   bind_builtin(&c, "JSON", "JSON");
   bind_builtin(&c, "Buffer", "BUFFER");

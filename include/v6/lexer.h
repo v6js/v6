@@ -126,6 +126,8 @@ typedef struct lexer {
   const char* src;
   const char* cur;
   int line;
+  int auto_regex;
+  tok_kind prev_kind;
 } lexer;
 
 void lex_init(lexer* lx, const char* src);

@@ -303,12 +303,14 @@ public record V6Value(int tag, double num, Object ref) {
       V6Closure fnClosure = (V6Closure)classValue.ref;
       V6Value protoVal = fnClosure.get("prototype");
       V6Object instance = new V6Object();
-      if (protoVal.tag == TAG_OBJ && protoVal.ref instanceof V6Object)
+      if ((protoVal.tag == TAG_OBJ || protoVal.tag == TAG_FUNC) &&
+          protoVal.ref instanceof V6Object)
         instance.setProto((V6Object)protoVal.ref);
       instance.newTarget = classValue;
       V6Value instanceValue = new V6Value(TAG_OBJ, 0, instance);
       V6Value result = fnClosure.call(instanceValue, args);
-      if (result.tag == TAG_OBJ && result.ref instanceof V6Object)
+      if ((result.tag == TAG_OBJ || result.tag == TAG_FUNC) &&
+          result.ref instanceof V6Object)
         return result;
       return instanceValue;
     }
@@ -345,6 +347,12 @@ public record V6Value(int tag, double num, Object ref) {
   }
 
   public V6Callable asCallable() {
+    if (ref instanceof V6Callable)
+      return (V6Callable)ref;
+    if (ref instanceof V6NativeConstructor) {
+      V6NativeConstructor ctor = (V6NativeConstructor)ref;
+      return (thisArg, args) -> ctor.construct(args);
+    }
     return (V6Callable)ref;
   }
 

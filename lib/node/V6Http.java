@@ -52,6 +52,8 @@ public final class V6Http {
       throws IOException {
     V6EventEmitterObject req = new V6EventEmitterObject();
     req.setProto(V6EventEmitterConstructor.PROTOTYPE);
+    for (String k : keysOf(V6EventEmitterConstructor.PROTOTYPE))
+      req.set(k, V6EventEmitterConstructor.PROTOTYPE.get(k));
     req.set("method", str(exchange.getRequestMethod()));
     req.set("url", str(exchange.getRequestURI().toString()));
     V6Object reqHeaders = new V6Object();
@@ -60,11 +62,22 @@ public final class V6Http {
       reqHeaders.set(e.getKey().toLowerCase(),
                      str(String.join(", ", e.getValue())));
     req.set("headers", objValue(reqHeaders));
+    req.set("httpVersionMajor", num(1));
+    req.set("httpVersionMinor", num(1));
+    req.set("unpipe", fn((t, a) -> t));
+    req.set("resume", fn((t, a) -> t));
+    req.set("pause", fn((t, a) -> t));
+    req.set("destroy", fn((t, a) -> t));
+    req.set("pipe", fn((t, a) -> V6Value.argAt(a, 0)));
     byte[] bodyBytes = exchange.getRequestBody().readAllBytes();
 
     V6EventEmitterObject res = new V6EventEmitterObject();
     res.setProto(V6EventEmitterConstructor.PROTOTYPE);
+    for (String k : keysOf(V6EventEmitterConstructor.PROTOTYPE))
+      res.set(k, V6EventEmitterConstructor.PROTOTYPE.get(k));
     res.set("statusCode", num(200));
+    res.set("statusMessage", str(""));
+    res.set("headersSent", V6Value.FALSE);
     Map<String, String> resHeaders = new LinkedHashMap<>();
     boolean[] ended = {false};
     boolean[] headersSent = {false};
@@ -78,6 +91,10 @@ public final class V6Http {
     res.set("getHeader", fn((t, a) -> {
               String v = resHeaders.get(V6Value.argAt(a, 0).toString());
               return v != null ? str(v) : UNDEF;
+            }));
+    res.set("removeHeader", fn((t, a) -> {
+              resHeaders.remove(V6Value.argAt(a, 0).toString());
+              return UNDEF;
             }));
     res.set("writeHead", fn((t, a) -> {
               ((V6Object)t.ref())
@@ -99,6 +116,7 @@ public final class V6Http {
                   exchange.sendResponseHeaders(
                       (int)((V6Object)t.ref()).get("statusCode").toNumber(), 0);
                   headersSent[0] = true;
+                  ((V6Object)t.ref()).set("headersSent", V6Value.TRUE);
                   responseStreamHolder[0] = exchange.getResponseBody();
                 }
                 byte[] bytes = bytesOf(V6Value.argAt(a, 0));
@@ -124,6 +142,7 @@ public final class V6Http {
                   if (finalBytes.length > 0)
                     responseStreamHolder[0].write(finalBytes);
                   headersSent[0] = true;
+                  ((V6Object)t.ref()).set("headersSent", V6Value.TRUE);
                 } else if (a.length > 0 && a[0].tag() != V6Value.TAG_FUNC) {
                   byte[] bytes = bytesOf(a[0]);
                   responseStreamHolder[0].write(bytes);
@@ -466,6 +485,68 @@ public final class V6Http {
     return objValue(reqObj);
   }
 
+  private static final String[] HTTP_METHODS = {
+      "ACL",      "BIND",      "CHECKOUT",   "CONNECT",    "COPY",
+      "DELETE",   "GET",       "HEAD",       "LINK",       "LOCK",
+      "M-SEARCH", "MERGE",     "MKACTIVITY", "MKCALENDAR", "MKCOL",
+      "MOVE",     "NOTIFY",    "OPTIONS",    "PATCH",      "POST",
+      "PROPFIND", "PROPPATCH", "PURGE",      "PUT",        "QUERY",
+      "REBIND",   "REPORT",    "SEARCH",     "SOURCE",     "SUBSCRIBE",
+      "TRACE",    "UNBIND",    "UNLINK",     "UNLOCK",     "UNSUBSCRIBE",
+  };
+
+  private static final String[][] HTTP_STATUS_CODES = {
+      {"100", "Continue"},
+      {"101", "Switching Protocols"},
+      {"102", "Processing"},
+      {"200", "OK"},
+      {"201", "Created"},
+      {"202", "Accepted"},
+      {"203", "Non-Authoritative Information"},
+      {"204", "No Content"},
+      {"205", "Reset Content"},
+      {"206", "Partial Content"},
+      {"300", "Multiple Choices"},
+      {"301", "Moved Permanently"},
+      {"302", "Found"},
+      {"303", "See Other"},
+      {"304", "Not Modified"},
+      {"307", "Temporary Redirect"},
+      {"308", "Permanent Redirect"},
+      {"400", "Bad Request"},
+      {"401", "Unauthorized"},
+      {"402", "Payment Required"},
+      {"403", "Forbidden"},
+      {"404", "Not Found"},
+      {"405", "Method Not Allowed"},
+      {"406", "Not Acceptable"},
+      {"407", "Proxy Authentication Required"},
+      {"408", "Request Timeout"},
+      {"409", "Conflict"},
+      {"410", "Gone"},
+      {"411", "Length Required"},
+      {"412", "Precondition Failed"},
+      {"413", "Payload Too Large"},
+      {"414", "URI Too Long"},
+      {"415", "Unsupported Media Type"},
+      {"416", "Range Not Satisfiable"},
+      {"417", "Expectation Failed"},
+      {"418", "I'm a Teapot"},
+      {"422", "Unprocessable Entity"},
+      {"425", "Too Early"},
+      {"426", "Upgrade Required"},
+      {"428", "Precondition Required"},
+      {"429", "Too Many Requests"},
+      {"431", "Request Header Fields Too Large"},
+      {"451", "Unavailable For Legal Reasons"},
+      {"500", "Internal Server Error"},
+      {"501", "Not Implemented"},
+      {"502", "Bad Gateway"},
+      {"503", "Service Unavailable"},
+      {"504", "Gateway Timeout"},
+      {"505", "HTTP Version Not Supported"},
+  };
+
   public static V6Object build() {
     V6Object o = buildCreateServerModule(false);
     o.set("request", fn((thisArg, args) -> requestImpl(args, false, false)));
@@ -473,6 +554,14 @@ public final class V6Http {
     V6HttpAgentConstructor agentCtor = new V6HttpAgentConstructor();
     o.set("Agent", objValue(agentCtor));
     o.set("globalAgent", agentCtor.construct(new V6Value[0]));
+    V6Array methods = new V6Array();
+    for (String m : HTTP_METHODS)
+      methods.push(str(m));
+    o.set("METHODS", objValue(methods));
+    V6Object statusCodes = new V6Object();
+    for (String[] sc : HTTP_STATUS_CODES)
+      statusCodes.set(sc[0], str(sc[1]));
+    o.set("STATUS_CODES", objValue(statusCodes));
     return o;
   }
 

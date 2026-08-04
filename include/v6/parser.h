@@ -5,7 +5,7 @@
 
 struct module_ctx;
 
-#define v6_max_params 16
+#define v6_max_params 64
 #define v6_max_locals 512
 #define v6_max_loops 32
 #define v6_max_breaks 32
@@ -104,13 +104,13 @@ typedef struct parser {
   tok cur;
   tok prev;
   int had_error;
-  char err_msg[160];
+  char err_msg[1024];
   int err_line;
 } parser;
 
 typedef struct compile_result {
   int ok;
-  char message[160];
+  char message[1024];
   int line;
 } compile_result;
 

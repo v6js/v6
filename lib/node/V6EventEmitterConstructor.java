@@ -36,8 +36,15 @@ public final class V6EventEmitterConstructor
     return new V6Value(V6Value.TAG_OBJ, 0, o);
   }
 
+  private static final java.util
+      .WeakHashMap<Object, V6EventEmitterObject> MIXIN_STATE =
+      new java.util.WeakHashMap<>();
+
   private static V6EventEmitterObject self(V6Value thisArg) {
-    return (V6EventEmitterObject)thisArg.ref();
+    if (thisArg.ref() instanceof V6EventEmitterObject)
+      return (V6EventEmitterObject)thisArg.ref();
+    return MIXIN_STATE.computeIfAbsent(thisArg.ref(),
+                                       k -> new V6EventEmitterObject());
   }
 
   private static V6Object buildPrototype() {

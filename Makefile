@@ -91,12 +91,18 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/core/V6FunctionConstructor.java \
                 lib/core/V6ArrayConstructor.java \
                 lib/core/V6StringConstructor.java \
+                lib/core/V6BooleanConstructor.java \
+                lib/core/V6NumberConstructor.java \
+                lib/core/V6Uint8ArrayObject.java \
+                lib/core/V6Uint8ArrayConstructor.java \
+                lib/core/V6CallSiteObject.java \
                 lib/core/V6DateObject.java lib/core/V6DateConstructor.java \
                 lib/core/V6Json.java \
                 lib/node/V6Path.java \
                 lib/node/V6EventEmitterObject.java lib/node/V6EventEmitterConstructor.java \
                 lib/node/V6NativeFunctionObject.java \
                 lib/node/V6Util.java lib/node/V6Os.java lib/node/V6Process.java \
+                lib/node/V6Tty.java \
                 lib/node/V6Buffer.java lib/node/V6BufferConstructor.java \
                 lib/node/V6Fs.java \
                 lib/node/V6Assert.java lib/node/V6AssertFunction.java \
