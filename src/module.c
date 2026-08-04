@@ -1,3 +1,9 @@
+#ifndef _WIN32
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+#endif
+
 #include "v6/module.h"
 
 #include <ctype.h>

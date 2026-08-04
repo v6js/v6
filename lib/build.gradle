@@ -17,6 +17,7 @@ def destDir = project.findProperty('destDir')
 
 tasks.named('compileJava') {
   options.incremental = true
+  options.release = 21
   if (destDir) {
     destinationDirectory = file(destDir)
   }

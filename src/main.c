@@ -4,6 +4,7 @@
 #include "v6/module.h"
 #include "v6/parser.h"
 #include "v6/runtime.h"
+#include "v6/version.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,11 +34,18 @@ static char* read_file(const char* path) {
 static void usage(const char* prog) {
   fprintf(stderr,
           "usage: %s <script.js> [-o <output.jar>] [-cp <classpath>] "
-          "[script args...]\n",
-          prog);
+          "[script args...]\n"
+          "       %s --version | -v\n",
+          prog, prog);
 }
 
 int main(int argc, char** argv) {
+  if (argc > 1 &&
+      (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
+    printf("v6 %s (zig %s)\n", V6_VERSION, V6_ZIG_VERSION);
+    return 0;
+  }
+
   const char* in_path = NULL;
   const char* out_path = NULL;
   const char* classpath = NULL;

@@ -1,3 +1,7 @@
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(_DEFAULT_SOURCE)
+#define _DEFAULT_SOURCE
+#endif
+
 #include "v6/jvm.h"
 #include "v6/runtime.h"
 
@@ -17,6 +21,7 @@ static const char* v6_jvm_lib_name = "jvm.dll";
 static const char* v6_jvm_lib_rel = "bin/server/jvm.dll";
 #elif defined(__APPLE__)
 #include <dlfcn.h>
+#include <mach-o/dyld.h>
 typedef void* v6_lib;
 #define v6_lib_open(p) dlopen(p, RTLD_NOW)
 #define v6_lib_sym(h, n) dlsym(h, n)
@@ -24,6 +29,7 @@ static const char* v6_jvm_lib_name = "libjvm.dylib";
 static const char* v6_jvm_lib_rel = "lib/server/libjvm.dylib";
 #else
 #include <dlfcn.h>
+#include <unistd.h>
 typedef void* v6_lib;
 #define v6_lib_open(p) dlopen(p, RTLD_NOW)
 #define v6_lib_sym(h, n) dlsym(h, n)
@@ -31,15 +37,73 @@ static const char* v6_jvm_lib_name = "libjvm.so";
 static const char* v6_jvm_lib_rel = "lib/server/libjvm.so";
 #endif
 
+static int v6_get_exe_dir(char* out, size_t out_size) {
+  char path[1024];
+#ifdef _WIN32
+  DWORD n = GetModuleFileNameA(NULL, path, sizeof(path));
+  if (n == 0 || n >= sizeof(path))
+    return -1;
+#elif defined(__APPLE__)
+  uint32_t size = sizeof(path);
+  if (_NSGetExecutablePath(path, &size) != 0)
+    return -1;
+#else
+  ssize_t n = readlink("/proc/self/exe", path, sizeof(path) - 1);
+  if (n < 0)
+    return -1;
+  path[n] = '\0';
+#endif
+
+  char* last_slash = strrchr(path, '/');
+  char* last_backslash = strrchr(path, '\\');
+  char* cut = last_slash;
+  if (last_backslash && (!cut || last_backslash > cut))
+    cut = last_backslash;
+  if (!cut)
+    return -1;
+
+  size_t len = (size_t)(cut - path);
+  if (len >= out_size)
+    return -1;
+  memcpy(out, path, len);
+  out[len] = '\0';
+  return 0;
+}
+
+#ifdef _WIN32
+static void v6_prep_dll_search(const char* root) {
+  char bin_dir[1024];
+  snprintf(bin_dir, sizeof(bin_dir), "%s/bin", root);
+  SetDllDirectoryA(bin_dir);
+}
+#else
+static void v6_prep_dll_search(const char* root) {
+  (void)root;
+}
+#endif
+
 static v6_lib v6_open_jvm_lib(void) {
   v6_lib lib = v6_lib_open(v6_jvm_lib_name);
   if (lib)
     return lib;
 
+  char exe_dir[1024];
+  if (v6_get_exe_dir(exe_dir, sizeof(exe_dir)) == 0) {
+    char root[1024];
+    snprintf(root, sizeof(root), "%s/jdk", exe_dir);
+    v6_prep_dll_search(root);
+    char path[1200];
+    snprintf(path, sizeof(path), "%s/%s", root, v6_jvm_lib_rel);
+    lib = v6_lib_open(path);
+    if (lib)
+      return lib;
+  }
+
   const char* home = getenv("JAVA_HOME");
   if (!home)
     return NULL;
 
+  v6_prep_dll_search(home);
   char path[1024];
   snprintf(path, sizeof(path), "%s/%s", home, v6_jvm_lib_rel);
   return v6_lib_open(path);

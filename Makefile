@@ -191,7 +191,16 @@ endif
 
 FMT_FILES := $(wildcard src/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java) $(wildcard lib/node/*.java) $(wildcard lib/shared/*.java) $(wildcard lib/web/*.java) $(wildcard lib/interop/*.java)
 
-.PHONY: all test fmt clean dirs release bench javaclasses
+BUILD_TOOL_BIN := build/tools/build_tool$(EXE)
+
+.PHONY: all test fmt clean dirs release bench javaclasses target
+
+.DEFAULT_GOAL := all
+
+target:
+	@$(call MKDIR_P,build/tools)
+	$(CC) $(STD) $(WARN) -D_CRT_SECURE_NO_WARNINGS tools/build.c -o $(BUILD_TOOL_BIN)
+	$(BUILD_TOOL_BIN)
 
 all: | dirs
 	$(MAKE) --no-print-directory BUILD_TYPE=$(BUILD_TYPE) javaclasses
