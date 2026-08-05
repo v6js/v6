@@ -13,6 +13,37 @@ public record V6Value(int tag, double num, Object ref) {
   public static final V6Value TRUE = new V6Value(TAG_BOOL, 1, null);
   public static final V6Value FALSE = new V6Value(TAG_BOOL, 0, null);
 
+  private static final int SMI_LOW = -1024;
+  private static final int SMI_HIGH = 4096;
+  private static final V6Value[] SMI_CACHE = new V6Value[SMI_HIGH - SMI_LOW + 1];
+  static {
+    for (int i = SMI_LOW; i <= SMI_HIGH; i++)
+      SMI_CACHE[i - SMI_LOW] = new V6Value(TAG_NUM, i, null);
+  }
+  public static final V6Value NAN = new V6Value(TAG_NUM, Double.NaN, null);
+  public static final V6Value POS_INF =
+      new V6Value(TAG_NUM, Double.POSITIVE_INFINITY, null);
+  public static final V6Value NEG_INF =
+      new V6Value(TAG_NUM, Double.NEGATIVE_INFINITY, null);
+
+  public static V6Value num(double d) {
+    int i = (int)d;
+    if (i == d && i >= SMI_LOW && i <= SMI_HIGH &&
+        !(i == 0 && Double.doubleToRawLongBits(d) != 0L))
+      return SMI_CACHE[i - SMI_LOW];
+    if (Double.isNaN(d))
+      return NAN;
+    if (d == Double.POSITIVE_INFINITY)
+      return POS_INF;
+    if (d == Double.NEGATIVE_INFINITY)
+      return NEG_INF;
+    return new V6Value(TAG_NUM, d, null);
+  }
+
+  public static V6Value bool(boolean b) {
+    return b ? TRUE : FALSE;
+  }
+
   @Override
   public String toString() {
     return switch (tag) {
@@ -140,7 +171,7 @@ public record V6Value(int tag, double num, Object ref) {
         throw mixedBigIntError();
       return bigint(a.asBigInt().add(b.asBigInt()));
     }
-    return new V6Value(TAG_NUM, a.toNumber() + b.toNumber(), null);
+    return num(a.toNumber() + b.toNumber());
   }
 
   public static V6Value sub(V6Value a, V6Value b) {
@@ -149,7 +180,7 @@ public record V6Value(int tag, double num, Object ref) {
         throw mixedBigIntError();
       return bigint(a.asBigInt().subtract(b.asBigInt()));
     }
-    return new V6Value(TAG_NUM, a.toNumber() - b.toNumber(), null);
+    return num(a.toNumber() - b.toNumber());
   }
 
   public static V6Value mul(V6Value a, V6Value b) {
@@ -158,7 +189,7 @@ public record V6Value(int tag, double num, Object ref) {
         throw mixedBigIntError();
       return bigint(a.asBigInt().multiply(b.asBigInt()));
     }
-    return new V6Value(TAG_NUM, a.toNumber() * b.toNumber(), null);
+    return num(a.toNumber() * b.toNumber());
   }
 
   public static V6Value div(V6Value a, V6Value b) {
@@ -167,7 +198,7 @@ public record V6Value(int tag, double num, Object ref) {
         throw mixedBigIntError();
       return bigint(a.asBigInt().divide(b.asBigInt()));
     }
-    return new V6Value(TAG_NUM, a.toNumber() / b.toNumber(), null);
+    return num(a.toNumber() / b.toNumber());
   }
 
   public static V6Value mod(V6Value a, V6Value b) {
@@ -176,13 +207,13 @@ public record V6Value(int tag, double num, Object ref) {
         throw mixedBigIntError();
       return bigint(a.asBigInt().remainder(b.asBigInt()));
     }
-    return new V6Value(TAG_NUM, a.toNumber() % b.toNumber(), null);
+    return num(a.toNumber() % b.toNumber());
   }
 
   public static V6Value neg(V6Value a) {
     if (a.tag == TAG_BIGINT)
       return bigint(a.asBigInt().negate());
-    return new V6Value(TAG_NUM, -a.toNumber(), null);
+    return num(-a.toNumber());
   }
 
   public static boolean lt(V6Value a, V6Value b) {
@@ -237,9 +268,9 @@ public record V6Value(int tag, double num, Object ref) {
     if (aNullish || bNullish)
       return aNullish && bNullish;
     if (a.tag == TAG_BOOL)
-      return looseEquals(new V6Value(TAG_NUM, a.num, null), b);
+      return looseEquals(num(a.num), b);
     if (b.tag == TAG_BOOL)
-      return looseEquals(a, new V6Value(TAG_NUM, b.num, null));
+      return looseEquals(a, num(b.num));
     if (a.tag == TAG_BIGINT || b.tag == TAG_BIGINT)
       return a.toNumber() == b.toNumber();
     return a.toNumber() == b.toNumber();
@@ -274,7 +305,7 @@ public record V6Value(int tag, double num, Object ref) {
   }
 
   public static V6Value argAt(V6Value[] args, int idx) {
-    return idx < args.length ? args[idx] : new V6Value(TAG_UNDEF, 0, null);
+    return idx < args.length ? args[idx] : UNDEF;
   }
 
   private static V6NativeConstructor findNativeAncestor(V6Object proto) {
@@ -366,6 +397,27 @@ public record V6Value(int tag, double num, Object ref) {
     return new V6Array();
   }
 
+  private static boolean isFastIndex(V6Value key) {
+    return key.tag == TAG_NUM && key.num >= 0 && key.num <= Integer.MAX_VALUE &&
+           key.num == Math.floor(key.num);
+  }
+
+  public V6Value getIndexedOrProp(V6Value key) {
+    if (isFastIndex(key) && (tag == TAG_OBJ || tag == TAG_FUNC) &&
+        ref instanceof V6Object)
+      return ((V6Object)ref).getIndexed((int)key.num);
+    return getProp(key.toString());
+  }
+
+  public void setIndexedOrProp(V6Value key, V6Value value) {
+    if (isFastIndex(key) && (tag == TAG_OBJ || tag == TAG_FUNC) &&
+        ref instanceof V6Object) {
+      ((V6Object)ref).setIndexed((int)key.num, value);
+      return;
+    }
+    setProp(key.toString(), value);
+  }
+
   public V6Value getProp(String key) {
     switch (tag) {
     case TAG_OBJ:
@@ -374,23 +426,23 @@ public record V6Value(int tag, double num, Object ref) {
         if (key.equals("description"))
           return sym.description != null
               ? new V6Value(TAG_STR, 0, sym.description)
-              : new V6Value(TAG_UNDEF, 0, null);
+              : UNDEF;
         if (key.equals("toString"))
           return new V6Value(
               TAG_FUNC, 0,
               (V6Callable)(t, a) -> new V6Value(TAG_STR, 0, t.toString()));
-        return new V6Value(TAG_UNDEF, 0, null);
+        return UNDEF;
       }
       return ((V6Object)ref).get(key);
     case TAG_STR:
       CharSequence s = (CharSequence)ref;
       if (key.equals("length"))
-        return new V6Value(TAG_NUM, s.length(), null);
+        return num(s.length());
       int idx = V6Object.parseIndex(key);
       if (idx >= 0)
         return idx < s.length()
             ? new V6Value(TAG_STR, 0, String.valueOf(s.charAt(idx)))
-            : new V6Value(TAG_UNDEF, 0, null);
+            : UNDEF;
       return V6String.PROTOTYPE.get(key);
     case TAG_NUM:
       return V6Number.PROTOTYPE.get(key);
@@ -403,7 +455,7 @@ public record V6Value(int tag, double num, Object ref) {
         return ((V6Object)ref).get(key);
       return V6Closure.FUNCTION_PROTOTYPE.get(key);
     default:
-      return new V6Value(TAG_UNDEF, 0, null);
+      return UNDEF;
     }
   }
 
@@ -442,8 +494,7 @@ public record V6Value(int tag, double num, Object ref) {
         throw mixedBigIntError();
       return bigint(a.asBigInt().and(b.asBigInt()));
     }
-    return new V6Value(TAG_NUM, toInt32(a.toNumber()) & toInt32(b.toNumber()),
-                       null);
+    return num(toInt32(a.toNumber()) & toInt32(b.toNumber()));
   }
 
   public static V6Value bitOr(V6Value a, V6Value b) {
@@ -452,8 +503,7 @@ public record V6Value(int tag, double num, Object ref) {
         throw mixedBigIntError();
       return bigint(a.asBigInt().or(b.asBigInt()));
     }
-    return new V6Value(TAG_NUM, toInt32(a.toNumber()) | toInt32(b.toNumber()),
-                       null);
+    return num(toInt32(a.toNumber()) | toInt32(b.toNumber()));
   }
 
   public static V6Value bitXor(V6Value a, V6Value b) {
@@ -462,14 +512,13 @@ public record V6Value(int tag, double num, Object ref) {
         throw mixedBigIntError();
       return bigint(a.asBigInt().xor(b.asBigInt()));
     }
-    return new V6Value(TAG_NUM, toInt32(a.toNumber()) ^ toInt32(b.toNumber()),
-                       null);
+    return num(toInt32(a.toNumber()) ^ toInt32(b.toNumber()));
   }
 
   public static V6Value bitNot(V6Value a) {
     if (a.tag == TAG_BIGINT)
       return bigint(a.asBigInt().not());
-    return new V6Value(TAG_NUM, ~toInt32(a.toNumber()), null);
+    return num(~toInt32(a.toNumber()));
   }
 
   public static V6Value shl(V6Value a, V6Value b) {
@@ -479,7 +528,7 @@ public record V6Value(int tag, double num, Object ref) {
       return bigint(a.asBigInt().shiftLeft(b.asBigInt().intValueExact()));
     }
     int shift = toInt32(b.toNumber()) & 31;
-    return new V6Value(TAG_NUM, toInt32(a.toNumber()) << shift, null);
+    return num(toInt32(a.toNumber()) << shift);
   }
 
   public static V6Value shr(V6Value a, V6Value b) {
@@ -489,7 +538,7 @@ public record V6Value(int tag, double num, Object ref) {
       return bigint(a.asBigInt().shiftRight(b.asBigInt().intValueExact()));
     }
     int shift = toInt32(b.toNumber()) & 31;
-    return new V6Value(TAG_NUM, toInt32(a.toNumber()) >> shift, null);
+    return num(toInt32(a.toNumber()) >> shift);
   }
 
   public static V6Value ushr(V6Value a, V6Value b) {
@@ -500,7 +549,7 @@ public record V6Value(int tag, double num, Object ref) {
     }
     int shift = toInt32(b.toNumber()) & 31;
     long result = (toInt32(a.toNumber()) >>> shift) & 0xFFFFFFFFL;
-    return new V6Value(TAG_NUM, result, null);
+    return num(result);
   }
 
   public static boolean instanceOf(V6Value obj, V6Value ctor) {
@@ -548,6 +597,6 @@ public record V6Value(int tag, double num, Object ref) {
         throw mixedBigIntError();
       return bigint(a.asBigInt().pow(b.asBigInt().intValueExact()));
     }
-    return new V6Value(TAG_NUM, Math.pow(a.toNumber(), b.toNumber()), null);
+    return num(Math.pow(a.toNumber(), b.toNumber()));
   }
 }

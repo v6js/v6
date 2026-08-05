@@ -48,6 +48,20 @@ public final class V6EventLoop {
     external.add(r);
   }
 
+  public static synchronized void reset() {
+    timers.clear();
+    byId.clear();
+    external.clear();
+    refCount.set(0);
+    started = false;
+  }
+
+  private static volatile Thread ignoredThread = null;
+
+  public static void setIgnoredThread(Thread t) {
+    ignoredThread = t;
+  }
+
   private static boolean hasOtherNonDaemonThreads() {
     ThreadGroup root = Thread.currentThread().getThreadGroup();
     while (root.getParent() != null)
@@ -55,9 +69,11 @@ public final class V6EventLoop {
     Thread[] threads = new Thread[root.activeCount() + 16];
     int n = root.enumerate(threads, true);
     Thread me = Thread.currentThread();
+    Thread ignored = ignoredThread;
     for (int i = 0; i < n; i++) {
       Thread th = threads[i];
-      if (th != null && th != me && th.isAlive() && !th.isDaemon())
+      if (th != null && th != me && th != ignored && th.isAlive() &&
+          !th.isDaemon())
         return true;
     }
     return false;

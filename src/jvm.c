@@ -123,7 +123,7 @@ int v6_jvm_available(void) {
   return 1;
 }
 
-v6_jvm* v6_jvm_create(const char* classpath) {
+v6_jvm* v6_jvm_create(const char* classpath, int is_daemon) {
   v6_lib lib = v6_open_jvm_lib();
   if (!lib)
     return NULL;
@@ -148,7 +148,7 @@ v6_jvm* v6_jvm_create(const char* classpath) {
   args.version = JNI_VERSION_1_8;
   args.ignoreUnrecognized = JNI_TRUE;
 
-  JavaVMOption opts[2];
+  JavaVMOption opts[8];
   int nopts = 0;
   char* cp_opt = NULL;
   if (classpath && classpath[0] != '\0') {
@@ -160,6 +160,24 @@ v6_jvm* v6_jvm_create(const char* classpath) {
     nopts++;
   }
   opts[nopts].optionString = "-Dsun.java2d.dpiaware=true";
+  opts[nopts].extraInfo = NULL;
+  nopts++;
+  if (is_daemon) {
+    opts[nopts].optionString = "-XX:+UseG1GC";
+    opts[nopts].extraInfo = NULL;
+    nopts++;
+  } else {
+    opts[nopts].optionString = "-XX:+UseSerialGC";
+    opts[nopts].extraInfo = NULL;
+    nopts++;
+    opts[nopts].optionString = "-XX:TieredStopAtLevel=1";
+    opts[nopts].extraInfo = NULL;
+    nopts++;
+    opts[nopts].optionString = "-XX:CICompilerCount=1";
+    opts[nopts].extraInfo = NULL;
+    nopts++;
+  }
+  opts[nopts].optionString = "-Xshare:auto";
   opts[nopts].extraInfo = NULL;
   nopts++;
   args.nOptions = nopts;
@@ -273,7 +291,21 @@ int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
   if ((*env)->ExceptionCheck(env)) {
     jthrowable exc = (*env)->ExceptionOccurred(env);
     (*env)->ExceptionClear(env);
+
+    jclass exit_cls = (*env)->FindClass(env, "V6ProcessExit");
+    if ((*env)->ExceptionCheck(env))
+      (*env)->ExceptionClear(env);
+    if (exit_cls && (*env)->IsInstanceOf(env, exc, exit_cls)) {
+      jfieldID code_fld = (*env)->GetFieldID(env, exit_cls, "code", "I");
+      jint code = code_fld ? (*env)->GetIntField(env, exc, code_fld) : 0;
+      return (int)code;
+    }
+    if ((*env)->ExceptionCheck(env))
+      (*env)->ExceptionClear(env);
+
     jclass throw_cls = (*env)->FindClass(env, "V6Throw");
+    if ((*env)->ExceptionCheck(env))
+      (*env)->ExceptionClear(env);
     if (throw_cls && (*env)->IsInstanceOf(env, exc, throw_cls)) {
       jfieldID value_fld =
           (*env)->GetFieldID(env, throw_cls, "value", "LV6Value;");
@@ -306,6 +338,41 @@ int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
   return 0;
 }
 
+int v6_jvm_serve_daemon(v6_jvm* jvm, const char* lock_file_path,
+                        long idle_timeout_ms, long long binary_mtime,
+                        long long binary_size,
+                        long long execution_timeout_ms) {
+  JNIEnv* env = jvm->env;
+  jclass daemon_cls = (*env)->FindClass(env, "V6Daemon");
+  if (!daemon_cls) {
+    if ((*env)->ExceptionCheck(env)) {
+      (*env)->ExceptionDescribe(env);
+      (*env)->ExceptionClear(env);
+    }
+    return -1;
+  }
+  jmethodID serve_m = (*env)->GetStaticMethodID(env, daemon_cls, "serve",
+                                                "(Ljava/lang/String;JJJJ)V");
+  if (!serve_m) {
+    if ((*env)->ExceptionCheck(env)) {
+      (*env)->ExceptionDescribe(env);
+      (*env)->ExceptionClear(env);
+    }
+    return -1;
+  }
+  jstring lock_str = (*env)->NewStringUTF(env, lock_file_path);
+  (*env)->CallStaticVoidMethod(env, daemon_cls, serve_m, lock_str,
+                               (jlong)idle_timeout_ms, (jlong)binary_mtime,
+                               (jlong)binary_size,
+                               (jlong)execution_timeout_ms);
+  if ((*env)->ExceptionCheck(env)) {
+    (*env)->ExceptionDescribe(env);
+    (*env)->ExceptionClear(env);
+    return -1;
+  }
+  return 0;
+}
+
 void v6_jvm_destroy(v6_jvm* jvm) {
   if (!jvm)
     return;
@@ -329,8 +396,9 @@ int v6_jvm_available(void) {
   return 0;
 }
 
-v6_jvm* v6_jvm_create(const char* classpath) {
+v6_jvm* v6_jvm_create(const char* classpath, int is_daemon) {
   (void)classpath;
+  (void)is_daemon;
   return NULL;
 }
 
@@ -355,6 +423,19 @@ int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
   (void)len;
   (void)script_args;
   (void)script_argc;
+  return -1;
+}
+
+int v6_jvm_serve_daemon(v6_jvm* jvm, const char* lock_file_path,
+                        long idle_timeout_ms, long long binary_mtime,
+                        long long binary_size,
+                        long long execution_timeout_ms) {
+  (void)jvm;
+  (void)lock_file_path;
+  (void)idle_timeout_ms;
+  (void)binary_mtime;
+  (void)binary_size;
+  (void)execution_timeout_ms;
   return -1;
 }
 

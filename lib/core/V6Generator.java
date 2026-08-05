@@ -32,7 +32,7 @@ public final class V6Generator extends V6Object {
     if (started)
       return;
     started = true;
-    thread = new Thread(() -> {
+    thread = Thread.ofVirtual().unstarted(() -> {
       CURRENT.set(this);
       try {
         toCoroutine.take();
@@ -52,7 +52,6 @@ public final class V6Generator extends V6Object {
         }
       }
     });
-    thread.setDaemon(true);
     thread.start();
   }
 

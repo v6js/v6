@@ -21,8 +21,8 @@ public final class V6MessageChannelConstructor
     port2.get("_setPeer")
         .asCallable()
         .call(objValue(port2), new V6Value[] {objValue(port1)});
-    port1.props.remove("_setPeer");
-    port2.props.remove("_setPeer");
+    port1.delete("_setPeer");
+    port2.delete("_setPeer");
     channel.set("port1", objValue(port1));
     channel.set("port2", objValue(port2));
     return objValue(channel);

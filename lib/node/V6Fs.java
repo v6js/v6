@@ -501,6 +501,8 @@ public final class V6Fs {
     return o;
   }
 
+  public static final V6Value MODULE = new V6Value(V6Value.TAG_OBJ, 0, build());
+
   private static V6Object buildConstants() {
     V6Object c = new V6Object();
     c.set("F_OK", num(0));

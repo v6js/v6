@@ -4,7 +4,7 @@ function fib(n) {
 }
 
 function run() {
-  const result = fib(32);
+  const result = fib(26);
   return result;
 }
 

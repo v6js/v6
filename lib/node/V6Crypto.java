@@ -607,4 +607,6 @@ public final class V6Crypto {
 
     return o;
   }
+
+  public static final V6Value MODULE = objValue(build());
 }

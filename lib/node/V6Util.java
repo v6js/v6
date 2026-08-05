@@ -179,6 +179,8 @@ public final class V6Util {
     return o;
   }
 
+  public static final V6Value MODULE = new V6Value(V6Value.TAG_OBJ, 0, build());
+
   private static boolean isa(V6Value v, Class<?> cls) {
     return v.tag() == V6Value.TAG_OBJ && cls.isInstance(v.ref());
   }

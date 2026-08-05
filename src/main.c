@@ -1,4 +1,5 @@
 #include "v6/bytecode.h"
+#include "v6/daemon.h"
 #include "v6/jar.h"
 #include "v6/jvm.h"
 #include "v6/module.h"
@@ -9,6 +10,56 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define V6_DEFAULT_DAEMON_IDLE_MS (30L * 60L * 1000L)
+#define V6_DEFAULT_DAEMON_EXEC_TIMEOUT_MS (5L * 60L * 1000L)
+
+static long v6_daemon_idle_ms(void) {
+  const char* env = getenv("V6_DAEMON_IDLE_MS");
+  if (env && env[0])
+    return atol(env);
+  return V6_DEFAULT_DAEMON_IDLE_MS;
+}
+
+static long v6_daemon_exec_timeout_ms(void) {
+  const char* env = getenv("V6_DAEMON_EXEC_TIMEOUT_MS");
+  if (env && env[0])
+    return atol(env);
+  return V6_DEFAULT_DAEMON_EXEC_TIMEOUT_MS;
+}
+
+static int v6_run_daemon_serve(const char* lock_path) {
+  if (!v6_jvm_available()) {
+    fprintf(stderr, "error: no JVM available (built without JAVA_HOME?)\n");
+    return 1;
+  }
+
+  char exe_path[1024];
+  if (v6_get_own_exe_path(exe_path, sizeof(exe_path)) != 0) {
+    fprintf(stderr, "error: cannot resolve own executable path\n");
+    return 1;
+  }
+
+  long long mtime = 0, size = 0;
+  v6_stat_file(exe_path, &mtime, &size);
+
+  v6_jvm* jvm = v6_jvm_create(NULL, 1);
+  if (!jvm) {
+    fprintf(stderr, "error: failed to create JVM\n");
+    return 1;
+  }
+
+  if (v6_jvm_load_runtime(jvm) != 0) {
+    fprintf(stderr, "error: failed to load runtime\n");
+    v6_jvm_destroy(jvm);
+    return 1;
+  }
+
+  v6_jvm_serve_daemon(jvm, lock_path, v6_daemon_idle_ms(), mtime, size,
+                     v6_daemon_exec_timeout_ms());
+  v6_jvm_destroy(jvm);
+  return 0;
+}
 
 static char* read_file(const char* path) {
   FILE* f = fopen(path, "rb");
@@ -34,7 +85,7 @@ static char* read_file(const char* path) {
 static void usage(const char* prog) {
   fprintf(stderr,
           "usage: %s <script.js> [-o <output.jar>] [-cp <classpath>] "
-          "[script args...]\n"
+          "[--no-daemon] [script args...]\n"
           "       %s --version | -v\n",
           prog, prog);
 }
@@ -46,9 +97,13 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  if (argc > 2 && strcmp(argv[1], "--__v6_daemon_serve__") == 0)
+    return v6_run_daemon_serve(argv[2]);
+
   const char* in_path = NULL;
   const char* out_path = NULL;
   const char* classpath = NULL;
+  int no_daemon = 0;
   char** script_args = argc > 1 ? malloc(sizeof(char*) * (size_t)argc) : NULL;
   int script_argc = 0;
 
@@ -59,6 +114,8 @@ int main(int argc, char** argv) {
                 strcmp(argv[i], "--classpath") == 0) &&
                i + 1 < argc) {
       classpath = argv[++i];
+    } else if (strcmp(argv[i], "--no-daemon") == 0) {
+      no_daemon = 1;
     } else if (!in_path) {
       in_path = argv[i];
     } else {
@@ -147,6 +204,32 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  if (!classpath && !no_daemon) {
+    int num_classes = 1 + modctx.count;
+    v6_daemon_class_entry* classes =
+        malloc(sizeof(v6_daemon_class_entry) * (size_t)num_classes);
+    classes[0].name = "Main";
+    classes[0].data = out.data;
+    classes[0].len = out.len;
+    for (int i = 0; i < modctx.count; i++) {
+      classes[i + 1].name = modctx.modules[i].class_name;
+      classes[i + 1].data = mod_bufs[i].data;
+      classes[i + 1].len = mod_bufs[i].len;
+    }
+
+    int exit_code = 1;
+    int handled = v6_daemon_run(argv[0], classes, num_classes, in_path,
+                                script_args, script_argc, &exit_code);
+    free(classes);
+    if (handled) {
+      buf_free(&out);
+      for (int i = 0; i < modctx.count; i++)
+        buf_free(&mod_bufs[i]);
+      free(mod_bufs);
+      return exit_code;
+    }
+  }
+
   if (!v6_jvm_available()) {
     fprintf(stderr, "error: no JVM available (built without JAVA_HOME?)\n");
     buf_free(&out);
@@ -156,7 +239,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  v6_jvm* jvm = v6_jvm_create(classpath);
+  v6_jvm* jvm = v6_jvm_create(classpath, 0);
   if (!jvm) {
     fprintf(stderr, "error: failed to create JVM\n");
     buf_free(&out);
@@ -197,10 +280,10 @@ int main(int argc, char** argv) {
   buf_free(&out);
   v6_jvm_destroy(jvm);
 
-  if (run_rc != 0) {
+  if (run_rc < 0) {
     fprintf(stderr, "error: program failed\n");
     return 1;
   }
 
-  return 0;
+  return run_rc;
 }

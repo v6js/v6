@@ -82,7 +82,8 @@ public final class V6Cluster {
             return objValue(workerHandle);
           }
 
-          ProcessBuilder pb = new ProcessBuilder(exePath, V6Process.scriptPath);
+          ProcessBuilder pb = new ProcessBuilder(exePath, "--no-daemon",
+                                                 V6Process.scriptPath);
           pb.environment().put("V6_CLUSTER_WORKER", "1");
           pb.environment().put("V6_CLUSTER_WORKER_ID", String.valueOf(id));
 
@@ -131,7 +132,7 @@ public final class V6Cluster {
                     objValue(o),
                     new V6Value[] {str("exit"), objValue(workerHandle),
                                    num(code)});
-                workersObj.props.remove(String.valueOf(id));
+                workersObj.delete(String.valueOf(id));
               });
             } catch (InterruptedException ignored) {
             } finally {

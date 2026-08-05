@@ -233,4 +233,6 @@ public final class V6Dns {
     o.set("promises", objValue(buildPromises()));
     return o;
   }
+
+  public static final V6Value MODULE = objValue(build());
 }

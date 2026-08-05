@@ -142,7 +142,7 @@ public final class V6WebCrypto {
       case "AES-GCM":
       case "AES-CBC":
       case "AES-CTR": {
-        int length = algoObj.props.containsKey("length")
+        int length = algoObj.hasOwnNamed("length")
                          ? (int)algoObj.get("length").toNumber()
                          : 256;
         KeyGenerator kg = KeyGenerator.getInstance("AES");
@@ -163,7 +163,7 @@ public final class V6WebCrypto {
       case "HMAC": {
         V6Value hashVal = algoObj.get("hash");
         String hashName = digestAlgo(algoName(hashVal));
-        int length = algoObj.props.containsKey("length")
+        int length = algoObj.hasOwnNamed("length")
                          ? (int)algoObj.get("length").toNumber()
                          : (hashName.equals("SHA-1") ? 512 : 1024);
         byte[] keyBytes = new byte[length / 8];

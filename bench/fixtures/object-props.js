@@ -11,7 +11,7 @@ class Point {
 
 function run() {
   let total = 0;
-  for (let i = 0; i < 3000000; i++) {
+  for (let i = 0; i < 300000; i++) {
     const p = new Point(i, i + 1);
     total += p.distanceFromOrigin();
   }

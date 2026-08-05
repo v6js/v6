@@ -7,7 +7,7 @@ function buildString(n) {
 }
 
 function run() {
-  const result = buildString(2000000);
+  const result = buildString(200000);
   return result.length;
 }
 

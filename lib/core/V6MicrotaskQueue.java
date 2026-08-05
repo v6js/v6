@@ -13,4 +13,8 @@ public final class V6MicrotaskQueue {
       r.run();
     }
   }
+
+  public static void reset() {
+    queue.clear();
+  }
 }

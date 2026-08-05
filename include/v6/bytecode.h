@@ -105,6 +105,12 @@ typedef enum {
   op_ixor = 0x82,
   op_dup_x2 = 0x5b,
   op_wide = 0xc4,
+  op_ineg = 0x74,
+  op_ishl = 0x78,
+  op_ishr = 0x7a,
+  op_iushr = 0x7c,
+  op_iand = 0x7e,
+  op_ior = 0x80,
 } opcode;
 
 enum {

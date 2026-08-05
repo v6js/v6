@@ -37,6 +37,8 @@ typedef struct local {
   int dead;
   int direct_fn;
   const char* fn_method_name;
+  const char* num_shadow_name;
+  int num_arity;
 } local;
 
 typedef struct upvalue {

@@ -5,7 +5,11 @@ public class V6Object {
   private static final V6Value[] EMPTY_ELEMENTS = new V6Value[0];
   private static final V6Value[] EMPTY_ARGS = new V6Value[0];
 
-  protected final Map<String, V6Value> props = new LinkedHashMap<>();
+  private V6Shape shape = V6Shape.EMPTY;
+  private V6Value[] slots = EMPTY_ELEMENTS;
+  private boolean dictMode = false;
+  private Map<String, V6Value> dictProps;
+  protected final Map<String, V6Value> props = new LinkedHashMap<>(4);
   protected V6Value[] elements = EMPTY_ELEMENTS;
   protected int elemCount = 0;
   protected int length = 0;
@@ -70,13 +74,39 @@ public class V6Object {
     this.proto = OBJECT_PROTOTYPE;
   }
 
+  private boolean hasOwnNamedFast(String key) {
+    return !dictMode && shape.slotOf(key) >= 0;
+  }
+
+  public boolean hasOwnNamed(String key) {
+    return dictMode ? dictProps.containsKey(key) : shape.slotOf(key) >= 0;
+  }
+
+  private void demoteToDict() {
+    if (dictMode)
+      return;
+    dictProps = new LinkedHashMap<>(4);
+    String[] keys = shape.orderedKeys();
+    for (int i = 0; i < keys.length; i++)
+      dictProps.put(keys[i], slots[i]);
+    dictMode = true;
+    shape = null;
+    slots = null;
+  }
+
+  public java.util.Set<String> keySet() {
+    if (dictMode)
+      return dictProps.keySet();
+    return new java.util.LinkedHashSet<>(java.util.Arrays.asList(shape.orderedKeys()));
+  }
+
   public boolean hasOwn(String key) {
-    if (key.equals("length") && !props.containsKey("length"))
+    if (key.equals("length") && !hasOwnNamed("length"))
       return true;
     int idx = parseIndex(key);
     if (idx >= 0 && idx < elemCount)
       return true;
-    if (props.containsKey(key))
+    if (hasOwnNamed(key))
       return true;
     if ((getters != null && getters.containsKey(key)) ||
         (setters != null && setters.containsKey(key)))
@@ -111,14 +141,20 @@ public class V6Object {
     if (getters == null)
       getters = new LinkedHashMap<>();
     getters.put(key, getter);
-    props.remove(key);
+    if (hasOwnNamedFast(key))
+      demoteToDict();
+    if (dictMode)
+      dictProps.remove(key);
   }
 
   public void defineSetter(String key, V6Callable setter) {
     if (setters == null)
       setters = new LinkedHashMap<>();
     setters.put(key, setter);
-    props.remove(key);
+    if (hasOwnNamedFast(key))
+      demoteToDict();
+    if (dictMode)
+      dictProps.remove(key);
   }
 
   private V6Callable findGetter(String key) {
@@ -151,6 +187,13 @@ public class V6Object {
       return;
     int newCap = Math.max(min, elements.length == 0 ? 8 : elements.length * 2);
     elements = java.util.Arrays.copyOf(elements, newCap);
+  }
+
+  private void ensureSlotCapacity(int min) {
+    if (slots.length >= min)
+      return;
+    int newCap = Math.max(min, slots.length == 0 ? 4 : slots.length * 2);
+    slots = java.util.Arrays.copyOf(slots, newCap);
   }
 
   public void setProto(V6Object proto) {
@@ -188,7 +231,7 @@ public class V6Object {
   }
 
   private V6Value get(String key, V6Value receiver) {
-    if (key.equals("length") && !props.containsKey("length"))
+    if (key.equals("length") && !hasOwnNamed("length"))
       return new V6Value(V6Value.TAG_NUM, length, null);
     int idx = parseIndex(key);
     if (idx >= 0 && idx < elemCount)
@@ -199,9 +242,15 @@ public class V6Object {
         return new V6Value(V6Value.TAG_UNDEF, 0, null);
       return g.call(receiver, EMPTY_ARGS);
     }
-    V6Value v = props.get(key);
-    if (v != null)
-      return v;
+    if (!dictMode) {
+      int slot = shape.slotOf(key);
+      if (slot >= 0)
+        return slots[slot];
+    } else {
+      V6Value v = dictProps.get(key);
+      if (v != null)
+        return v;
+    }
     if (proto != null)
       return proto.get(key, receiver);
     return new V6Value(V6Value.TAG_UNDEF, 0, null);
@@ -213,7 +262,10 @@ public class V6Object {
       elements[idx] = new V6Value(V6Value.TAG_UNDEF, 0, null);
       return true;
     }
-    props.remove(key);
+    if (hasOwnNamedFast(key))
+      demoteToDict();
+    if (dictMode)
+      dictProps.remove(key);
     if (getters != null)
       getters.remove(key);
     if (setters != null)
@@ -222,12 +274,12 @@ public class V6Object {
   }
 
   public boolean has(String key) {
-    if (key.equals("length") && !props.containsKey("length"))
+    if (key.equals("length") && !hasOwnNamed("length"))
       return true;
     int idx = parseIndex(key);
     if (idx >= 0 && idx < elemCount)
       return true;
-    if (props.containsKey(key))
+    if (hasOwnNamed(key))
       return true;
     return proto != null && proto.has(key);
   }
@@ -244,7 +296,7 @@ public class V6Object {
     int idx = parseIndex(key);
     boolean isDenseAppend = idx == elemCount;
     boolean isDenseUpdate = idx >= 0 && idx < elemCount;
-    if (sealed && !props.containsKey(key) && !isDenseUpdate)
+    if (sealed && !hasOwnNamed(key) && !isDenseUpdate)
       return;
     if (isDenseAppend) {
       ensureCapacity(elemCount + 1);
@@ -258,9 +310,48 @@ public class V6Object {
       elements[idx] = value;
       return;
     }
-    props.put(key, value);
+    if (!dictMode) {
+      int slot = shape.slotOf(key);
+      if (slot >= 0) {
+        slots[slot] = value;
+      } else if (shape.isFull()) {
+        demoteToDict();
+        dictProps.put(key, value);
+      } else {
+        V6Shape newShape = shape.transition(key);
+        ensureSlotCapacity(newShape.slotCount);
+        slots[newShape.slotCount - 1] = value;
+        shape = newShape;
+      }
+    } else {
+      dictProps.put(key, value);
+    }
     if (idx >= 0 && idx + 1 > length)
       length = idx + 1;
+  }
+
+  public V6Value getIndexed(int idx) {
+    if (idx >= 0 && idx < elemCount && getters == null)
+      return elements[idx];
+    return get(Integer.toString(idx));
+  }
+
+  public void setIndexed(int idx, V6Value value) {
+    if (idx >= 0 && !frozen && setters == null) {
+      if (idx == elemCount) {
+        ensureCapacity(elemCount + 1);
+        elements[elemCount] = value;
+        elemCount++;
+        if (elemCount > length)
+          length = elemCount;
+        return;
+      }
+      if (idx < elemCount) {
+        elements[idx] = value;
+        return;
+      }
+    }
+    set(Integer.toString(idx), value);
   }
 
   public void push(V6Value value) {
@@ -276,7 +367,11 @@ public class V6Object {
       return elements[elemCount];
     }
     String key = Integer.toString(length);
-    V6Value v = props.remove(key);
+    V6Value v = dictMode ? dictProps.remove(key) : null;
+    if (v == null && hasOwnNamedFast(key)) {
+      demoteToDict();
+      v = dictProps.remove(key);
+    }
     return v != null ? v : new V6Value(V6Value.TAG_UNDEF, 0, null);
   }
 
@@ -287,7 +382,7 @@ public class V6Object {
     for (int i = 1; i < length; i++)
       set(Integer.toString(i - 1), get(Integer.toString(i)));
     length--;
-    props.remove(Integer.toString(length));
+    delete(Integer.toString(length));
     return first;
   }
 
@@ -524,8 +619,8 @@ public class V6Object {
       V6Object o = (V6Object)v.ref();
       for (int i = 0; i < o.elemCount; i++)
         set(Integer.toString(i), o.elements[i]);
-      for (Map.Entry<String, V6Value> e : o.props.entrySet())
-        set(e.getKey(), e.getValue());
+      for (String k : o.keySet())
+        set(k, o.get(k));
     }
   }
 
@@ -540,7 +635,7 @@ public class V6Object {
     java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
     for (int i = 0; i < elemCount; i++)
       seen.add(Integer.toString(i));
-    seen.addAll(props.keySet());
+    seen.addAll(keySet());
     V6Array arr = new V6Array();
     for (String k : seen)
       arr.push(new V6Value(V6Value.TAG_STR, 0, k));
@@ -570,11 +665,11 @@ public class V6Object {
       first = false;
       sb.append(i).append(": ").append(elements[i].toString());
     }
-    for (Map.Entry<String, V6Value> e : props.entrySet()) {
+    for (String k : keySet()) {
       if (!first)
         sb.append(", ");
       first = false;
-      sb.append(e.getKey()).append(": ").append(e.getValue().toString());
+      sb.append(k).append(": ").append(get(k).toString());
     }
     return sb.append("}").toString();
   }

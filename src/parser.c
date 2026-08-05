@@ -1,6 +1,7 @@
 #include "v6/parser.h"
 
 #include "v6/module.h"
+#include "v6/internal.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -18,7 +19,7 @@ enum {
   V6_TAG_BIGINT = 7,
 };
 
-static void advance(parser* p) {
+void advance(parser* p) {
   p->prev = p->cur;
   p->cur = lex_next(&p->lex);
 }
@@ -43,7 +44,7 @@ static void error_at(parser* p, const char* msg) {
   p->err_msg[n] = '\0';
 }
 
-static int check(parser* p, tok_kind k) {
+int check(parser* p, tok_kind k) {
   return p->cur.kind == k;
 }
 
@@ -166,12 +167,26 @@ static int match_property_name(parser* p) {
   return 0;
 }
 
-static uint16_t value_class(class_file* cf) {
+uint16_t value_class(class_file* cf) {
   return cf_class(cf, "V6Value");
 }
 
 static uint16_t value_ctor(class_file* cf) {
   return cf_methodref(cf, "V6Value", "<init>", "(IDLjava/lang/Object;)V");
+}
+
+static uint16_t value_num_method(class_file* cf) {
+  return cf_methodref(cf, "V6Value", "num", "(D)LV6Value;");
+}
+
+void emit_to_int32_raw(class_file* cf, method* m) {
+  uint16_t idx = cf_methodref(cf, "V6Value", "toInt32", "(D)I");
+  op_emit2(m, op_invokestatic, idx);
+}
+
+void emit_dconst_val(class_file* cf, method* m, double v) {
+  uint16_t idx = cf_double(cf, v);
+  op_emit2(m, op_ldc2_w, idx);
 }
 
 static void emit_wide_slot_op(method* m, uint8_t opcode, uint16_t slot) {
@@ -183,7 +198,7 @@ static void emit_wide_slot_op(method* m, uint8_t opcode, uint16_t slot) {
   }
 }
 
-static void emit_dstore(method* m, uint16_t slot) {
+void emit_dstore(method* m, uint16_t slot) {
   switch (slot) {
   case 0:
     op_emit(m, op_dstore_0);
@@ -203,7 +218,7 @@ static void emit_dstore(method* m, uint16_t slot) {
   }
 }
 
-static void emit_dload(method* m, uint16_t slot) {
+void emit_dload(method* m, uint16_t slot) {
   switch (slot) {
   case 0:
     op_emit(m, op_dload_0);
@@ -223,7 +238,7 @@ static void emit_dload(method* m, uint16_t slot) {
   }
 }
 
-static void emit_aload(method* m, uint16_t slot) {
+void emit_aload(method* m, uint16_t slot) {
   switch (slot) {
   case 0:
     op_emit(m, op_aload_0);
@@ -243,7 +258,7 @@ static void emit_aload(method* m, uint16_t slot) {
   }
 }
 
-static void emit_astore(method* m, uint16_t slot) {
+void emit_astore(method* m, uint16_t slot) {
   switch (slot) {
   case 0:
     op_emit(m, op_astore_0);
@@ -265,6 +280,11 @@ static void emit_astore(method* m, uint16_t slot) {
 
 static void emit_box_const(class_file* cf, method* m, uint8_t tag_op,
                            uint8_t num_op) {
+  if (tag_op == op_iconst_0) {
+    op_emit(m, num_op);
+    op_emit2(m, op_invokestatic, value_num_method(cf));
+    return;
+  }
   op_emit2(m, op_new, value_class(cf));
   op_emit(m, op_dup);
   op_emit(m, tag_op);
@@ -284,6 +304,10 @@ static void emit_undef(class_file* cf, method* m) {
 
 static void emit_box_tag_m(class_file* cf, method* m, uint16_t scratch_slot,
                            uint8_t tag_op) {
+  if (tag_op == op_iconst_0) {
+    op_emit2(m, op_invokestatic, value_num_method(cf));
+    return;
+  }
   emit_dstore(m, scratch_slot);
   op_emit2(m, op_new, value_class(cf));
   op_emit(m, op_dup);
@@ -293,7 +317,7 @@ static void emit_box_tag_m(class_file* cf, method* m, uint16_t scratch_slot,
   op_emit2(m, op_invokespecial, value_ctor(cf));
 }
 
-static void emit_box_tag(compiler* c, uint8_t tag_op) {
+void emit_box_tag(compiler* c, uint8_t tag_op) {
   emit_box_tag_m(c->cf, c->m, c->scratch_slot, tag_op);
 }
 
@@ -315,7 +339,7 @@ static void emit_box_bool(compiler* c) {
   op_patch2(c->m, (uint16_t)(end_jump + 1), (uint16_t)(end_pos - end_jump));
 }
 
-static void emit_to_number(compiler* c) {
+void emit_to_number(compiler* c) {
   uint16_t idx = cf_methodref(c->cf, "V6Value", "toNumber", "()D");
   op_emit2(c->m, op_invokevirtual, idx);
 }
@@ -325,7 +349,7 @@ static void emit_truthy(compiler* c) {
   op_emit2(c->m, op_invokevirtual, idx);
 }
 
-static void emit_iconst(method* m, int n) {
+void emit_iconst(method* m, int n) {
   if (n >= -1 && n <= 5) {
     op_emit(m, (uint8_t)(op_iconst_0 + n));
     return;
@@ -530,7 +554,7 @@ static char* format_num_key(double n) {
   return s;
 }
 
-static local* find_local_entry(compiler* c, const char* name, size_t len) {
+local* find_local_entry(compiler* c, const char* name, size_t len) {
   for (int i = c->local_count - 1; i >= 0; i--) {
     if (c->locals[i].dead)
       continue;
@@ -595,7 +619,7 @@ static int name_reassigned_in_scope(const char* src, const char* name,
   return 0;
 }
 
-static int find_slot(compiler* c, const char* name, size_t len, uint16_t* out) {
+int find_slot(compiler* c, const char* name, size_t len, uint16_t* out) {
   for (int i = 0; i < c->param_count; i++) {
     if (c->params[i].len == len && memcmp(c->params[i].name, name, len) == 0) {
       *out = c->params[i].slot;
@@ -622,15 +646,10 @@ static void add_local(compiler* c, tok name, uint16_t slot, int is_var,
   c->locals[c->local_count].dead = 0;
   c->locals[c->local_count].direct_fn = 0;
   c->locals[c->local_count].fn_method_name = NULL;
+  c->locals[c->local_count].num_shadow_name = NULL;
+  c->locals[c->local_count].num_arity = 0;
   c->local_count++;
 }
-
-typedef enum { var_local, var_upvalue, var_not_found } var_kind;
-
-typedef struct {
-  var_kind kind;
-  uint16_t index;
-} var_ref;
 
 static var_ref resolve_var(compiler* c, const char* name, size_t len) {
   uint16_t slot;
@@ -676,7 +695,7 @@ static var_ref resolve_var(compiler* c, const char* name, size_t len) {
   return vr;
 }
 
-static void emit_var_read_ref(compiler* c, var_ref vr) {
+void emit_var_read_ref(compiler* c, var_ref vr) {
   if (!c->box_locals && vr.kind == var_local) {
     emit_aload(c->m, vr.index);
     return;
@@ -684,7 +703,7 @@ static void emit_var_read_ref(compiler* c, var_ref vr) {
   emit_var_read(c, vr.kind == var_upvalue, vr.index);
 }
 
-static void emit_var_write_ref(compiler* c, var_ref vr) {
+void emit_var_write_ref(compiler* c, var_ref vr) {
   if (!c->box_locals && vr.kind == var_local) {
     op_emit(c->m, op_dup);
     emit_astore(c->m, vr.index);
@@ -1395,6 +1414,7 @@ static void parse_postfix(parser* p, compiler* c) {
     }
 
     if (check(p, tok_dot) || check(p, tok_lbracket)) {
+      int is_bracket = check(p, tok_lbracket);
       if (match(p, tok_dot)) {
         if (!match_property_name(p)) {
           error_at(p, "expected property name");
@@ -1407,10 +1427,38 @@ static void parse_postfix(parser* p, compiler* c) {
       } else {
         advance(p);
         parse_expr(p, c);
-        uint16_t tostring_idx =
-            cf_methodref(c->cf, "V6Value", "toString", "()Ljava/lang/String;");
-        op_emit2(c->m, op_invokevirtual, tostring_idx);
         expect(p, tok_rbracket);
+      }
+
+      if (is_bracket && check(p, tok_assign)) {
+        advance(p);
+        parse_expr(p, c);
+        op_emit(c->m, op_dup_x2);
+        uint16_t set_idx = cf_methodref(
+            c->cf, "V6Value", "setIndexedOrProp", "(LV6Value;LV6Value;)V");
+        op_emit2(c->m, op_invokevirtual, set_idx);
+        goto patch_and_return;
+      }
+
+      if (is_bracket && !is_logical_assign_op(p->cur.kind) &&
+          !check(p, tok_plus_eq) && !check(p, tok_minus_eq) &&
+          !check(p, tok_star_eq) && !check(p, tok_slash_eq) &&
+          !check(p, tok_percent_eq) && !check(p, tok_amp_eq) &&
+          !check(p, tok_pipe_eq) && !check(p, tok_caret_eq) &&
+          !check(p, tok_shl_eq) && !check(p, tok_shr_eq) &&
+          !check(p, tok_ushr_eq) && !check(p, tok_plus_plus) &&
+          !check(p, tok_minus_minus) && !check(p, tok_lparen) &&
+          !check(p, tok_template)) {
+        uint16_t get_idx = cf_methodref(
+            c->cf, "V6Value", "getIndexedOrProp", "(LV6Value;)LV6Value;");
+        op_emit2(c->m, op_invokevirtual, get_idx);
+        continue;
+      }
+
+      if (is_bracket) {
+        uint16_t tostring_idx = cf_methodref(c->cf, "V6Value", "toString",
+                                             "()Ljava/lang/String;");
+        op_emit2(c->m, op_invokevirtual, tostring_idx);
       }
 
       if (match(p, tok_assign)) {
@@ -2054,6 +2102,37 @@ static void parse_ident_primary(parser* p, compiler* c, tok name) {
     return;
   }
   if (check(p, tok_lparen)) {
+    int shadow_arity = 0;
+    const char* shadow_name =
+        find_num_shadow_fn(c, name.start, name.len, &shadow_arity);
+    if (shadow_name) {
+      lexer saved_lex = p->lex;
+      tok saved_cur = p->cur;
+      tok saved_prev = p->prev;
+      num_fn_ctx nf;
+      nf.param_count = 0;
+      nf.self_name = "";
+      nf.self_len = 0;
+      nf.sibling_scope = c;
+      nf.class_name = c->this_class_name;
+      if (compile_num_call_args(p, c->cf, c->m, &nf, 0, shadow_arity)) {
+        p->lex = saved_lex;
+        p->cur = saved_cur;
+        p->prev = saved_prev;
+        if (compile_num_call_args(p, c->cf, c->m, &nf, 1, shadow_arity)) {
+          char sig[16];
+          build_num_sig(sig, shadow_arity);
+          uint16_t midx =
+              cf_methodref(c->cf, c->this_class_name, shadow_name, sig);
+          op_emit2(c->m, op_invokestatic, midx);
+          op_emit2(c->m, op_invokestatic, value_num_method(c->cf));
+          return;
+        }
+      }
+      p->lex = saved_lex;
+      p->cur = saved_cur;
+      p->prev = saved_prev;
+    }
     const char* lambda_name = find_direct_fn(c, name.start, name.len);
     if (lambda_name) {
       compile_direct_call(p, c, vr, lambda_name);
@@ -2130,12 +2209,8 @@ static void parse_primary(parser* p, compiler* c) {
       return;
     }
     uint16_t idx = cf_double(c->cf, p->prev.num);
-    op_emit2(c->m, op_new, value_class(c->cf));
-    op_emit(c->m, op_dup);
-    op_emit(c->m, op_iconst_0);
     op_emit2(c->m, op_ldc2_w, idx);
-    op_emit(c->m, op_aconst_null);
-    op_emit2(c->m, op_invokespecial, value_ctor(c->cf));
+    op_emit2(c->m, op_invokestatic, value_num_method(c->cf));
     return;
   }
 
@@ -3531,577 +3606,6 @@ static void parse_for_of_pattern(parser* p, compiler* c, tok_kind kind,
   pop_loop(c, end_pos);
 }
 
-#define v6_max_raw_accums 8
-#define v6_raw_ctx_init 0
-#define v6_raw_ctx_header 1
-#define v6_raw_ctx_body 2
-
-typedef struct raw_accum {
-  const char* name;
-  size_t len;
-  uint16_t real_slot;
-  uint16_t shadow_slot;
-} raw_accum;
-
-typedef struct raw_loop_ctx {
-  const char* counter_name;
-  size_t counter_len;
-  uint16_t counter_slot;
-  raw_accum accums[v6_max_raw_accums];
-  int accum_count;
-} raw_loop_ctx;
-
-static int raw_ident_is_counter(raw_loop_ctx* rl, tok name) {
-  return name.len == rl->counter_len &&
-         memcmp(name.start, rl->counter_name, rl->counter_len) == 0;
-}
-
-static raw_accum* raw_find_accum(raw_loop_ctx* rl, const char* name,
-                                 size_t len) {
-  for (int i = 0; i < rl->accum_count; i++) {
-    if (rl->accums[i].len == len && memcmp(rl->accums[i].name, name, len) == 0)
-      return &rl->accums[i];
-  }
-  return NULL;
-}
-
-static void emit_dconst_val(class_file* cf, method* m, double v) {
-  uint16_t idx = cf_double(cf, v);
-  op_emit2(m, op_ldc2_w, idx);
-}
-
-static const char* raw_find_body_start(parser* p) {
-  lexer lx = p->lex;
-  tok t = p->cur;
-  int depth = 1;
-  for (;;) {
-    if (t.kind == tok_eof)
-      return NULL;
-    if (t.kind == tok_lparen) {
-      depth++;
-    } else if (t.kind == tok_rparen) {
-      depth--;
-      if (depth == 0) {
-        t = lex_next(&lx);
-        return t.start;
-      }
-    }
-    t = lex_next(&lx);
-  }
-}
-
-static int raw_scan_body_accums(const char* body_start, raw_loop_ctx* rl) {
-  lexer lx;
-  lex_init(&lx, body_start);
-  tok t = lex_next(&lx);
-  if (t.kind != tok_lbrace)
-    return 0;
-  int depth = 1;
-  t = lex_next(&lx);
-  while (depth > 0) {
-    if (t.kind == tok_eof)
-      return 0;
-    if (t.kind == tok_lbrace) {
-      depth++;
-      t = lex_next(&lx);
-      continue;
-    }
-    if (t.kind == tok_rbrace) {
-      depth--;
-      t = lex_next(&lx);
-      continue;
-    }
-    if (t.kind == tok_ident) {
-      tok name = t;
-      tok next = lex_next(&lx);
-      if ((next.kind == tok_plus_eq || next.kind == tok_minus_eq ||
-           next.kind == tok_star_eq || next.kind == tok_assign) &&
-          !raw_ident_is_counter(rl, name) &&
-          !raw_find_accum(rl, name.start, name.len)) {
-        if (rl->accum_count >= v6_max_raw_accums)
-          return 0;
-        rl->accums[rl->accum_count].name = name.start;
-        rl->accums[rl->accum_count].len = name.len;
-        rl->accum_count++;
-      }
-      t = next;
-      continue;
-    }
-    t = lex_next(&lx);
-  }
-  return 1;
-}
-
-static int compile_raw_expr(parser* p, compiler* c, raw_loop_ctx* rl, int emit,
-                            int mode);
-
-static int compile_raw_primary(parser* p, compiler* c, raw_loop_ctx* rl,
-                               int emit, int mode) {
-  if (check(p, tok_num)) {
-    double v = p->cur.num;
-    advance(p);
-    if (emit)
-      emit_dconst_val(c->cf, c->m, v);
-    return 1;
-  }
-  if (check(p, tok_lparen)) {
-    advance(p);
-    if (!compile_raw_expr(p, c, rl, emit, mode))
-      return 0;
-    if (!check(p, tok_rparen))
-      return 0;
-    advance(p);
-    return 1;
-  }
-  if (check(p, tok_ident)) {
-    tok name = p->cur;
-    if (raw_ident_is_counter(rl, name)) {
-      if (mode == v6_raw_ctx_init)
-        return 0;
-      advance(p);
-      if (emit)
-        emit_dload(c->m, rl->counter_slot);
-      return 1;
-    }
-    raw_accum* acc = raw_find_accum(rl, name.start, name.len);
-    if (acc) {
-      if (mode != v6_raw_ctx_body)
-        return 0;
-      advance(p);
-      if (emit)
-        emit_dload(c->m, acc->shadow_slot);
-      return 1;
-    }
-    uint16_t slot;
-    if (!find_slot(c, name.start, name.len, &slot))
-      return 0;
-    advance(p);
-    if (emit) {
-      var_ref vr;
-      vr.kind = var_local;
-      vr.index = slot;
-      emit_var_read_ref(c, vr);
-      emit_to_number(c);
-    }
-    return 1;
-  }
-  return 0;
-}
-
-static int compile_raw_unary(parser* p, compiler* c, raw_loop_ctx* rl, int emit,
-                             int mode) {
-  if (check(p, tok_minus)) {
-    advance(p);
-    if (!compile_raw_unary(p, c, rl, emit, mode))
-      return 0;
-    if (emit)
-      op_emit(c->m, op_dneg);
-    return 1;
-  }
-  return compile_raw_primary(p, c, rl, emit, mode);
-}
-
-static int compile_raw_mul(parser* p, compiler* c, raw_loop_ctx* rl, int emit,
-                           int mode) {
-  if (!compile_raw_unary(p, c, rl, emit, mode))
-    return 0;
-  for (;;) {
-    uint8_t bop;
-    if (check(p, tok_star))
-      bop = op_dmul;
-    else if (check(p, tok_slash))
-      bop = op_ddiv;
-    else if (check(p, tok_percent))
-      bop = op_drem;
-    else
-      break;
-    advance(p);
-    if (!compile_raw_unary(p, c, rl, emit, mode))
-      return 0;
-    if (emit)
-      op_emit(c->m, bop);
-  }
-  return 1;
-}
-
-static int compile_raw_expr(parser* p, compiler* c, raw_loop_ctx* rl, int emit,
-                            int mode) {
-  if (!compile_raw_mul(p, c, rl, emit, mode))
-    return 0;
-  for (;;) {
-    uint8_t bop;
-    if (check(p, tok_plus))
-      bop = op_dadd;
-    else if (check(p, tok_minus))
-      bop = op_dsub;
-    else
-      break;
-    advance(p);
-    if (!compile_raw_mul(p, c, rl, emit, mode))
-      return 0;
-    if (emit)
-      op_emit(c->m, bop);
-  }
-  return 1;
-}
-
-static int compile_raw_push_stmt(parser* p, compiler* c, raw_loop_ctx* rl,
-                                 int emit, uint16_t arr_slot) {
-  var_ref arr_vr;
-  arr_vr.kind = var_local;
-  arr_vr.index = arr_slot;
-
-  uint16_t arrval_slot = 0;
-  if (emit) {
-    emit_var_read_ref(c, arr_vr);
-    arrval_slot = c->next_local_slot++;
-    emit_astore(c->m, arrval_slot);
-  }
-
-  if (!compile_raw_expr(p, c, rl, emit, v6_raw_ctx_body))
-    return 0;
-
-  uint16_t argval_slot = 0;
-  if (emit) {
-    emit_box_tag(c, op_iconst_0);
-    argval_slot = c->next_local_slot++;
-    emit_astore(c->m, argval_slot);
-  }
-
-  if (!check(p, tok_rparen))
-    return 0;
-  advance(p);
-  if (!check(p, tok_semi))
-    return 0;
-  advance(p);
-
-  if (emit) {
-    uint16_t arr_cls = cf_class(c->cf, "V6Array");
-    uint16_t ref_idx =
-        cf_methodref(c->cf, "V6Value", "ref", "()Ljava/lang/Object;");
-    emit_aload(c->m, arrval_slot);
-    op_emit2(c->m, op_invokevirtual, ref_idx);
-    op_emit2(c->m, op_instanceof, arr_cls);
-    size_t slow_jump = op_pos(c->m);
-    op_emit2(c->m, op_ifeq, 0);
-
-    emit_aload(c->m, arrval_slot);
-    op_emit2(c->m, op_invokevirtual, ref_idx);
-    op_emit2(c->m, op_checkcast, arr_cls);
-    emit_aload(c->m, argval_slot);
-    uint16_t push_idx = cf_methodref(c->cf, "V6Object", "push", "(LV6Value;)V");
-    op_emit2(c->m, op_invokevirtual, push_idx);
-    size_t end_jump = op_pos(c->m);
-    op_emit2(c->m, op_goto, 0);
-
-    size_t slow_pos = op_pos(c->m);
-    op_patch2(c->m, (uint16_t)(slow_jump + 1),
-              (uint16_t)(slow_pos - slow_jump));
-
-    uint16_t push_str = cf_string(c->cf, "push");
-    uint16_t getprop_idx = cf_methodref(c->cf, "V6Value", "getProp",
-                                        "(Ljava/lang/String;)LV6Value;");
-    uint16_t call_idx = cf_methodref(c->cf, "V6Value", "call",
-                                     "(LV6Value;[LV6Value;)LV6Value;");
-    emit_aload(c->m, arrval_slot);
-    op_emit2(c->m, op_ldc_w, push_str);
-    op_emit2(c->m, op_invokevirtual, getprop_idx);
-    emit_aload(c->m, arrval_slot);
-    emit_iconst(c->m, 1);
-    op_emit2(c->m, op_anewarray, value_class(c->cf));
-    op_emit(c->m, op_dup);
-    emit_iconst(c->m, 0);
-    emit_aload(c->m, argval_slot);
-    op_emit(c->m, op_aastore);
-    op_emit2(c->m, op_invokevirtual, call_idx);
-    op_emit(c->m, op_pop);
-
-    size_t end_pos = op_pos(c->m);
-    op_patch2(c->m, (uint16_t)(end_jump + 1), (uint16_t)(end_pos - end_jump));
-  }
-
-  return 1;
-}
-
-static int compile_raw_stmt(parser* p, compiler* c, raw_loop_ctx* rl,
-                            int emit) {
-  if (!check(p, tok_ident))
-    return 0;
-  tok name = p->cur;
-  if (raw_ident_is_counter(rl, name))
-    return 0;
-
-  raw_accum* acc = raw_find_accum(rl, name.start, name.len);
-  if (acc) {
-    advance(p);
-
-    uint8_t bop = 0;
-    int is_plain = 0;
-    if (check(p, tok_plus_eq))
-      bop = op_dadd;
-    else if (check(p, tok_minus_eq))
-      bop = op_dsub;
-    else if (check(p, tok_star_eq))
-      bop = op_dmul;
-    else if (check(p, tok_assign))
-      is_plain = 1;
-    else
-      return 0;
-    advance(p);
-
-    if (emit && !is_plain)
-      emit_dload(c->m, acc->shadow_slot);
-
-    if (!compile_raw_expr(p, c, rl, emit, v6_raw_ctx_body))
-      return 0;
-
-    if (emit) {
-      if (!is_plain)
-        op_emit(c->m, bop);
-      emit_dstore(c->m, acc->shadow_slot);
-    }
-
-    if (!check(p, tok_semi))
-      return 0;
-    advance(p);
-    return 1;
-  }
-
-  uint16_t arr_slot;
-  if (!find_slot(c, name.start, name.len, &arr_slot))
-    return 0;
-  advance(p);
-  if (!check(p, tok_dot))
-    return 0;
-  advance(p);
-  if (!check(p, tok_ident) || p->cur.len != 4 ||
-      memcmp(p->cur.start, "push", 4) != 0)
-    return 0;
-  advance(p);
-  if (!check(p, tok_lparen))
-    return 0;
-  advance(p);
-
-  return compile_raw_push_stmt(p, c, rl, emit, arr_slot);
-}
-
-static int compile_raw_for_rest(parser* p, compiler* c, raw_loop_ctx* rl,
-                                int emit) {
-  if (!compile_raw_expr(p, c, rl, emit, v6_raw_ctx_init))
-    return 0;
-  if (emit)
-    emit_dstore(c->m, rl->counter_slot);
-
-  if (!check(p, tok_semi))
-    return 0;
-  advance(p);
-
-  if (!check(p, tok_ident) || !raw_ident_is_counter(rl, p->cur))
-    return 0;
-  advance(p);
-
-  uint8_t cmp_op;
-  if (check(p, tok_lt))
-    cmp_op = op_ifge;
-  else if (check(p, tok_le))
-    cmp_op = op_ifgt;
-  else if (check(p, tok_gt))
-    cmp_op = op_ifle;
-  else if (check(p, tok_ge))
-    cmp_op = op_iflt;
-  else
-    return 0;
-  advance(p);
-
-  size_t cond_pos = 0;
-  if (emit) {
-    cond_pos = op_pos(c->m);
-    emit_dload(c->m, rl->counter_slot);
-  }
-  if (!compile_raw_expr(p, c, rl, emit, v6_raw_ctx_header))
-    return 0;
-
-  size_t exit_jump = 0;
-  if (emit) {
-    op_emit(c->m, op_dcmpg);
-    exit_jump = op_pos(c->m);
-    op_emit2(c->m, cmp_op, 0);
-  }
-
-  if (!check(p, tok_semi))
-    return 0;
-  advance(p);
-
-  if (!check(p, tok_ident) || !raw_ident_is_counter(rl, p->cur))
-    return 0;
-  advance(p);
-
-  int is_dec = 0;
-  int has_step_expr = 0;
-  if (check(p, tok_plus_plus)) {
-    advance(p);
-  } else if (check(p, tok_minus_minus)) {
-    is_dec = 1;
-    advance(p);
-  } else if (check(p, tok_plus_eq)) {
-    has_step_expr = 1;
-    advance(p);
-  } else if (check(p, tok_minus_eq)) {
-    has_step_expr = 1;
-    is_dec = 1;
-    advance(p);
-  } else {
-    return 0;
-  }
-
-  size_t body_jump = 0, inc_pos = 0;
-  if (emit) {
-    body_jump = op_pos(c->m);
-    op_emit2(c->m, op_goto, 0);
-    inc_pos = op_pos(c->m);
-    emit_dload(c->m, rl->counter_slot);
-  }
-  if (has_step_expr) {
-    if (!compile_raw_expr(p, c, rl, emit, v6_raw_ctx_header))
-      return 0;
-  } else if (emit) {
-    emit_dconst_val(c->cf, c->m, 1.0);
-  }
-  if (emit) {
-    op_emit(c->m, is_dec ? op_dsub : op_dadd);
-    emit_dstore(c->m, rl->counter_slot);
-    size_t inc_to_cond = op_pos(c->m);
-    op_emit2(c->m, op_goto, 0);
-    op_patch2(c->m, (uint16_t)(inc_to_cond + 1),
-              (uint16_t)(cond_pos - inc_to_cond));
-  }
-
-  if (!check(p, tok_rparen))
-    return 0;
-  advance(p);
-
-  if (!check(p, tok_lbrace))
-    return 0;
-  advance(p);
-
-  size_t body_pos = 0;
-  if (emit) {
-    body_pos = op_pos(c->m);
-    op_patch2(c->m, (uint16_t)(body_jump + 1),
-              (uint16_t)(body_pos - body_jump));
-  }
-
-  while (!check(p, tok_rbrace)) {
-    if (check(p, tok_eof))
-      return 0;
-    if (!compile_raw_stmt(p, c, rl, emit))
-      return 0;
-  }
-  advance(p);
-
-  if (emit) {
-    size_t body_to_inc = op_pos(c->m);
-    op_emit2(c->m, op_goto, 0);
-    op_patch2(c->m, (uint16_t)(body_to_inc + 1),
-              (uint16_t)(inc_pos - body_to_inc));
-    size_t end_pos = op_pos(c->m);
-    op_patch2(c->m, (uint16_t)(exit_jump + 1), (uint16_t)(end_pos - exit_jump));
-  }
-
-  return 1;
-}
-
-static int try_compile_raw_for(parser* p, compiler* c) {
-  size_t checkpoint = c->m->code.len;
-  lexer saved_lex = p->lex;
-  tok saved_cur = p->cur;
-  tok saved_prev = p->prev;
-
-  const char* body_start = raw_find_body_start(p);
-  if (!body_start)
-    return 0;
-
-  if (!check(p, tok_kw_let))
-    goto bail;
-  advance(p);
-  if (!check(p, tok_ident))
-    goto bail;
-  tok counter_name = p->cur;
-  advance(p);
-  if (!check(p, tok_assign))
-    goto bail;
-  advance(p);
-
-  raw_loop_ctx rl;
-  rl.counter_name = counter_name.start;
-  rl.counter_len = counter_name.len;
-  rl.accum_count = 0;
-
-  if (!raw_scan_body_accums(body_start, &rl))
-    goto bail;
-
-  lexer after_assign_lex = p->lex;
-  tok after_assign_cur = p->cur;
-  tok after_assign_prev = p->prev;
-
-  if (!compile_raw_for_rest(p, c, &rl, 0))
-    goto bail;
-
-  for (int i = 0; i < rl.accum_count; i++) {
-    raw_accum* acc = &rl.accums[i];
-    uint16_t slot;
-    if (!find_slot(c, acc->name, acc->len, &slot))
-      goto bail;
-    local* le = find_local_entry(c, acc->name, acc->len);
-    if (le && le->is_const)
-      goto bail;
-    acc->real_slot = slot;
-    acc->shadow_slot = c->next_local_slot;
-    c->next_local_slot += 2;
-  }
-  rl.counter_slot = c->next_local_slot;
-  c->next_local_slot += 2;
-
-  p->lex = after_assign_lex;
-  p->cur = after_assign_cur;
-  p->prev = after_assign_prev;
-
-  for (int i = 0; i < rl.accum_count; i++) {
-    raw_accum* acc = &rl.accums[i];
-    var_ref vr;
-    vr.kind = var_local;
-    vr.index = acc->real_slot;
-    emit_var_read_ref(c, vr);
-    emit_to_number(c);
-    emit_dstore(c->m, acc->shadow_slot);
-  }
-
-  if (!compile_raw_for_rest(p, c, &rl, 1)) {
-    c->m->code.len = checkpoint;
-    goto bail;
-  }
-
-  for (int i = 0; i < rl.accum_count; i++) {
-    raw_accum* acc = &rl.accums[i];
-    emit_dload(c->m, acc->shadow_slot);
-    emit_box_tag(c, op_iconst_0);
-    var_ref vr;
-    vr.kind = var_local;
-    vr.index = acc->real_slot;
-    emit_var_write_ref(c, vr);
-    op_emit(c->m, op_pop);
-  }
-
-  return 1;
-
-bail:
-  c->m->code.len = checkpoint;
-  p->lex = saved_lex;
-  p->cur = saved_cur;
-  p->prev = saved_prev;
-  return 0;
-}
-
 static void parse_for(parser* p, compiler* c) {
   int is_await = match(p, tok_kw_await);
   expect(p, tok_lparen);
@@ -5305,44 +4809,45 @@ static void parse_labeled_stmt(parser* p, compiler* c, tok label) {
 
 typedef struct {
   const char* name;
+  const char* cls;
   const char* field;
 } node_builtin_ref;
 
 static const node_builtin_ref v6_node_builtin_table[] = {
-    {"path", "NODE_PATH"},
-    {"buffer", "NODE_BUFFER"},
-    {"util", "NODE_UTIL"},
-    {"os", "NODE_OS"},
-    {"tty", "NODE_TTY"},
-    {"fs", "NODE_FS"},
-    {"events", "NODE_EVENTS"},
-    {"assert", "NODE_ASSERT"},
-    {"querystring", "NODE_QUERYSTRING"},
-    {"perf_hooks", "NODE_PERF_HOOKS"},
-    {"dns", "NODE_DNS"},
-    {"string_decoder", "NODE_STRING_DECODER"},
-    {"url", "NODE_URL"},
-    {"zlib", "NODE_ZLIB"},
-    {"crypto", "NODE_CRYPTO"},
-    {"stream", "NODE_STREAM"},
-    {"child_process", "NODE_CHILD_PROCESS"},
-    {"net", "NODE_NET"},
-    {"http", "NODE_HTTP"},
-    {"https", "NODE_HTTPS"},
-    {"tls", "NODE_TLS"},
-    {"readline", "NODE_READLINE"},
-    {"worker_threads", "NODE_WORKER_THREADS"},
-    {"cluster", "NODE_CLUSTER"},
-    {"repl", "NODE_REPL"},
-    {"timers", "NODE_TIMERS"},
-    {"dgram", "NODE_DGRAM"},
-    {"http2", "NODE_HTTP2"},
-    {"v8", "NODE_V8"},
-    {"module", "NODE_MODULE"},
-    {"diagnostics_channel", "NODE_DIAGNOSTICS_CHANNEL"},
-    {"async_hooks", "NODE_ASYNC_HOOKS"},
-    {"inspector", "NODE_INSPECTOR"},
-    {"trace_events", "NODE_TRACE_EVENTS"},
+    {"path", "V6Path", "MODULE"},
+    {"buffer", "V6Builtins", "NODE_BUFFER"},
+    {"util", "V6Util", "MODULE"},
+    {"os", "V6Os", "MODULE"},
+    {"tty", "V6Tty", "MODULE"},
+    {"fs", "V6Fs", "MODULE"},
+    {"events", "V6Builtins", "NODE_EVENTS"},
+    {"assert", "V6Builtins", "NODE_ASSERT"},
+    {"querystring", "V6Builtins", "NODE_QUERYSTRING"},
+    {"perf_hooks", "V6PerfHooks", "MODULE"},
+    {"dns", "V6Dns", "MODULE"},
+    {"string_decoder", "V6Builtins", "NODE_STRING_DECODER"},
+    {"url", "V6Builtins", "NODE_URL"},
+    {"zlib", "V6Zlib", "MODULE"},
+    {"crypto", "V6Crypto", "MODULE"},
+    {"stream", "V6SparseModules", "NODE_STREAM"},
+    {"child_process", "V6SparseModules", "NODE_CHILD_PROCESS"},
+    {"net", "V6SparseModules", "NODE_NET"},
+    {"http", "V6SparseModules", "NODE_HTTP"},
+    {"https", "V6SparseModules", "NODE_HTTPS"},
+    {"tls", "V6SparseModules", "NODE_TLS"},
+    {"readline", "V6SparseModules", "NODE_READLINE"},
+    {"worker_threads", "V6SparseModules", "NODE_WORKER_THREADS"},
+    {"cluster", "V6SparseModules", "NODE_CLUSTER"},
+    {"repl", "V6SparseModules", "NODE_REPL"},
+    {"timers", "V6SparseModules", "NODE_TIMERS"},
+    {"dgram", "V6SparseModules", "NODE_DGRAM"},
+    {"http2", "V6SparseModules", "NODE_HTTP2"},
+    {"v8", "V6SparseModules", "NODE_V8"},
+    {"module", "V6SparseModules", "NODE_MODULE"},
+    {"diagnostics_channel", "V6SparseModules", "NODE_DIAGNOSTICS_CHANNEL"},
+    {"async_hooks", "V6SparseModules", "NODE_ASYNC_HOOKS"},
+    {"inspector", "V6SparseModules", "NODE_INSPECTOR"},
+    {"trace_events", "V6SparseModules", "NODE_TRACE_EVENTS"},
 };
 
 static int emit_node_builtin_ref(compiler* c, const char* specifier) {
@@ -5351,8 +4856,9 @@ static int emit_node_builtin_ref(compiler* c, const char* specifier) {
   size_t n = sizeof(v6_node_builtin_table) / sizeof(v6_node_builtin_table[0]);
   for (size_t i = 0; i < n; i++) {
     if (strcmp(specifier, v6_node_builtin_table[i].name) == 0) {
-      uint16_t fidx = cf_fieldref(c->cf, "V6Builtins",
-                                  v6_node_builtin_table[i].field, "LV6Value;");
+      uint16_t fidx =
+          cf_fieldref(c->cf, v6_node_builtin_table[i].cls,
+                     v6_node_builtin_table[i].field, "LV6Value;");
       op_emit2(c->m, op_getstatic, fidx);
       return 1;
     }
@@ -6402,16 +5908,29 @@ static void prescan_decls(compiler* c, const char* src, int hoist_functions) {
     tok name = fp.cur;
     advance(&fp);
     char* lambda_name = malloc(24);
+    local* direct_le = NULL;
     if (!is_gen && !is_async &&
         !name_reassigned_in_scope(src, name.start, name.len)) {
       local* le = find_local_entry(c, name.start, name.len);
       if (le) {
         le->direct_fn = 1;
         le->fn_method_name = lambda_name;
+        direct_le = le;
       }
     }
     c->pending_async_gen = is_gen && is_async;
     compile_closure_value(&fp, c, 0, 1, lambda_name);
+    if (direct_le) {
+      char* shadow_name = malloc(24);
+      int shadow_arity = 0;
+      if (try_compile_num_shadow(c, name, name.start + name.len, shadow_name,
+                                 &shadow_arity)) {
+        direct_le->num_shadow_name = shadow_name;
+        direct_le->num_arity = shadow_arity;
+      } else {
+        free(shadow_name);
+      }
+    }
     if (is_gen && is_async)
       emit_wrap_async_generator(c);
     else if (is_gen)
@@ -6631,9 +6150,10 @@ static void preprocess_exports(char* src, export_binding* bindings,
   }
 }
 
-static void bind_builtin(compiler* c, const char* name, const char* field) {
+static void bind_builtin_cls(compiler* c, const char* name, const char* cls,
+                             const char* field) {
   uint16_t slot = c->next_local_slot++;
-  uint16_t fidx = cf_fieldref(c->cf, "V6Builtins", field, "LV6Value;");
+  uint16_t fidx = cf_fieldref(c->cf, cls, field, "LV6Value;");
   op_emit2(c->m, op_getstatic, fidx);
   emit_var_declare(c, slot);
   tok t;
@@ -6643,6 +6163,10 @@ static void bind_builtin(compiler* c, const char* name, const char* field) {
   t.line = 0;
   t.num = 0;
   add_local(c, t, slot, 1, 0);
+}
+
+static void bind_builtin(compiler* c, const char* name, const char* field) {
+  bind_builtin_cls(c, name, "V6Builtins", field);
 }
 
 static const char* const v6_prelude_src =
@@ -6725,6 +6249,24 @@ static int count_newlines(const char* s) {
   return n;
 }
 
+static int is_ident_char(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+         (c >= '0' && c <= '9') || c == '_' || c == '$';
+}
+
+static int src_has_ident(const char* src, const char* name) {
+  size_t name_len = strlen(name);
+  const char* p = src;
+  while ((p = strstr(p, name)) != NULL) {
+    int before_ok = (p == src) || !is_ident_char(p[-1]);
+    int after_ok = !is_ident_char(p[name_len]);
+    if (before_ok && after_ok)
+      return 1;
+    p += 1;
+  }
+  return 0;
+}
+
 static compile_result
 compile_module_impl(class_file* cf, const char* this_class_name,
                     const char* user_src, const char* module_dir,
@@ -6805,90 +6347,184 @@ compile_module_impl(class_file* cf, const char* this_class_name,
   }
   c.box_locals = top_has_closures;
 
-  bind_builtin(&c, "console", "CONSOLE");
-  bind_builtin(&c, "Math", "MATH");
-  bind_builtin(&c, "Object", "OBJECT");
-  bind_builtin(&c, "Array", "ARRAY");
-  bind_builtin(&c, "atob", "ATOB");
-  bind_builtin(&c, "btoa", "BTOA");
-  bind_builtin(&c, "Uint8Array", "UINT8ARRAY_CTOR");
-  bind_builtin(&c, "encodeURIComponent", "ENCODE_URI_COMPONENT");
-  bind_builtin(&c, "decodeURIComponent", "DECODE_URI_COMPONENT");
-  bind_builtin(&c, "encodeURI", "ENCODE_URI");
-  bind_builtin(&c, "decodeURI", "DECODE_URI");
-  bind_builtin(&c, "eval", "EVAL_STUB");
-  bind_builtin(&c, "__v6CaptureCallSites", "CAPTURE_CALL_SITES");
-  bind_builtin(&c, "Number", "NUMBER");
-  bind_builtin(&c, "parseInt", "PARSE_INT");
-  bind_builtin(&c, "BigInt", "BIGINT");
-  bind_builtin(&c, "parseFloat", "PARSE_FLOAT");
-  bind_builtin(&c, "isNaN", "IS_NAN");
-  bind_builtin(&c, "isFinite", "IS_FINITE");
-  bind_builtin(&c, "NaN", "NAN_VALUE");
-  bind_builtin(&c, "Infinity", "INFINITY_VALUE");
-  bind_builtin(&c, "Map", "MAP");
-  bind_builtin(&c, "Set", "SET");
-  bind_builtin(&c, "WeakMap", "WEAK_MAP");
-  bind_builtin(&c, "WeakSet", "WEAK_SET");
-  bind_builtin(&c, "Symbol", "SYMBOL");
-  bind_builtin(&c, "Promise", "PROMISE");
+  if (src_has_ident(src, "console"))
+    bind_builtin(&c, "console", "CONSOLE");
+  if (src_has_ident(src, "Math"))
+    bind_builtin(&c, "Math", "MATH");
+  if (src_has_ident(src, "Object"))
+    bind_builtin(&c, "Object", "OBJECT");
+  if (src_has_ident(src, "Array"))
+    bind_builtin(&c, "Array", "ARRAY");
+  if (src_has_ident(src, "atob"))
+    bind_builtin(&c, "atob", "ATOB");
+  if (src_has_ident(src, "btoa"))
+    bind_builtin(&c, "btoa", "BTOA");
+  if (src_has_ident(src, "Uint8Array"))
+    bind_builtin(&c, "Uint8Array", "UINT8ARRAY_CTOR");
+  if (src_has_ident(src, "encodeURIComponent"))
+    bind_builtin(&c, "encodeURIComponent", "ENCODE_URI_COMPONENT");
+  if (src_has_ident(src, "decodeURIComponent"))
+    bind_builtin(&c, "decodeURIComponent", "DECODE_URI_COMPONENT");
+  if (src_has_ident(src, "encodeURI"))
+    bind_builtin(&c, "encodeURI", "ENCODE_URI");
+  if (src_has_ident(src, "decodeURI"))
+    bind_builtin(&c, "decodeURI", "DECODE_URI");
+  if (src_has_ident(src, "eval"))
+    bind_builtin(&c, "eval", "EVAL_STUB");
+  if (src_has_ident(src, "__v6CaptureCallSites"))
+    bind_builtin_cls(&c, "__v6CaptureCallSites", "V6CaptureCallSites",
+                     "CAPTURE_CALL_SITES");
+  if (src_has_ident(src, "Number"))
+    bind_builtin(&c, "Number", "NUMBER");
+  if (src_has_ident(src, "parseInt"))
+    bind_builtin(&c, "parseInt", "PARSE_INT");
+  if (src_has_ident(src, "BigInt"))
+    bind_builtin(&c, "BigInt", "BIGINT");
+  if (src_has_ident(src, "parseFloat"))
+    bind_builtin(&c, "parseFloat", "PARSE_FLOAT");
+  if (src_has_ident(src, "isNaN"))
+    bind_builtin(&c, "isNaN", "IS_NAN");
+  if (src_has_ident(src, "isFinite"))
+    bind_builtin(&c, "isFinite", "IS_FINITE");
+  if (src_has_ident(src, "NaN"))
+    bind_builtin(&c, "NaN", "NAN_VALUE");
+  if (src_has_ident(src, "Infinity"))
+    bind_builtin(&c, "Infinity", "INFINITY_VALUE");
+  if (src_has_ident(src, "Map"))
+    bind_builtin(&c, "Map", "MAP");
+  if (src_has_ident(src, "Set"))
+    bind_builtin(&c, "Set", "SET");
+  if (src_has_ident(src, "WeakMap"))
+    bind_builtin(&c, "WeakMap", "WEAK_MAP");
+  if (src_has_ident(src, "WeakSet"))
+    bind_builtin(&c, "WeakSet", "WEAK_SET");
+  if (src_has_ident(src, "Symbol"))
+    bind_builtin(&c, "Symbol", "SYMBOL");
+  if (src_has_ident(src, "Promise"))
+    bind_builtin(&c, "Promise", "PROMISE");
   bind_builtin(&c, "RegExp", "REGEXP");
-  bind_builtin(&c, "Function", "FUNCTION");
-  bind_builtin(&c, "String", "STRING");
-  bind_builtin(&c, "Boolean", "BOOLEAN");
-  bind_builtin(&c, "Date", "DATE");
-  bind_builtin(&c, "JSON", "JSON");
-  bind_builtin(&c, "Buffer", "BUFFER");
-  bind_builtin(&c, "process", "PROCESS");
-  bind_builtin(&c, "URL", "URL_CTOR");
-  bind_builtin(&c, "URLSearchParams", "URL_SEARCH_PARAMS_CTOR");
-  bind_builtin(&c, "setTimeout", "SET_TIMEOUT");
-  bind_builtin(&c, "clearTimeout", "CLEAR_TIMEOUT");
-  bind_builtin(&c, "setInterval", "SET_INTERVAL");
-  bind_builtin(&c, "clearInterval", "CLEAR_INTERVAL");
-  bind_builtin(&c, "setImmediate", "SET_IMMEDIATE");
-  bind_builtin(&c, "clearImmediate", "CLEAR_IMMEDIATE");
-  bind_builtin(&c, "queueMicrotask", "QUEUE_MICROTASK");
-  bind_builtin(&c, "global", "GLOBAL_OBJECT");
-  bind_builtin(&c, "globalThis", "GLOBAL_OBJECT");
-  bind_builtin(&c, "Event", "EVENT_CTOR");
-  bind_builtin(&c, "CustomEvent", "CUSTOM_EVENT_CTOR");
-  bind_builtin(&c, "EventTarget", "EVENT_TARGET_CTOR");
-  bind_builtin(&c, "AbortSignal", "ABORT_SIGNAL_CTOR");
-  bind_builtin(&c, "AbortController", "ABORT_CONTROLLER_CTOR");
-  bind_builtin(&c, "structuredClone", "STRUCTURED_CLONE");
-  bind_builtin(&c, "TextEncoder", "TEXT_ENCODER_CTOR");
-  bind_builtin(&c, "TextDecoder", "TEXT_DECODER_CTOR");
-  bind_builtin(&c, "ReadableStream", "READABLE_STREAM_CTOR");
-  bind_builtin(&c, "WritableStream", "WRITABLE_STREAM_CTOR");
-  bind_builtin(&c, "TransformStream", "TRANSFORM_STREAM_CTOR");
-  bind_builtin(&c, "CountQueuingStrategy", "COUNT_QUEUING_STRATEGY_CTOR");
-  bind_builtin(&c, "ByteLengthQueuingStrategy",
-               "BYTE_LENGTH_QUEUING_STRATEGY_CTOR");
-  bind_builtin(&c, "ArrayBuffer", "ARRAY_BUFFER_CTOR");
-  bind_builtin(&c, "Blob", "BLOB_CTOR");
-  bind_builtin(&c, "File", "FILE_CTOR");
-  bind_builtin(&c, "FormData", "FORM_DATA_CTOR");
-  bind_builtin(&c, "TextEncoderStream", "TEXT_ENCODER_STREAM_CTOR");
-  bind_builtin(&c, "TextDecoderStream", "TEXT_DECODER_STREAM_CTOR");
-  bind_builtin(&c, "CompressionStream", "COMPRESSION_STREAM_CTOR");
-  bind_builtin(&c, "DecompressionStream", "DECOMPRESSION_STREAM_CTOR");
-  bind_builtin(&c, "Headers", "HEADERS_CTOR");
-  bind_builtin(&c, "Request", "REQUEST_CTOR");
-  bind_builtin(&c, "Response", "RESPONSE_CTOR");
-  bind_builtin(&c, "fetch", "FETCH");
-  bind_builtin(&c, "WebSocket", "WEBSOCKET_CTOR");
-  bind_builtin(&c, "EventSource", "EVENT_SOURCE_CTOR");
-  bind_builtin(&c, "CryptoKey", "CRYPTO_KEY_CTOR");
-  bind_builtin(&c, "crypto", "WEB_CRYPTO");
-  bind_builtin(&c, "MessageEvent", "MESSAGE_EVENT_CTOR");
-  bind_builtin(&c, "MessagePort", "MESSAGE_PORT_CTOR");
-  bind_builtin(&c, "MessageChannel", "MESSAGE_CHANNEL_CTOR");
-  bind_builtin(&c, "BroadcastChannel", "BROADCAST_CHANNEL_CTOR");
-  bind_builtin(&c, "self", "WORKER_SELF");
-  bind_builtin(&c, "Worker", "WEB_WORKER_CTOR");
-  bind_builtin(&c, "performance", "PERFORMANCE");
-  bind_builtin(&c, "navigator", "NAVIGATOR");
+  if (src_has_ident(src, "Function"))
+    bind_builtin(&c, "Function", "FUNCTION");
+  if (src_has_ident(src, "String"))
+    bind_builtin(&c, "String", "STRING");
+  if (src_has_ident(src, "Boolean"))
+    bind_builtin(&c, "Boolean", "BOOLEAN");
+  if (src_has_ident(src, "Date"))
+    bind_builtin(&c, "Date", "DATE");
+  if (src_has_ident(src, "JSON"))
+    bind_builtin(&c, "JSON", "JSON");
+  if (src_has_ident(src, "Buffer"))
+    bind_builtin(&c, "Buffer", "BUFFER");
+  if (src_has_ident(src, "process"))
+    bind_builtin(&c, "process", "PROCESS");
+  if (src_has_ident(src, "URL"))
+    bind_builtin(&c, "URL", "URL_CTOR");
+  if (src_has_ident(src, "URLSearchParams"))
+    bind_builtin(&c, "URLSearchParams", "URL_SEARCH_PARAMS_CTOR");
+  if (src_has_ident(src, "setTimeout"))
+    bind_builtin(&c, "setTimeout", "SET_TIMEOUT");
+  if (src_has_ident(src, "clearTimeout"))
+    bind_builtin(&c, "clearTimeout", "CLEAR_TIMEOUT");
+  if (src_has_ident(src, "setInterval"))
+    bind_builtin(&c, "setInterval", "SET_INTERVAL");
+  if (src_has_ident(src, "clearInterval"))
+    bind_builtin(&c, "clearInterval", "CLEAR_INTERVAL");
+  if (src_has_ident(src, "setImmediate"))
+    bind_builtin(&c, "setImmediate", "SET_IMMEDIATE");
+  if (src_has_ident(src, "clearImmediate"))
+    bind_builtin(&c, "clearImmediate", "CLEAR_IMMEDIATE");
+  if (src_has_ident(src, "queueMicrotask"))
+    bind_builtin(&c, "queueMicrotask", "QUEUE_MICROTASK");
+  if (src_has_ident(src, "global"))
+    bind_builtin(&c, "global", "GLOBAL_OBJECT");
+  if (src_has_ident(src, "globalThis"))
+    bind_builtin(&c, "globalThis", "GLOBAL_OBJECT");
+  if (src_has_ident(src, "Event"))
+    bind_builtin_cls(&c, "Event", "V6WebGlobals", "EVENT_CTOR");
+  if (src_has_ident(src, "CustomEvent"))
+    bind_builtin_cls(&c, "CustomEvent", "V6WebGlobals", "CUSTOM_EVENT_CTOR");
+  if (src_has_ident(src, "EventTarget"))
+    bind_builtin_cls(&c, "EventTarget", "V6WebGlobals", "EVENT_TARGET_CTOR");
+  if (src_has_ident(src, "AbortSignal"))
+    bind_builtin_cls(&c, "AbortSignal", "V6WebGlobals", "ABORT_SIGNAL_CTOR");
+  if (src_has_ident(src, "AbortController"))
+    bind_builtin_cls(&c, "AbortController", "V6WebGlobals",
+                     "ABORT_CONTROLLER_CTOR");
+  if (src_has_ident(src, "structuredClone"))
+    bind_builtin_cls(&c, "structuredClone", "V6WebGlobals", "STRUCTURED_CLONE");
+  if (src_has_ident(src, "TextEncoder"))
+    bind_builtin_cls(&c, "TextEncoder", "V6WebGlobals", "TEXT_ENCODER_CTOR");
+  if (src_has_ident(src, "TextDecoder"))
+    bind_builtin_cls(&c, "TextDecoder", "V6WebGlobals", "TEXT_DECODER_CTOR");
+  if (src_has_ident(src, "ReadableStream"))
+    bind_builtin_cls(&c, "ReadableStream", "V6WebGlobals",
+                     "READABLE_STREAM_CTOR");
+  if (src_has_ident(src, "WritableStream"))
+    bind_builtin_cls(&c, "WritableStream", "V6WebGlobals",
+                     "WRITABLE_STREAM_CTOR");
+  if (src_has_ident(src, "TransformStream"))
+    bind_builtin_cls(&c, "TransformStream", "V6WebGlobals",
+                     "TRANSFORM_STREAM_CTOR");
+  if (src_has_ident(src, "CountQueuingStrategy"))
+    bind_builtin_cls(&c, "CountQueuingStrategy", "V6WebGlobals",
+                     "COUNT_QUEUING_STRATEGY_CTOR");
+  if (src_has_ident(src, "ByteLengthQueuingStrategy"))
+    bind_builtin_cls(&c, "ByteLengthQueuingStrategy", "V6WebGlobals",
+                     "BYTE_LENGTH_QUEUING_STRATEGY_CTOR");
+  if (src_has_ident(src, "ArrayBuffer"))
+    bind_builtin_cls(&c, "ArrayBuffer", "V6WebGlobals", "ARRAY_BUFFER_CTOR");
+  if (src_has_ident(src, "Blob"))
+    bind_builtin_cls(&c, "Blob", "V6WebGlobals", "BLOB_CTOR");
+  if (src_has_ident(src, "File"))
+    bind_builtin_cls(&c, "File", "V6WebGlobals", "FILE_CTOR");
+  if (src_has_ident(src, "FormData"))
+    bind_builtin_cls(&c, "FormData", "V6WebGlobals", "FORM_DATA_CTOR");
+  if (src_has_ident(src, "TextEncoderStream"))
+    bind_builtin_cls(&c, "TextEncoderStream", "V6WebGlobals",
+                     "TEXT_ENCODER_STREAM_CTOR");
+  if (src_has_ident(src, "TextDecoderStream"))
+    bind_builtin_cls(&c, "TextDecoderStream", "V6WebGlobals",
+                     "TEXT_DECODER_STREAM_CTOR");
+  if (src_has_ident(src, "CompressionStream"))
+    bind_builtin_cls(&c, "CompressionStream", "V6WebGlobals",
+                     "COMPRESSION_STREAM_CTOR");
+  if (src_has_ident(src, "DecompressionStream"))
+    bind_builtin_cls(&c, "DecompressionStream", "V6WebGlobals",
+                     "DECOMPRESSION_STREAM_CTOR");
+  if (src_has_ident(src, "Headers"))
+    bind_builtin_cls(&c, "Headers", "V6WebGlobals", "HEADERS_CTOR");
+  if (src_has_ident(src, "Request"))
+    bind_builtin_cls(&c, "Request", "V6WebGlobals", "REQUEST_CTOR");
+  if (src_has_ident(src, "Response"))
+    bind_builtin_cls(&c, "Response", "V6WebGlobals", "RESPONSE_CTOR");
+  if (src_has_ident(src, "fetch"))
+    bind_builtin_cls(&c, "fetch", "V6WebGlobals", "FETCH");
+  if (src_has_ident(src, "WebSocket"))
+    bind_builtin_cls(&c, "WebSocket", "V6WebGlobals", "WEBSOCKET_CTOR");
+  if (src_has_ident(src, "EventSource"))
+    bind_builtin_cls(&c, "EventSource", "V6WebGlobals", "EVENT_SOURCE_CTOR");
+  if (src_has_ident(src, "CryptoKey"))
+    bind_builtin_cls(&c, "CryptoKey", "V6WebGlobals", "CRYPTO_KEY_CTOR");
+  if (src_has_ident(src, "crypto"))
+    bind_builtin_cls(&c, "crypto", "V6WebGlobals", "WEB_CRYPTO");
+  if (src_has_ident(src, "MessageEvent"))
+    bind_builtin_cls(&c, "MessageEvent", "V6WebGlobals", "MESSAGE_EVENT_CTOR");
+  if (src_has_ident(src, "MessagePort"))
+    bind_builtin_cls(&c, "MessagePort", "V6WebGlobals", "MESSAGE_PORT_CTOR");
+  if (src_has_ident(src, "MessageChannel"))
+    bind_builtin_cls(&c, "MessageChannel", "V6WebGlobals",
+                     "MESSAGE_CHANNEL_CTOR");
+  if (src_has_ident(src, "BroadcastChannel"))
+    bind_builtin_cls(&c, "BroadcastChannel", "V6WebGlobals",
+                     "BROADCAST_CHANNEL_CTOR");
+  if (src_has_ident(src, "self"))
+    bind_builtin_cls(&c, "self", "V6WebGlobals", "WORKER_SELF");
+  if (src_has_ident(src, "Worker"))
+    bind_builtin_cls(&c, "Worker", "V6WebGlobals", "WEB_WORKER_CTOR");
+  if (src_has_ident(src, "performance"))
+    bind_builtin_cls(&c, "performance", "V6WebGlobals", "PERFORMANCE");
+  if (src_has_ident(src, "navigator"))
+    bind_builtin_cls(&c, "navigator", "V6WebGlobals", "NAVIGATOR");
 
   if (is_entry) {
     uint16_t setargv_idx =

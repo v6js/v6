@@ -12,6 +12,8 @@ public final class V6JavaInstanceObject extends V6Object {
     java.lang.reflect.Field cachedField = fieldCache.get(key);
     if (cachedField != null)
       return V6JavaMarshal.readField(cachedField, instance);
+    if (hasOwnNamed(key))
+      return super.get(key);
     if (props.containsKey(key))
       return props.get(key);
     V6Value method = V6JavaMarshal.resolveInstanceMethod(instance, key);

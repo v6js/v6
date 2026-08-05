@@ -60,3 +60,5 @@ lib/.gradle/
 lib/build/
 
 test/compat/node_modules/
+
+bench/data/

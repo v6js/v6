@@ -142,4 +142,6 @@ public final class V6Os {
 
     return o;
   }
+
+  public static final V6Value MODULE = new V6Value(V6Value.TAG_OBJ, 0, build());
 }

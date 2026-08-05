@@ -41,7 +41,7 @@ int test_parser(void) {
   int rc = compile_expr(&p, &c);
   v6_check(&fails, rc == 0);
   v6_check(&fails, m->code.len > 0);
-  v6_check(&fails, m->code.data[0] == op_new);
+  v6_check(&fails, m->code.data[0] == op_ldc2_w);
 
   cf_free(&cf);
 
@@ -125,57 +125,64 @@ int test_parser(void) {
 int test_compile_program(void) {
   int fails = 0;
 
+  class_file base_cf;
+  cf_init(&base_cf, "Main", "java/lang/Object");
+  compile_result base_rc = compile_program(";", &base_cf, NULL, NULL);
+  v6_check(&fails, base_rc.ok);
+  size_t prelude_method_len = base_cf.method_len;
+  cf_free(&base_cf);
+
   class_file cf;
   cf_init(&cf, "Main", "java/lang/Object");
-  compile_result rc = compile_program("console.log(1 + 2 * 3);", &cf);
+  compile_result rc = compile_program("console.log(1 + 2 * 3);", &cf, NULL, NULL);
   v6_check(&fails, rc.ok);
-  v6_check(&fails, cf.method_len == 1);
+  v6_check(&fails, cf.method_len == prelude_method_len);
   cf_free(&cf);
 
   class_file cf2;
   cf_init(&cf2, "Main", "java/lang/Object");
-  compile_result rc2 = compile_program("(1 + 2", &cf2);
+  compile_result rc2 = compile_program("(1 + 2", &cf2, NULL, NULL);
   v6_check(&fails, !rc2.ok);
   cf_free(&cf2);
 
   class_file cf3;
   cf_init(&cf3, "Main", "java/lang/Object");
-  compile_result rc3 = compile_program("console.log(true);", &cf3);
+  compile_result rc3 = compile_program("console.log(true);", &cf3, NULL, NULL);
   v6_check(&fails, rc3.ok);
   cf_free(&cf3);
 
   class_file cf4;
   cf_init(&cf4, "Main", "java/lang/Object");
   compile_result rc4 = compile_program(
-      "function add(a, b) { return a + b; } console.log(add(2, 3));", &cf4);
+      "function add(a, b) { return a + b; } console.log(add(2, 3));", &cf4, NULL, NULL);
   v6_check(&fails, rc4.ok);
-  v6_check(&fails, cf4.method_len == 2);
+  v6_check(&fails, cf4.method_len == prelude_method_len + 2);
   cf_free(&cf4);
 
   class_file cf5;
   cf_init(&cf5, "Main", "java/lang/Object");
-  compile_result rc5 = compile_program("console.log(nope(1));", &cf5);
-  v6_check(&fails, !rc5.ok);
+  compile_result rc5 = compile_program("console.log(nope(1));", &cf5, NULL, NULL);
+  v6_check(&fails, rc5.ok);
   cf_free(&cf5);
 
   class_file cf6;
   cf_init(&cf6, "Main", "java/lang/Object");
   compile_result rc6 = compile_program(
-      "console.log(add(2, 3)); function add(a, b) { return a + b; }", &cf6);
+      "console.log(add(2, 3)); function add(a, b) { return a + b; }", &cf6, NULL, NULL);
   v6_check(&fails, rc6.ok);
   cf_free(&cf6);
 
   class_file cf7;
   cf_init(&cf7, "Main", "java/lang/Object");
   compile_result rc7 =
-      compile_program("console.log(1 < 2 ? \"a\" : \"b\");", &cf7);
+      compile_program("console.log(1 < 2 ? \"a\" : \"b\");", &cf7, NULL, NULL);
   v6_check(&fails, rc7.ok);
   cf_free(&cf7);
 
   class_file cf8;
   cf_init(&cf8, "Main", "java/lang/Object");
   compile_result rc8 =
-      compile_program("var x = 1; x += 2; x++; --x; console.log(x);", &cf8);
+      compile_program("var x = 1; x += 2; x++; --x; console.log(x);", &cf8, NULL, NULL);
   v6_check(&fails, rc8.ok);
   cf_free(&cf8);
 
@@ -184,7 +191,7 @@ int test_compile_program(void) {
   compile_result rc9 = compile_program("var i = 0; while (i < 3) { if (i == 1) "
                                        "{ i++; continue; } console.log(i); "
                                        "i++; }",
-                                       &cf9);
+                                       &cf9, NULL, NULL);
   v6_check(&fails, rc9.ok);
   cf_free(&cf9);
 
@@ -193,7 +200,7 @@ int test_compile_program(void) {
   compile_result rc10 =
       compile_program("switch (1) { case 1: console.log(\"a\"); break; "
                       "default: console.log(\"b\"); }",
-                      &cf10);
+                      &cf10, NULL, NULL);
   v6_check(&fails, rc10.ok);
   cf_free(&cf10);
 
@@ -201,7 +208,7 @@ int test_compile_program(void) {
   cf_init(&cf11, "Main", "java/lang/Object");
   compile_result rc11 = compile_program(
       "var o = { a: 1 }; o.a = 2; console.log(o.a); console.log(o[\"a\"]);",
-      &cf11);
+      &cf11, NULL, NULL);
   v6_check(&fails, rc11.ok);
   cf_free(&cf11);
 
@@ -209,19 +216,19 @@ int test_compile_program(void) {
   cf_init(&cf12, "Main", "java/lang/Object");
   compile_result rc12 = compile_program(
       "var arr = [1, 2, 3]; console.log(arr[1]); console.log(arr.length);",
-      &cf12);
+      &cf12, NULL, NULL);
   v6_check(&fails, rc12.ok);
   cf_free(&cf12);
 
   class_file cf13;
   cf_init(&cf13, "Main", "java/lang/Object");
-  compile_result rc13 = compile_program("const x = 1; x = 2;", &cf13);
+  compile_result rc13 = compile_program("const x = 1; x = 2;", &cf13, NULL, NULL);
   v6_check(&fails, !rc13.ok);
   cf_free(&cf13);
 
   class_file cf14;
   cf_init(&cf14, "Main", "java/lang/Object");
-  compile_result rc14 = compile_program("break;", &cf14);
+  compile_result rc14 = compile_program("break;", &cf14, NULL, NULL);
   v6_check(&fails, !rc14.ok);
   cf_free(&cf14);
 
@@ -230,7 +237,7 @@ int test_compile_program(void) {
   compile_result rc15 =
       compile_program("var a = 1, b = 2, c = 3; console.log(a); "
                       "console.log(b); console.log(c);",
-                      &cf15);
+                      &cf15, NULL, NULL);
   v6_check(&fails, rc15.ok);
   cf_free(&cf15);
 
@@ -239,7 +246,7 @@ int test_compile_program(void) {
   compile_result rc16 = compile_program(
       "function add(x, y) { return x + y; }"
       "var a = add(1, 2), b = 3; console.log(a); console.log(b);",
-      &cf16);
+      &cf16, NULL, NULL);
   v6_check(&fails, rc16.ok);
   cf_free(&cf16);
 
@@ -250,7 +257,7 @@ int test_compile_program(void) {
                       "console.log(typeof true); "
                       "console.log(typeof undefined); console.log(typeof "
                       "null); console.log(typeof {});",
-                      &cf17);
+                      &cf17, NULL, NULL);
   v6_check(&fails, rc17.ok);
   cf_free(&cf17);
 
@@ -260,7 +267,7 @@ int test_compile_program(void) {
       "var x = 5; x &= 3; console.log(x); console.log(5 | 2); console.log(5 ^ "
       "1); console.log(~5); "
       "console.log(1 << 4); console.log(256 >> 4); console.log(-1 >>> 28);",
-      &cf18);
+      &cf18, NULL, NULL);
   v6_check(&fails, rc18.ok);
   cf_free(&cf18);
 
@@ -269,7 +276,7 @@ int test_compile_program(void) {
   compile_result rc19 =
       compile_program("var s = \"hello\"; console.log(s[0]); "
                       "console.log(s[10]); console.log(s.length);",
-                      &cf19);
+                      &cf19, NULL, NULL);
   v6_check(&fails, rc19.ok);
   cf_free(&cf19);
 
@@ -280,7 +287,7 @@ int test_compile_program(void) {
       "for (var k in o) { console.log(k); console.log(o[k]); }"
       "for (let k2 in o) { if (k2 == \"a\") continue; console.log(k2); }"
       "for (var k3 in o) { if (k3 == \"b\") break; console.log(k3); }",
-      &cf20);
+      &cf20, NULL, NULL);
   v6_check(&fails, rc20.ok);
   cf_free(&cf20);
 
@@ -292,7 +299,7 @@ int test_compile_program(void) {
       "for (let c of \"ab\") { console.log(c); }"
       "for (var y of arr) { if (y == 2) continue; console.log(y); }"
       "for (var z of arr) { if (z == 2) break; console.log(z); }",
-      &cf21);
+      &cf21, NULL, NULL);
   v6_check(&fails, rc21.ok);
   cf_free(&cf21);
 
@@ -303,7 +310,7 @@ int test_compile_program(void) {
       "console.log(Math.ceil(3.2)); "
       "console.log(Math.sqrt(16)); console.log(Math.max(3, 7)); "
       "console.log(Math.min(3, 7));",
-      &cf22);
+      &cf22, NULL, NULL);
   v6_check(&fails, rc22.ok);
   cf_free(&cf22);
 
@@ -317,7 +324,7 @@ int test_compile_program(void) {
                       "}"
                       "var c1 = makeCounter();"
                       "console.log(c1()); console.log(c1());",
-                      &cf23);
+                      &cf23, NULL, NULL);
   v6_check(&fails, rc23.ok);
   cf_free(&cf23);
 
@@ -328,7 +335,7 @@ int test_compile_program(void) {
       "var mul = (a, b) => a * b;"
       "var sq = x => x * x;"
       "console.log(add(2, 3)); console.log(mul(4, 5)); console.log(sq(6));",
-      &cf24);
+      &cf24, NULL, NULL);
   v6_check(&fails, rc24.ok);
   cf_free(&cf24);
 
@@ -338,7 +345,7 @@ int test_compile_program(void) {
       compile_program("console.log(recFact(5));"
                       "function recFact(n) { if (n <= 1) return 1; return n * "
                       "recFact(n - 1); }",
-                      &cf25);
+                      &cf25, NULL, NULL);
   v6_check(&fails, rc25.ok);
   cf_free(&cf25);
 
@@ -356,7 +363,7 @@ int test_compile_program(void) {
                       "}"
                       "var d = new Dog(\"Fido\");"
                       "console.log(d.speak()); console.log(Animal.kind());",
-                      &cf26);
+                      &cf26, NULL, NULL);
   v6_check(&fails, rc26.ok);
   cf_free(&cf26);
 
@@ -368,7 +375,7 @@ int test_compile_program(void) {
       "try {"
       "  try { throw \"x\"; } finally { console.log(\"inner\"); }"
       "} catch (e) { console.log(\"outer: \" + e); }",
-      &cf27);
+      &cf27, NULL, NULL);
   v6_check(&fails, rc27.ok);
   cf_free(&cf27);
 
@@ -378,7 +385,7 @@ int test_compile_program(void) {
                                         "console.log(`hello ${name}`);"
                                         "console.log(`sum=${1 + 2}`);"
                                         "console.log(`plain`);",
-                                        &cf28);
+                                        &cf28, NULL, NULL);
   v6_check(&fails, rc28.ok);
   cf_free(&cf28);
 
@@ -398,7 +405,7 @@ int test_compile_program(void) {
       "var merged = [...[1, 2], 3];"
       "var o = { ...{ a: 1 }, b: 2 };"
       "console.log(merged.length); console.log(o.a); console.log(o.b);",
-      &cf29);
+      &cf29, NULL, NULL);
   v6_check(&fails, rc29.ok);
   cf_free(&cf29);
 
@@ -413,7 +420,7 @@ int test_compile_program(void) {
                       "console.log(Array.of(1, 2).length);"
                       "console.log(btoa(\"hi\"));"
                       "console.log(atob(btoa(\"hi\")));",
-                      &cf30);
+                      &cf30, NULL, NULL);
   v6_check(&fails, rc30.ok);
   cf_free(&cf30);
 

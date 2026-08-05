@@ -48,7 +48,7 @@ public final class V6WorkerConstructor
           + "directly to use Worker"));
     }
 
-    ProcessBuilder pb = new ProcessBuilder(exePath, scriptPath);
+    ProcessBuilder pb = new ProcessBuilder(exePath, "--no-daemon", scriptPath);
     pb.environment().put("V6_WORKER_MODE", "1");
     if (!workerData.isUndefined())
       pb.environment().put(

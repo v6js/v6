@@ -42,7 +42,7 @@ public final class V6Http {
     java.util.Set<String> keys = new java.util.HashSet<>();
     for (int i = 0; i < o.elemCount; i++)
       keys.add(Integer.toString(i));
-    keys.addAll(o.props.keySet());
+    keys.addAll(o.keySet());
     return keys;
   }
 

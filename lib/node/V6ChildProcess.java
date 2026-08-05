@@ -347,6 +347,7 @@ public final class V6ChildProcess {
 
             List<String> cmd = new ArrayList<>();
             cmd.add(exePath);
+            cmd.add("--no-daemon");
             cmd.add(modulePath);
             cmd.addAll(extraArgs);
             ProcessBuilder pb = new ProcessBuilder(cmd);

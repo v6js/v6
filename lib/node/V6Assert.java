@@ -16,7 +16,7 @@ public final class V6Assert {
     java.util.Set<String> keys = new java.util.HashSet<>();
     for (int i = 0; i < o.elemCount; i++)
       keys.add(Integer.toString(i));
-    keys.addAll(o.props.keySet());
+    keys.addAll(o.keySet());
     return keys;
   }
 
@@ -113,7 +113,7 @@ public final class V6Assert {
                                                    V6Object))
         return false;
       V6Object eo = (V6Object)errVal.ref();
-      for (String k : mo.props.keySet())
+      for (String k : mo.keySet())
         if (!V6Value.looseEquals(mo.get(k), eo.get(k)))
           return false;
       return true;

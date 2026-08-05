@@ -43,7 +43,7 @@ public final class V6WebWorkerConstructor
           + "available to run a second script); run via the v6 executable "
           + "directly to use Worker"));
 
-    ProcessBuilder pb = new ProcessBuilder(exePath, scriptPath);
+    ProcessBuilder pb = new ProcessBuilder(exePath, "--no-daemon", scriptPath);
     pb.environment().put("V6_WORKER_MODE", "1");
 
     Process proc;

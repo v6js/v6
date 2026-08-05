@@ -153,4 +153,6 @@ public final class V6PerfHooks {
     return objValue(performanceObj != null ? performanceObj
                                            : buildPerformanceObject());
   }
+
+  public static final V6Value MODULE = objValue(build());
 }

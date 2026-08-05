@@ -105,7 +105,7 @@ public final class V6Http2 {
                           if (headersVal.tag() == V6Value.TAG_OBJ &&
                               headersVal.ref() instanceof V6Object) {
                             V6Object h = (V6Object)headersVal.ref();
-                            for (String k : h.props.keySet()) {
+                            for (String k : h.keySet()) {
                               String v = h.get(k).toString();
                               if (k.equals(":path"))
                                 path = v;

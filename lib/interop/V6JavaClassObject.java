@@ -26,6 +26,8 @@ public final class V6JavaClassObject
     Field cachedField = fieldCache.get(key);
     if (cachedField != null)
       return V6JavaMarshal.readField(cachedField, null);
+    if (hasOwnNamed(key))
+      return super.get(key);
     if (props.containsKey(key))
       return props.get(key);
     V6Value resolved = V6JavaMarshal.resolveStaticMethodOrNested(clazz, key);

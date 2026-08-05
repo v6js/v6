@@ -7,7 +7,7 @@ function sumSquaresOfEvens(arr) {
 
 function run() {
   const data = [];
-  for (let i = 0; i < 2000000; i++) {
+  for (let i = 0; i < 200000; i++) {
     data.push(i);
   }
   return sumSquaresOfEvens(data);

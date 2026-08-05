@@ -126,7 +126,8 @@ public final class V6Repl {
         tmp.deleteOnExit();
         Files.write(tmp.toPath(), fullSrc.getBytes(StandardCharsets.UTF_8));
 
-        ProcessBuilder pb = new ProcessBuilder(exePath, tmp.getAbsolutePath());
+        ProcessBuilder pb =
+            new ProcessBuilder(exePath, "--no-daemon", tmp.getAbsolutePath());
         pb.redirectErrorStream(true);
         Process proc = pb.start();
         String output = new String(proc.getInputStream().readAllBytes(),

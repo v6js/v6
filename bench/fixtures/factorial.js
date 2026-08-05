@@ -5,7 +5,7 @@ function factorial(n) {
 
 function run() {
   let total = 0;
-  for (let i = 0; i < 3000000; i++) {
+  for (let i = 0; i < 200000; i++) {
     total += factorial(12);
   }
   return total;

@@ -7,7 +7,7 @@ function sumTo(n) {
 }
 
 function run() {
-  const result = sumTo(200000000);
+  const result = sumTo(20000000);
   return result;
 }
 

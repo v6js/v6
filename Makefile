@@ -42,6 +42,8 @@ endif
 
 ifeq ($(PLATFORM),linux)
   LDLIBS := -ldl
+else ifeq ($(PLATFORM),windows)
+  LDLIBS := -lws2_32
 else
   LDLIBS :=
 endif
@@ -71,11 +73,12 @@ V6_BIN := $(BIN)/v6$(EXE)
 TEST_BIN := $(BIN)/v6_test$(EXE)
 PACK_CLASS_BIN := $(BIN)/pack_class$(EXE)
 
-RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.java \
+RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Shape.java lib/core/V6Array.java \
                 lib/core/V6String.java lib/core/V6Number.java lib/core/V6Boolean.java \
                 lib/core/V6BigInt.java \
                 lib/core/V6Iterator.java lib/core/V6Ref.java lib/core/V6Callable.java \
-                lib/core/V6Closure.java lib/core/V6Builtins.java lib/core/V6Class.java \
+                lib/core/V6Closure.java lib/core/V6Builtins.java \
+                lib/core/V6CaptureCallSites.java lib/core/V6Class.java \
                 lib/core/V6Throw.java lib/core/V6Rope.java lib/core/V6NativeConstructor.java \
                 lib/core/V6MapObject.java lib/core/V6SetObject.java lib/core/V6MapKey.java \
                 lib/core/V6MapConstructor.java lib/core/V6SetConstructor.java \
@@ -84,6 +87,8 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/core/V6GeneratorReturn.java lib/core/V6MicrotaskQueue.java \
                 lib/core/V6EventLoop.java lib/core/V6TimerTask.java \
                 lib/core/V6Timers.java \
+                lib/core/V6ProcessExit.java lib/core/V6DaemonClassLoader.java \
+                lib/core/V6TaggedStream.java lib/core/V6Daemon.java \
                 lib/core/V6Promise.java lib/core/V6PromiseConstructor.java \
                 lib/core/V6AsyncFunction.java lib/core/V6AsyncGenerator.java \
                 lib/core/V6AsyncGeneratorFunction.java \
@@ -134,6 +139,7 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/node/V6AsyncLocalStorageConstructor.java \
                 lib/node/V6UnsupportedConstructor.java \
                 lib/node/V6Inspector.java lib/node/V6TraceEvents.java \
+                lib/node/V6SparseModules.java \
                 lib/shared/V6EventHandlerProperty.java \
                 lib/web/V6EventObject.java lib/web/V6EventConstructor.java \
                 lib/web/V6CustomEventObject.java lib/web/V6CustomEventConstructor.java \
@@ -172,6 +178,7 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Array.ja
                 lib/web/V6BroadcastChannelObject.java lib/web/V6BroadcastChannelConstructor.java \
                 lib/web/V6WebWorkerObject.java lib/web/V6WebWorkerConstructor.java \
                 lib/web/V6Navigator.java \
+                lib/web/V6WebGlobals.java \
                 lib/interop/V6JavaInterop.java lib/interop/V6JavaMarshal.java \
                 lib/interop/V6JavaMatch.java \
                 lib/interop/V6JavaClassObject.java lib/interop/V6JavaInstanceObject.java \

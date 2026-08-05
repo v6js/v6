@@ -42,6 +42,8 @@ public final class V6Process {
   public static volatile String[] rawArgv = new String[0];
   public static volatile String scriptPath = "";
   private static boolean stdinStarted = false;
+  private static volatile java.util.Map<String, String> envOverride = null;
+  private static volatile String cwdOverride = null;
 
   public static void setArgv(String[] args) {
     rawArgv = args;
@@ -49,6 +51,25 @@ public final class V6Process {
 
   public static void setScriptPath(String path) {
     scriptPath = path;
+  }
+
+  public static void resetForRequest(java.util.Map<String, String> env,
+                                     String cwd) {
+    if (processObj != null)
+      processObj.listeners.clear();
+    envOverride = env;
+    cwdOverride = cwd;
+    if (processObj != null)
+      processObj.set("env", objValue(buildEnvObject()));
+  }
+
+  private static V6Object buildEnvObject() {
+    V6Object env = new V6Object();
+    java.util.Map<String, String> src =
+        envOverride != null ? envOverride : System.getenv();
+    for (java.util.Map.Entry<String, String> e : src.entrySet())
+      env.set(e.getKey(), str(e.getValue()));
+    return env;
   }
 
   public static void dispatchExit(int code) {
@@ -150,10 +171,7 @@ public final class V6Process {
       return objValue(argv);
     });
 
-    V6Object env = new V6Object();
-    for (java.util.Map.Entry<String, String> e : System.getenv().entrySet())
-      env.set(e.getKey(), str(e.getValue()));
-    o.set("env", objValue(env));
+    o.set("env", objValue(buildEnvObject()));
 
     o.set("platform", str(platformName()));
     o.set("version", str("v6.0.0"));
@@ -162,14 +180,14 @@ public final class V6Process {
     versions.set("node", str("20.0.0"));
     o.set("versions", objValue(versions));
 
-    o.set("cwd",
-          fn((thisArg, args) -> str(System.getProperty("user.dir", "."))));
+    o.set("cwd", fn((thisArg, args) -> str(cwdOverride != null
+                                              ? cwdOverride
+                                              : System.getProperty("user.dir", "."))));
 
     o.set("exit", fn((thisArg, args) -> {
             int code = args.length > 0 ? (int)args[0].toNumber() : 0;
             dispatchExit(code);
-            System.exit(code);
-            return UNDEF;
+            throw new V6ProcessExit(code);
           }));
 
     o.set("nextTick", fn((thisArg, args) -> {

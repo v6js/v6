@@ -7,6 +7,8 @@ public final class V6JavaPackageObject extends V6Object {
 
   @Override
   public V6Value get(String key) {
+    if (hasOwnNamed(key))
+      return super.get(key);
     if (props.containsKey(key))
       return props.get(key);
     String full = prefix + "." + key;

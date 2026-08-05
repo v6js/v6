@@ -1,5 +1,5 @@
 public final class V6Builtins {
-  private static V6Value fn(V6Callable c) {
+  static V6Value fn(V6Callable c) {
     return new V6Value(V6Value.TAG_FUNC, 0, c);
   }
 
@@ -24,7 +24,7 @@ public final class V6Builtins {
     return new V6Value(V6Value.TAG_BOOL, b ? 1 : 0, null);
   }
 
-  private static V6Value objValue(V6Object o) {
+  static V6Value objValue(V6Object o) {
     return new V6Value(V6Value.TAG_OBJ, 0, o);
   }
 
@@ -908,12 +908,6 @@ public final class V6Builtins {
 
   public static final V6Value JSON = objValue(jsonObject());
 
-  public static final V6Value NODE_PATH = objValue(V6Path.build());
-  public static final V6Value NODE_UTIL = objValue(V6Util.build());
-  public static final V6Value NODE_OS = objValue(V6Os.build());
-  public static final V6Value NODE_TTY = objValue(V6Tty.build());
-  public static final V6Value NODE_FS = objValue(V6Fs.build());
-
   private static V6Value buildEventsModule() {
     V6EventEmitterConstructor ctor = new V6EventEmitterConstructor();
     ctor.set("EventEmitter", objValue(ctor));
@@ -943,14 +937,16 @@ public final class V6Builtins {
   public static final V6Value SET_IMMEDIATE = V6Timers.SET_IMMEDIATE;
   public static final V6Value CLEAR_IMMEDIATE = V6Timers.CLEAR_IMMEDIATE;
   public static final V6Value QUEUE_MICROTASK = V6Timers.QUEUE_MICROTASK;
-  public static final V6Value GLOBAL_OBJECT = objValue(new V6Object());
+  public static V6Value GLOBAL_OBJECT = objValue(new V6Object());
+
+  public static void resetGlobalObject() {
+    GLOBAL_OBJECT = objValue(new V6Object());
+  }
 
   public static final V6Value NODE_ASSERT =
       new V6Value(V6Value.TAG_FUNC, 0, V6Assert.build());
   public static final V6Value NODE_QUERYSTRING =
       objValue(V6QueryString.build());
-  public static final V6Value NODE_PERF_HOOKS = objValue(V6PerfHooks.build());
-  public static final V6Value NODE_DNS = objValue(V6Dns.build());
 
   private static V6Value buildStringDecoderModule() {
     V6Object o = new V6Object();
@@ -977,156 +973,6 @@ public final class V6Builtins {
   }
 
   public static final V6Value NODE_URL = buildUrlModule();
-  public static final V6Value NODE_ZLIB = objValue(V6Zlib.build());
-  public static final V6Value NODE_CRYPTO = objValue(V6Crypto.build());
-
-  private static V6Value buildStreamModule() {
-    V6Object o = new V6Object();
-    o.set("Readable",
-          new V6Value(V6Value.TAG_OBJ, 0, new V6StreamReadableConstructor()));
-    o.set("Writable",
-          new V6Value(V6Value.TAG_OBJ, 0, new V6StreamWritableConstructor()));
-    o.set("Duplex",
-          new V6Value(V6Value.TAG_OBJ, 0, new V6StreamDuplexConstructor()));
-    V6StreamTransformConstructor transformCtor =
-        new V6StreamTransformConstructor();
-    o.set("Transform", new V6Value(V6Value.TAG_OBJ, 0, transformCtor));
-    o.set("PassThrough", new V6Value(V6Value.TAG_OBJ, 0, transformCtor));
-    o.set("pipeline",
-          fn((thisArg, args) -> V6StreamMethods.pipelineImpl(args)));
-    o.set("finished",
-          fn((thisArg, args) -> V6StreamMethods.finishedImpl(args)));
-    V6Object promisesObj = new V6Object();
-    promisesObj.set("pipeline", fn((thisArg, args) -> {
-                      V6Promise p = new V6Promise();
-                      java.util.List<V6Value> streams =
-                          new java.util.ArrayList<>();
-                      for (V6Value a : args)
-                        if (a.tag() != V6Value.TAG_FUNC)
-                          streams.add(a);
-                      V6Value[] pipelineArgs = new V6Value[streams.size() + 1];
-                      for (int i = 0; i < streams.size(); i++)
-                        pipelineArgs[i] = streams.get(i);
-                      pipelineArgs[streams.size()] = fn((t2, a2) -> {
-                        V6Value err = V6Value.argAt(a2, 0);
-                        if (err.tag() == V6Value.TAG_NULL || err.isUndefined())
-                          p.resolve(new V6Value(V6Value.TAG_UNDEF, 0, null));
-                        else
-                          p.reject(err);
-                        return new V6Value(V6Value.TAG_UNDEF, 0, null);
-                      });
-                      V6StreamMethods.pipelineImpl(pipelineArgs);
-                      return objValue(p);
-                    }));
-    promisesObj.set(
-        "finished", fn((thisArg, args) -> {
-          V6Promise p = new V6Promise();
-          V6StreamMethods.finishedImpl(new V6Value[] {
-              V6Value.argAt(args, 0), fn((t2, a2) -> {
-                V6Value err = V6Value.argAt(a2, 0);
-                if (err.tag() == V6Value.TAG_NULL || err.isUndefined())
-                  p.resolve(new V6Value(V6Value.TAG_UNDEF, 0, null));
-                else
-                  p.reject(err);
-                return new V6Value(V6Value.TAG_UNDEF, 0, null);
-              })});
-          return objValue(p);
-        }));
-    o.set("promises", objValue(promisesObj));
-    return objValue(o);
-  }
-
-  public static final V6Value NODE_STREAM = buildStreamModule();
-  public static final V6Value NODE_CHILD_PROCESS =
-      objValue(V6ChildProcess.build());
-  public static final V6Value NODE_NET = objValue(V6Net.build());
-  public static final V6Value NODE_HTTP = objValue(V6Http.build());
-  public static final V6Value NODE_HTTPS = objValue(V6Http.buildHttps());
-  public static final V6Value NODE_TLS = objValue(V6Tls.build());
-  public static final V6Value NODE_READLINE = objValue(V6Readline.build());
-  public static final V6Value NODE_WORKER_THREADS =
-      objValue(V6WorkerThreads.build());
-  public static final V6Value WORKER_SELF = V6WorkerThreads.selfScope();
-  public static final V6Value NODE_CLUSTER = objValue(V6Cluster.build());
-  public static final V6Value NODE_REPL = objValue(V6Repl.build());
-  public static final V6Value NODE_TIMERS = objValue(V6Timers.buildModule());
-  public static final V6Value NODE_DGRAM = objValue(V6Dgram.build());
-  public static final V6Value NODE_HTTP2 = objValue(V6Http2.build());
-  public static final V6Value NODE_V8 = objValue(V6V8.build());
-  public static final V6Value NODE_MODULE = objValue(V6ModuleModule.build());
-  public static final V6Value NODE_DIAGNOSTICS_CHANNEL =
-      objValue(V6DiagnosticsChannel.build());
-  public static final V6Value NODE_ASYNC_HOOKS = objValue(V6AsyncHooks.build());
-  public static final V6Value NODE_INSPECTOR = objValue(V6Inspector.build());
-  public static final V6Value NODE_TRACE_EVENTS =
-      objValue(V6TraceEvents.build());
-
-  public static final V6Value EVENT_CTOR = objValue(new V6EventConstructor());
-  public static final V6Value CUSTOM_EVENT_CTOR =
-      objValue(new V6CustomEventConstructor());
-  public static final V6Value EVENT_TARGET_CTOR =
-      objValue(new V6EventTargetConstructor());
-  public static final V6Value ABORT_SIGNAL_CTOR =
-      objValue(new V6AbortSignalConstructor());
-  public static final V6Value ABORT_CONTROLLER_CTOR =
-      objValue(new V6AbortControllerConstructor());
-  public static final V6Value STRUCTURED_CLONE =
-      fn((thisArg, args) -> V6StructuredClone.clone(V6Value.argAt(args, 0)));
-  public static final V6Value TEXT_ENCODER_CTOR =
-      objValue(new V6TextEncoderConstructor());
-  public static final V6Value TEXT_DECODER_CTOR =
-      objValue(new V6TextDecoderConstructor());
-  public static final V6Value READABLE_STREAM_CTOR =
-      objValue(new V6ReadableStreamConstructor());
-  public static final V6Value WRITABLE_STREAM_CTOR =
-      objValue(new V6WritableStreamConstructor());
-  public static final V6Value TRANSFORM_STREAM_CTOR =
-      objValue(new V6TransformStreamConstructor());
-  public static final V6Value COUNT_QUEUING_STRATEGY_CTOR =
-      objValue(new V6CountQueuingStrategyConstructor());
-  public static final V6Value BYTE_LENGTH_QUEUING_STRATEGY_CTOR =
-      objValue(new V6ByteLengthQueuingStrategyConstructor());
-  public static final V6Value ARRAY_BUFFER_CTOR =
-      objValue(new V6ArrayBufferConstructor());
-  public static final V6Value BLOB_CTOR = objValue(new V6BlobConstructor());
-  public static final V6Value FILE_CTOR = objValue(new V6FileConstructor());
-  public static final V6Value FORM_DATA_CTOR =
-      objValue(new V6FormDataConstructor());
-  public static final V6Value TEXT_ENCODER_STREAM_CTOR =
-      objValue(new V6TextEncoderStreamConstructor());
-  public static final V6Value TEXT_DECODER_STREAM_CTOR =
-      objValue(new V6TextDecoderStreamConstructor());
-  public static final V6Value COMPRESSION_STREAM_CTOR =
-      objValue(new V6CompressionStreamConstructor());
-  public static final V6Value DECOMPRESSION_STREAM_CTOR =
-      objValue(new V6DecompressionStreamConstructor());
-  public static final V6Value HEADERS_CTOR =
-      objValue(new V6HeadersConstructor());
-  public static final V6Value REQUEST_CTOR =
-      objValue(new V6RequestConstructor());
-  public static final V6Value RESPONSE_CTOR =
-      objValue(new V6ResponseConstructor());
-  public static final V6Value FETCH =
-      fn((thisArg, args) -> V6Fetch.fetch(args));
-  public static final V6Value WEBSOCKET_CTOR =
-      objValue(new V6WebSocketConstructor());
-  public static final V6Value EVENT_SOURCE_CTOR =
-      objValue(new V6EventSourceConstructor());
-  public static final V6Value CRYPTO_KEY_CTOR =
-      objValue(new V6CryptoKeyConstructor());
-  public static final V6Value WEB_CRYPTO = objValue(V6WebCrypto.build());
-  public static final V6Value MESSAGE_EVENT_CTOR =
-      objValue(new V6MessageEventConstructor());
-  public static final V6Value MESSAGE_PORT_CTOR =
-      objValue(new V6MessagePortConstructor());
-  public static final V6Value MESSAGE_CHANNEL_CTOR =
-      objValue(new V6WebMessageChannelConstructor());
-  public static final V6Value BROADCAST_CHANNEL_CTOR =
-      objValue(new V6BroadcastChannelConstructor());
-  public static final V6Value WEB_WORKER_CTOR =
-      objValue(new V6WebWorkerConstructor());
-  public static final V6Value PERFORMANCE = V6PerfHooks.performance();
-  public static final V6Value NAVIGATOR = objValue(V6Navigator.build());
 
   public static final V6Value BTOA = fn((thisArg, args) -> {
     String s = V6Value.argAt(args, 0).toString();
@@ -1208,14 +1054,4 @@ public final class V6Builtins {
         new V6Value(V6Value.TAG_STR, 0, "EvalError: eval is not supported"));
   });
 
-  public static final V6Value CAPTURE_CALL_SITES = fn((thisArg, args) -> {
-    java.util
-        .List<StackWalker.StackFrame> frames = StackWalker.getInstance().walk(
-        s -> s.skip(1).limit(32).collect(java.util.stream.Collectors.toList()));
-    V6Array result = new V6Array();
-    for (StackWalker.StackFrame f : frames)
-      result.push(
-          objValue(new V6CallSiteObject(f.getMethodName(), f.getClassName())));
-    return objValue(result);
-  });
 }
