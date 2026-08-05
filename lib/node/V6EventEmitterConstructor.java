@@ -41,10 +41,12 @@ public final class V6EventEmitterConstructor
       new java.util.WeakHashMap<>();
 
   private static V6EventEmitterObject self(V6Value thisArg) {
-    if (thisArg.ref() instanceof V6EventEmitterObject)
-      return (V6EventEmitterObject)thisArg.ref();
-    return MIXIN_STATE.computeIfAbsent(thisArg.ref(),
-                                       k -> new V6EventEmitterObject());
+    Object key = thisArg.ref();
+    Object resolved =
+        key instanceof V6Object ? ((V6Object)key).resolveEmitterTarget() : key;
+    if (resolved instanceof V6EventEmitterObject)
+      return (V6EventEmitterObject)resolved;
+    return MIXIN_STATE.computeIfAbsent(resolved, k -> new V6EventEmitterObject());
   }
 
   private static V6Object buildPrototype() {

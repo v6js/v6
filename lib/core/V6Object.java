@@ -9,7 +9,6 @@ public class V6Object {
   private V6Value[] slots = EMPTY_ELEMENTS;
   private boolean dictMode = false;
   private Map<String, V6Value> dictProps;
-  protected final Map<String, V6Value> props = new LinkedHashMap<>(4);
   protected V6Value[] elements = EMPTY_ELEMENTS;
   protected int elemCount = 0;
   protected int length = 0;
@@ -228,6 +227,10 @@ public class V6Object {
 
   public V6Value get(String key) {
     return get(key, new V6Value(V6Value.TAG_OBJ, 0, this));
+  }
+
+  public V6Object resolveEmitterTarget() {
+    return this;
   }
 
   private V6Value get(String key, V6Value receiver) {

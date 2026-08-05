@@ -9,6 +9,17 @@ public final class V6PerfHooks {
   private static final long START_NANO = System.nanoTime();
   private static final long START_EPOCH_MS = System.currentTimeMillis();
   private static V6Object performanceObj = null;
+  private static final InheritableThreadLocal<List<V6Object>> ENTRIES =
+      new InheritableThreadLocal<>();
+
+  private static List<V6Object> entries() {
+    List<V6Object> e = ENTRIES.get();
+    if (e == null) {
+      e = Collections.synchronizedList(new ArrayList<>());
+      ENTRIES.set(e);
+    }
+    return e;
+  }
 
   private static V6Value num(double n) {
     return new V6Value(V6Value.TAG_NUM, n, null);
@@ -61,7 +72,6 @@ public final class V6PerfHooks {
 
   public static V6Object buildPerformanceObject() {
     V6Object performance = new V6Object();
-    List<V6Object> entries = Collections.synchronizedList(new ArrayList<>());
 
     performance.set("now", fn((t, a) -> num(nowMs())));
     performance.set("timeOrigin", num(START_EPOCH_MS));
@@ -69,7 +79,7 @@ public final class V6PerfHooks {
     performance.set("mark", fn((t, a) -> {
                       String name = V6Value.argAt(a, 0).toString();
                       V6Object e = makeEntry(name, "mark", nowMs(), 0);
-                      entries.add(e);
+                      entries().add(e);
                       return objValue(e);
                     }));
 
@@ -79,21 +89,21 @@ public final class V6PerfHooks {
           V6Value startArg = V6Value.argAt(a, 1);
           V6Value endArg = V6Value.argAt(a, 2);
           double startTime = startArg.tag() == V6Value.TAG_STR
-                                 ? findMarkTime(entries, startArg.toString())
+                                 ? findMarkTime(entries(), startArg.toString())
                              : startArg.isUndefined() ? 0
                                                       : startArg.toNumber();
           double endTime = endArg.tag() == V6Value.TAG_STR
-                               ? findMarkTime(entries, endArg.toString())
+                               ? findMarkTime(entries(), endArg.toString())
                            : endArg.isUndefined() ? nowMs()
                                                   : endArg.toNumber();
           V6Object e =
               makeEntry(name, "measure", startTime, endTime - startTime);
-          entries.add(e);
+          entries().add(e);
           return objValue(e);
         }));
 
     performance.set("getEntries",
-                    fn((t, a) -> toArray(new ArrayList<>(entries))));
+                    fn((t, a) -> toArray(new ArrayList<>(entries()))));
 
     performance.set(
         "getEntriesByName", fn((t, a) -> {
@@ -101,7 +111,7 @@ public final class V6PerfHooks {
           V6Value typeArg = V6Value.argAt(a, 1);
           String type = typeArg.isUndefined() ? null : typeArg.toString();
           List<V6Object> out = new ArrayList<>();
-          for (V6Object e : entries)
+          for (V6Object e : entries())
             if (e.get("name").toString().equals(name) &&
                 (type == null || e.get("entryType").toString().equals(type)))
               out.add(e);
@@ -111,7 +121,7 @@ public final class V6PerfHooks {
     performance.set("getEntriesByType", fn((t, a) -> {
                       String type = V6Value.argAt(a, 0).toString();
                       List<V6Object> out = new ArrayList<>();
-                      for (V6Object e : entries)
+                      for (V6Object e : entries())
                         if (e.get("entryType").toString().equals(type))
                           out.add(e);
                       return toArray(out);
@@ -121,7 +131,7 @@ public final class V6PerfHooks {
         "clearMarks", fn((t, a) -> {
           V6Value nameArg = V6Value.argAt(a, 0);
           String name = nameArg.isUndefined() ? null : nameArg.toString();
-          entries.removeIf(
+          entries().removeIf(
               e
               -> e.get("entryType").toString().equals("mark") &&
                      (name == null || e.get("name").toString().equals(name)));
@@ -132,7 +142,7 @@ public final class V6PerfHooks {
         "clearMeasures", fn((t, a) -> {
           V6Value nameArg = V6Value.argAt(a, 0);
           String name = nameArg.isUndefined() ? null : nameArg.toString();
-          entries.removeIf(
+          entries().removeIf(
               e
               -> e.get("entryType").toString().equals("measure") &&
                      (name == null || e.get("name").toString().equals(name)));

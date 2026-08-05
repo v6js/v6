@@ -1,6 +1,7 @@
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
@@ -14,6 +15,8 @@ import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class V6Daemon {
   private V6Daemon() {
@@ -64,10 +67,23 @@ public final class V6Daemon {
               StandardCopyOption.ATOMIC_MOVE);
   }
 
+  private static int maxConcurrentRequests() {
+    String v = System.getenv("V6_DAEMON_MAX_CONCURRENCY");
+    if (v != null) {
+      try {
+        int n = Integer.parseInt(v.trim());
+        if (n > 0)
+          return n;
+      } catch (NumberFormatException ignored) {
+      }
+    }
+    return Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
+  }
+
   private static boolean handleConnection(Socket socket,
                                           ClassLoader parentLoader,
-                                          java.io.PrintStream realOut,
-                                          java.io.PrintStream realErr,
+                                          V6ThreadStream dispatchOut,
+                                          V6ThreadStream dispatchErr,
                                           long executionTimeoutMillis) {
     try (Socket s = socket) {
       s.setTcpNoDelay(true);
@@ -137,18 +153,21 @@ public final class V6Daemon {
 
       s.setSoTimeout(0);
 
-      V6EventLoop.reset();
+      V6EventLoop.resetForThread();
       V6MicrotaskQueue.reset();
-      V6Builtins.resetGlobalObject();
+      V6GlobalDispatchObject.resetForThread();
       V6Process.resetForRequest(env, cwd);
+      V6ProcessDispatchObject.bindForThread(V6Process.buildForRequest());
 
       Object lock = new Object();
-      java.io.PrintStream taggedOut = new java.io.PrintStream(
-          new V6TaggedStream(out, TAG_STDOUT, lock), true,
-          StandardCharsets.UTF_8);
-      java.io.PrintStream taggedErr = new java.io.PrintStream(
-          new V6TaggedStream(out, TAG_STDERR, lock), true,
-          StandardCharsets.UTF_8);
+      V6TaggedStream rawOut = new V6TaggedStream(out, TAG_STDOUT, lock);
+      V6TaggedStream rawErr = new V6TaggedStream(out, TAG_STDERR, lock);
+      PrintStream taggedOut =
+          new PrintStream(rawOut, true, StandardCharsets.UTF_8);
+      PrintStream taggedErr =
+          new PrintStream(rawErr, true, StandardCharsets.UTF_8);
+      dispatchOut.bind(rawOut);
+      dispatchErr.bind(rawErr);
 
       Method m;
       try {
@@ -162,14 +181,14 @@ public final class V6Daemon {
           out.writeInt(1);
           out.flush();
         }
+        dispatchOut.unbind();
+        dispatchErr.unbind();
         return false;
       }
 
       int[] exitCodeHolder = {0};
       Method entryMethod = m;
       Thread worker = new Thread(() -> {
-        System.setOut(taggedOut);
-        System.setErr(taggedErr);
         try {
           entryMethod.invoke(null, (Object)args);
         } catch (InvocationTargetException ite) {
@@ -201,8 +220,8 @@ public final class V6Daemon {
         Thread.currentThread().interrupt();
       }
 
-      System.setOut(realOut);
-      System.setErr(realErr);
+      dispatchOut.unbind();
+      dispatchErr.unbind();
 
       if (worker.isAlive()) {
         try {
@@ -233,10 +252,19 @@ public final class V6Daemon {
   public static void serve(String lockFilePath, long idleTimeoutMillis,
                            long binaryMtime, long binarySize,
                            long executionTimeoutMillis) {
-    java.io.PrintStream realOut = System.out;
-    java.io.PrintStream realErr = System.err;
+    PrintStream realOut = System.out;
+    PrintStream realErr = System.err;
+    V6ThreadStream dispatchOut = new V6ThreadStream(realOut);
+    V6ThreadStream dispatchErr = new V6ThreadStream(realErr);
+    System.setOut(new PrintStream(dispatchOut, true, StandardCharsets.UTF_8));
+    System.setErr(new PrintStream(dispatchErr, true, StandardCharsets.UTF_8));
+
     ClassLoader parentLoader = V6Daemon.class.getClassLoader();
     V6EventLoop.setIgnoredThread(Thread.currentThread());
+
+    int maxConcurrent = maxConcurrentRequests();
+    Semaphore permits = new Semaphore(maxConcurrent);
+    AtomicBoolean wedged = new AtomicBoolean(false);
 
     try (ServerSocket server =
              new ServerSocket(0, 64, InetAddress.getLoopbackAddress())) {
@@ -246,25 +274,43 @@ public final class V6Daemon {
                     binarySize);
 
       long lastActivity = System.currentTimeMillis();
-      while (true) {
+      while (!wedged.get()) {
         Socket socket;
         try {
           socket = server.accept();
         } catch (java.net.SocketTimeoutException te) {
-          if (System.currentTimeMillis() - lastActivity > idleTimeoutMillis)
+          boolean idle = permits.availablePermits() == maxConcurrent;
+          if (idle && System.currentTimeMillis() - lastActivity >
+                          idleTimeoutMillis)
             break;
           continue;
         }
         lastActivity = System.currentTimeMillis();
-        boolean wedged = handleConnection(socket, parentLoader, realOut,
-                                          realErr, executionTimeoutMillis);
-        if (wedged) {
-          try {
-            Files.deleteIfExists(Path.of(lockFilePath));
-          } catch (IOException ignored) {
-          }
-          Runtime.getRuntime().halt(1);
+        try {
+          permits.acquire();
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          break;
         }
+        Thread connHandler = new Thread(() -> {
+          try {
+            boolean didWedge = handleConnection(
+                socket, parentLoader, dispatchOut, dispatchErr,
+                executionTimeoutMillis);
+            if (didWedge) {
+              wedged.set(true);
+              try {
+                Files.deleteIfExists(Path.of(lockFilePath));
+              } catch (IOException ignored) {
+              }
+              Runtime.getRuntime().halt(1);
+            }
+          } finally {
+            permits.release();
+          }
+        }, "v6-conn-handler");
+        connHandler.setDaemon(true);
+        connHandler.start();
       }
     } catch (IOException e) {
       realErr.println("v6 daemon: fatal: " + e.getMessage());

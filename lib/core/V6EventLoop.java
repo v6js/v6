@@ -1,59 +1,83 @@
-import java.util.HashMap;
-import java.util.Map;
-import java.util.PriorityQueue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicInteger;
-
 public final class V6EventLoop {
   private V6EventLoop() {
   }
 
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
-  private static final PriorityQueue<V6TimerTask> timers =
-      new PriorityQueue<>();
-  private static final Map<Long, V6TimerTask> byId = new HashMap<>();
-  private static final ConcurrentLinkedQueue<Runnable> external =
-      new ConcurrentLinkedQueue<>();
-  private static final AtomicInteger refCount = new AtomicInteger(0);
-  private static long nextId = 1;
+  private static final InheritableThreadLocal<V6EventLoopState> STATE =
+      new InheritableThreadLocal<>();
 
-  public static synchronized long schedule(V6Callable cb, double delayMs,
-                                           double intervalMs, V6Value[] args) {
-    V6TimerTask t = new V6TimerTask();
-    t.id = nextId++;
-    t.fireAt = System.currentTimeMillis() + (long)Math.max(0, delayMs);
-    t.interval = (long)Math.max(0, intervalMs);
-    t.callback = cb;
-    t.args = args;
-    timers.add(t);
-    byId.put(t.id, t);
-    return t.id;
+  public static void resetForThread() {
+    STATE.set(new V6EventLoopState());
   }
 
-  public static synchronized void cancel(long id) {
-    V6TimerTask t = byId.remove(id);
-    if (t != null)
-      t.cancelled = true;
+  public static void clearForThread() {
+    STATE.remove();
+  }
+
+  private static V6EventLoopState state() {
+    V6EventLoopState s = STATE.get();
+    if (s == null) {
+      s = new V6EventLoopState();
+      STATE.set(s);
+    }
+    return s;
+  }
+
+  public static long schedule(V6Callable cb, double delayMs, double intervalMs,
+                              V6Value[] args) {
+    V6EventLoopState s = state();
+    synchronized (s) {
+      V6TimerTask t = new V6TimerTask();
+      t.id = s.nextId++;
+      t.fireAt = System.currentTimeMillis() + (long)Math.max(0, delayMs);
+      t.interval = (long)Math.max(0, intervalMs);
+      t.callback = cb;
+      t.args = args;
+      s.timers.add(t);
+      s.byId.put(t.id, t);
+      return t.id;
+    }
+  }
+
+  public static void cancel(long id) {
+    V6EventLoopState s = state();
+    synchronized (s) {
+      V6TimerTask t = s.byId.remove(id);
+      if (t != null)
+        t.cancelled = true;
+    }
   }
 
   public static void ref() {
-    refCount.incrementAndGet();
+    state().refCount.incrementAndGet();
   }
 
   public static void unref() {
-    refCount.decrementAndGet();
+    state().refCount.decrementAndGet();
   }
 
   public static void postExternal(Runnable r) {
-    external.add(r);
+    state().external.add(r);
   }
 
-  public static synchronized void reset() {
-    timers.clear();
-    byId.clear();
-    external.clear();
-    refCount.set(0);
-    started = false;
+  public static Object captureState() {
+    return state();
+  }
+
+  public static void postExternalTo(Object capturedState, Runnable r) {
+    ((V6EventLoopState)capturedState).external.add(r);
+  }
+
+  public static void refCaptured(Object capturedState) {
+    ((V6EventLoopState)capturedState).refCount.incrementAndGet();
+  }
+
+  public static void unrefCaptured(Object capturedState) {
+    ((V6EventLoopState)capturedState).refCount.decrementAndGet();
+  }
+
+  public static void reset() {
+    resetForThread();
   }
 
   private static volatile Thread ignoredThread = null;
@@ -103,28 +127,27 @@ public final class V6EventLoop {
     }
   }
 
-  private static volatile boolean started = false;
-
   public static boolean hasStarted() {
-    return started;
+    return state().started;
   }
 
   public static void run() {
-    started = true;
+    V6EventLoopState s = state();
+    s.started = true;
     V6MicrotaskQueue.drain();
     while (true) {
       Runnable ext;
-      while ((ext = external.poll()) != null) {
+      while ((ext = s.external.poll()) != null) {
         runGuarded(ext);
         V6MicrotaskQueue.drain();
       }
 
       V6TimerTask t;
-      synchronized (V6EventLoop.class) {
-        t = timers.peek();
+      synchronized (s) {
+        t = s.timers.peek();
       }
       if (t == null) {
-        if (refCount.get() > 0 || hasOtherNonDaemonThreads()) {
+        if (s.refCount.get() > 0 || hasOtherNonDaemonThreads()) {
           sleepQuiet(15);
           continue;
         }
@@ -135,21 +158,21 @@ public final class V6EventLoop {
         sleepQuiet(Math.min(t.fireAt - now, 20));
         continue;
       }
-      synchronized (V6EventLoop.class) {
-        timers.poll();
+      synchronized (s) {
+        s.timers.poll();
       }
       if (t.cancelled)
         continue;
       if (t.interval > 0) {
-        synchronized (V6EventLoop.class) {
+        synchronized (s) {
           if (!t.cancelled) {
             t.fireAt = now + t.interval;
-            timers.add(t);
+            s.timers.add(t);
           }
         }
       } else {
-        synchronized (V6EventLoop.class) {
-          byId.remove(t.id);
+        synchronized (s) {
+          s.byId.remove(t.id);
         }
       }
       final V6TimerTask ft = t;

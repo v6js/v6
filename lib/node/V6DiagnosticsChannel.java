@@ -21,17 +21,36 @@ public final class V6DiagnosticsChannel {
 
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
 
-  private static final Map<String, V6Object> CHANNELS =
-      new ConcurrentHashMap<>();
-  private static final Map<String, List<V6Callable>> SUBSCRIBERS =
-      new ConcurrentHashMap<>();
+  private static final InheritableThreadLocal<Map<String, V6Object>> CHANNELS_TL =
+      new InheritableThreadLocal<>();
+  private static final InheritableThreadLocal<Map<String, List<V6Callable>>>
+      SUBSCRIBERS_TL = new InheritableThreadLocal<>();
+
+  private static Map<String, V6Object> channels() {
+    Map<String, V6Object> m = CHANNELS_TL.get();
+    if (m == null) {
+      m = new ConcurrentHashMap<>();
+      CHANNELS_TL.set(m);
+    }
+    return m;
+  }
+
+  private static Map<String, List<V6Callable>> subscribersMap() {
+    Map<String, List<V6Callable>> m = SUBSCRIBERS_TL.get();
+    if (m == null) {
+      m = new ConcurrentHashMap<>();
+      SUBSCRIBERS_TL.set(m);
+    }
+    return m;
+  }
 
   private static List<V6Callable> subscribersOf(String name) {
-    return SUBSCRIBERS.computeIfAbsent(name, k -> new CopyOnWriteArrayList<>());
+    return subscribersMap().computeIfAbsent(name,
+                                            k -> new CopyOnWriteArrayList<>());
   }
 
   private static V6Object channelFor(String name) {
-    return CHANNELS.computeIfAbsent(name, n -> {
+    return channels().computeIfAbsent(name, n -> {
       V6Object ch = new V6Object();
       ch.defineGetter("hasSubscribers",
                       (t, a)

@@ -204,7 +204,9 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  if (!classpath && !no_daemon) {
+  int uses_stdin = strstr(src, "stdin") != NULL || strstr(src, "readline") != NULL;
+
+  if (!classpath && !no_daemon && !uses_stdin) {
     int num_classes = 1 + modctx.count;
     v6_daemon_class_entry* classes =
         malloc(sizeof(v6_daemon_class_entry) * (size_t)num_classes);

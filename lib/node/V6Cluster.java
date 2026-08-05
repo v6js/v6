@@ -70,7 +70,7 @@ public final class V6Cluster {
                                 + "second script)")}));
             return objValue(workerHandle);
           }
-          if (V6Process.scriptPath.isEmpty()) {
+          if (V6Process.scriptPath().isEmpty()) {
             V6MicrotaskQueue.enqueue(
                 ()
                     -> workerHandle.get("emit").asCallable().call(
@@ -83,7 +83,7 @@ public final class V6Cluster {
           }
 
           ProcessBuilder pb = new ProcessBuilder(exePath, "--no-daemon",
-                                                 V6Process.scriptPath);
+                                                 V6Process.scriptPath());
           pb.environment().put("V6_CLUSTER_WORKER", "1");
           pb.environment().put("V6_CLUSTER_WORKER_ID", String.valueOf(id));
 

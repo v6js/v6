@@ -554,8 +554,17 @@ public final class V6Fs {
     return p;
   }
 
-  private static final Map<String, boolean[]> watchFileStops =
-      new java.util.concurrent.ConcurrentHashMap<>();
+  private static final InheritableThreadLocal<Map<String, boolean[]>>
+      WATCH_FILE_STOPS_TL = new InheritableThreadLocal<>();
+
+  private static Map<String, boolean[]> watchFileStops() {
+    Map<String, boolean[]> m = WATCH_FILE_STOPS_TL.get();
+    if (m == null) {
+      m = new java.util.concurrent.ConcurrentHashMap<>();
+      WATCH_FILE_STOPS_TL.set(m);
+    }
+    return m;
+  }
 
   private static void wireWatch(V6Object o) {
     o.set(
@@ -691,13 +700,13 @@ public final class V6Fs {
             });
             th.setDaemon(true);
             th.start();
-            watchFileStops.put(pathStr, stopped);
+            watchFileStops().put(pathStr, stopped);
             return UNDEF;
           }));
 
     o.set("unwatchFile", fn((thisArg, args) -> {
             String pathStr = V6Value.argAt(args, 0).toString();
-            boolean[] stopped = watchFileStops.remove(pathStr);
+            boolean[] stopped = watchFileStops().remove(pathStr);
             if (stopped != null)
               stopped[0] = true;
             return UNDEF;

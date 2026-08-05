@@ -7,6 +7,7 @@ public final class V6JavaClassObject
     extends V6Object implements V6NativeConstructor {
   final Class<?> clazz;
   private final Map<String, Field> fieldCache = new HashMap<>();
+  private final Map<String, V6Value> props = new HashMap<>();
 
   private static final Map<Class<?>, V6JavaClassObject> CACHE =
       new ConcurrentHashMap<>();

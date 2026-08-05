@@ -3,9 +3,11 @@ import java.nio.ByteBuffer;
 
 public final class V6WebSocketListenerImpl implements WebSocket.Listener {
   private final V6WebSocketObject socket;
+  private final Object capturedLoop;
 
   public V6WebSocketListenerImpl(V6WebSocketObject socket) {
     this.socket = socket;
+    this.capturedLoop = V6EventLoop.captureState();
   }
 
   private static V6Value str(String s) {
@@ -25,7 +27,7 @@ public final class V6WebSocketListenerImpl implements WebSocket.Listener {
 
   @Override
   public void onOpen(WebSocket webSocket) {
-    V6EventLoop.postExternal(() -> {
+    V6EventLoop.postExternalTo(capturedLoop, () -> {
       socket.readyState = 1;
       socket.dispatch(newEvent("open"));
     });
@@ -39,7 +41,7 @@ public final class V6WebSocketListenerImpl implements WebSocket.Listener {
     if (last) {
       String full = socket.textAccum.toString();
       socket.textAccum.setLength(0);
-      V6EventLoop.postExternal(() -> {
+      V6EventLoop.postExternalTo(capturedLoop, () -> {
         V6EventObject e = newEvent("message");
         e.set("data", str(full));
         socket.dispatch(e);
@@ -58,7 +60,7 @@ public final class V6WebSocketListenerImpl implements WebSocket.Listener {
     if (last) {
       byte[] full = socket.binaryAccum.toByteArray();
       socket.binaryAccum.reset();
-      V6EventLoop.postExternal(() -> {
+      V6EventLoop.postExternalTo(capturedLoop, () -> {
         V6EventObject e = newEvent("message");
         V6Value payload = socket.binaryType.equals("arraybuffer")
                               ? V6ArrayBufferConstructor.wrap(full)
@@ -74,27 +76,27 @@ public final class V6WebSocketListenerImpl implements WebSocket.Listener {
   @Override
   public java.util.concurrent.CompletionStage<?>
   onClose(WebSocket webSocket, int statusCode, String reason) {
-    V6EventLoop.postExternal(() -> {
+    V6EventLoop.postExternalTo(capturedLoop, () -> {
       socket.readyState = 3;
       V6EventObject e = newEvent("close");
       e.set("code", new V6Value(V6Value.TAG_NUM, statusCode, null));
       e.set("reason", str(reason == null ? "" : reason));
       e.set("wasClean", new V6Value(V6Value.TAG_BOOL, 1, null));
       socket.dispatch(e);
-      V6EventLoop.unref();
+      V6EventLoop.unrefCaptured(capturedLoop);
     });
     return null;
   }
 
   @Override
   public void onError(WebSocket webSocket, Throwable error) {
-    V6EventLoop.postExternal(() -> {
+    V6EventLoop.postExternalTo(capturedLoop, () -> {
       socket.readyState = 3;
       V6EventObject e = newEvent("error");
       e.set("message", str(String.valueOf(error.getMessage())));
       socket.dispatch(e);
       socket.dispatch(newEvent("close"));
-      V6EventLoop.unref();
+      V6EventLoop.unrefCaptured(capturedLoop);
     });
   }
 }

@@ -7,8 +7,18 @@ public final class V6BroadcastChannelConstructor
     extends V6Object implements V6NativeConstructor {
   public static final V6Object PROTOTYPE = buildPrototype();
 
-  private static final Map<String, List<V6BroadcastChannelObject>> REGISTRY =
-      new ConcurrentHashMap<>();
+  private static final InheritableThreadLocal<
+      Map<String, List<V6BroadcastChannelObject>>> REGISTRY_TL =
+      new InheritableThreadLocal<>();
+
+  private static Map<String, List<V6BroadcastChannelObject>> registry() {
+    Map<String, List<V6BroadcastChannelObject>> m = REGISTRY_TL.get();
+    if (m == null) {
+      m = new ConcurrentHashMap<>();
+      REGISTRY_TL.set(m);
+    }
+    return m;
+  }
 
   public V6BroadcastChannelConstructor() {
     set("prototype", new V6Value(V6Value.TAG_OBJ, 0, PROTOTYPE));
@@ -39,7 +49,7 @@ public final class V6BroadcastChannelConstructor
     V6BroadcastChannelObject ch = new V6BroadcastChannelObject();
     ch.setProto(PROTOTYPE);
     ch.name = V6Value.argAt(args, 0).toString();
-    REGISTRY.computeIfAbsent(ch.name, k -> new CopyOnWriteArrayList<>())
+    registry().computeIfAbsent(ch.name, k -> new CopyOnWriteArrayList<>())
         .add(ch);
     return objValue(ch);
   }
@@ -64,7 +74,7 @@ public final class V6BroadcastChannelConstructor
             if (ch.closed)
               throw new V6Throw(str("InvalidStateError: channel is closed"));
             V6Value data = V6Value.argAt(a, 0);
-            List<V6BroadcastChannelObject> peers = REGISTRY.get(ch.name);
+            List<V6BroadcastChannelObject> peers = registry().get(ch.name);
             if (peers != null) {
               for (V6BroadcastChannelObject peer : peers) {
                 if (peer == ch || peer.closed)
@@ -87,7 +97,7 @@ public final class V6BroadcastChannelConstructor
     o.set("close", fn((t, a) -> {
             V6BroadcastChannelObject ch = self(t);
             ch.closed = true;
-            List<V6BroadcastChannelObject> peers = REGISTRY.get(ch.name);
+            List<V6BroadcastChannelObject> peers = registry().get(ch.name);
             if (peers != null)
               peers.remove(ch);
             return UNDEF;

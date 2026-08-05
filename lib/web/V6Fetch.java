@@ -38,6 +38,7 @@ public final class V6Fetch {
       HttpRequest httpReq = builder.build();
 
       V6EventLoop.ref();
+      Object capturedLoop = V6EventLoop.captureState();
       CompletableFuture<HttpResponse<byte[]>> future =
           V6Http.DEFAULT_CLIENT.sendAsync(
               httpReq, HttpResponse.BodyHandlers.ofByteArray());
@@ -59,7 +60,7 @@ public final class V6Fetch {
       }
 
       future.whenComplete((resp, err) -> {
-        V6EventLoop.postExternal(() -> {
+        V6EventLoop.postExternalTo(capturedLoop, () -> {
           if (err == null) {
             V6ResponseObject response = new V6ResponseObject();
             response.setProto(V6ResponseConstructor.PROTOTYPE);

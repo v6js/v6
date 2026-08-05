@@ -63,11 +63,12 @@ public final class V6EventSourceConstructor
     HttpRequest req = builder.build();
 
     V6EventLoop.ref();
+    Object capturedLoop = V6EventLoop.captureState();
     V6Http.DEFAULT_CLIENT
         .sendAsync(req, HttpResponse.BodyHandlers.ofInputStream())
         .whenComplete((resp, err) -> {
           if (err != null) {
-            V6EventLoop.postExternal(() -> {
+            V6EventLoop.postExternalTo(capturedLoop, () -> {
               es.dispatch(newEvent("error"));
               scheduleReconnect(es);
               V6EventLoop.unref();
@@ -75,7 +76,7 @@ public final class V6EventSourceConstructor
             return;
           }
           if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
-            V6EventLoop.postExternal(() -> {
+            V6EventLoop.postExternalTo(capturedLoop, () -> {
               es.dispatch(newEvent("error"));
               scheduleReconnect(es);
               V6EventLoop.unref();
@@ -83,16 +84,17 @@ public final class V6EventSourceConstructor
             return;
           }
           es.currentStream = resp.body();
-          V6EventLoop.postExternal(() -> {
+          V6EventLoop.postExternalTo(capturedLoop, () -> {
             es.readyState = 1;
             es.dispatch(newEvent("open"));
           });
-          readEvents(es, resp.body());
+          readEvents(es, resp.body(), capturedLoop);
         });
   }
 
   private static void readEvents(V6EventSourceObject es,
-                                 java.io.InputStream body) {
+                                 java.io.InputStream body,
+                                 Object capturedLoop) {
     Thread th = new Thread(() -> {
       try (BufferedReader r = new BufferedReader(
                new InputStreamReader(body, StandardCharsets.UTF_8))) {
@@ -106,7 +108,7 @@ public final class V6EventSourceConstructor
                                 ? dataBuf.substring(0, dataBuf.length() - 1)
                                 : dataBuf.toString();
               String type = eventTypeHolder[0];
-              V6EventLoop.postExternal(() -> {
+              V6EventLoop.postExternalTo(capturedLoop, () -> {
                 V6EventObject e = newEvent(type);
                 e.set("data", str(data));
                 e.set("lastEventId", str(es.lastEventId));
@@ -150,7 +152,7 @@ public final class V6EventSourceConstructor
         }
       } catch (IOException ignored) {
       } finally {
-        V6EventLoop.postExternal(() -> {
+        V6EventLoop.postExternalTo(capturedLoop, () -> {
           if (!es.closed) {
             es.dispatch(newEvent("error"));
             scheduleReconnect(es);

@@ -44,6 +44,7 @@ for fixture in "$FIXTURES_DIR"/*.js; do
 
   echo "==> Benchmarking $name"
   hyperfine \
+    --shell=none \
     --warmup 6 \
     --min-runs 5 \
     --ignore-failure \

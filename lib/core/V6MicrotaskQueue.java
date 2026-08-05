@@ -1,20 +1,38 @@
 import java.util.ArrayDeque;
 
 public final class V6MicrotaskQueue {
-  private static final ArrayDeque<Runnable> queue = new ArrayDeque<>();
+  private static final InheritableThreadLocal<ArrayDeque<Runnable>> QUEUE =
+      new InheritableThreadLocal<>();
+
+  private static ArrayDeque<Runnable> queue() {
+    ArrayDeque<Runnable> q = QUEUE.get();
+    if (q == null) {
+      q = new ArrayDeque<>();
+      QUEUE.set(q);
+    }
+    return q;
+  }
 
   public static void enqueue(Runnable r) {
-    queue.add(r);
+    synchronized (queue()) {
+      queue().add(r);
+    }
   }
 
   public static void drain() {
-    while (!queue.isEmpty()) {
-      Runnable r = queue.poll();
+    ArrayDeque<Runnable> q = queue();
+    while (true) {
+      Runnable r;
+      synchronized (q) {
+        r = q.poll();
+      }
+      if (r == null)
+        break;
       r.run();
     }
   }
 
   public static void reset() {
-    queue.clear();
+    QUEUE.set(new ArrayDeque<>());
   }
 }

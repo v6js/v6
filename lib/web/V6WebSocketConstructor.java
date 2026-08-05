@@ -70,12 +70,13 @@ public final class V6WebSocketConstructor
     }
 
     V6EventLoop.ref();
+    Object capturedLoop = V6EventLoop.captureState();
     builder.buildAsync(URI.create(ws.url), new V6WebSocketListenerImpl(ws))
         .whenComplete((sock, err) -> {
           if (sock != null)
             ws.nativeSocket = sock;
           if (err != null) {
-            V6EventLoop.postExternal(() -> {
+            V6EventLoop.postExternalTo(capturedLoop, () -> {
               ws.readyState = 3;
               V6EventObject e = new V6EventObject();
               e.setProto(V6EventConstructor.PROTOTYPE);
@@ -86,7 +87,7 @@ public final class V6WebSocketConstructor
               closeEv.setProto(V6EventConstructor.PROTOTYPE);
               closeEv.type = "close";
               ws.dispatch(closeEv);
-              V6EventLoop.unref();
+              V6EventLoop.unrefCaptured(capturedLoop);
             });
           }
         });

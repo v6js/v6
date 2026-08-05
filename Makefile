@@ -89,6 +89,8 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Shape.ja
                 lib/core/V6Timers.java \
                 lib/core/V6ProcessExit.java lib/core/V6DaemonClassLoader.java \
                 lib/core/V6TaggedStream.java lib/core/V6Daemon.java \
+                lib/core/V6ThreadStream.java lib/core/V6GlobalDispatchObject.java \
+                lib/node/V6ProcessDispatchObject.java lib/core/V6EventLoopState.java \
                 lib/core/V6Promise.java lib/core/V6PromiseConstructor.java \
                 lib/core/V6AsyncFunction.java lib/core/V6AsyncGenerator.java \
                 lib/core/V6AsyncGeneratorFunction.java \

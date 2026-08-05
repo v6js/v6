@@ -54,9 +54,10 @@ public final class V6Http2 {
     HttpRequest req = rb.build();
 
     V6EventLoop.ref();
+    Object capturedLoop = V6EventLoop.captureState();
     client.sendAsync(req, HttpResponse.BodyHandlers.ofByteArray())
         .whenComplete((resp, err) -> {
-          V6EventLoop.postExternal(() -> {
+          V6EventLoop.postExternalTo(capturedLoop, () -> {
             if (err != null) {
               stream.get("emit").asCallable().call(
                   objValue(stream),

@@ -241,6 +241,7 @@ public final class V6Http {
                   if (v.tag() == V6Value.TAG_FUNC)
                     listenCb = v.asCallable();
                 final V6Callable fListenCb = listenCb;
+                Object capturedLoop = V6EventLoop.captureState();
                 try {
                   com.sun.net.httpserver.HttpServer hs;
                   if (fSslCtx != null) {
@@ -257,7 +258,7 @@ public final class V6Http {
                   httpServerHolder[0] = hs;
                   hs.createContext("/", exchange -> {
                     CountDownLatch latch = new CountDownLatch(1);
-                    V6EventLoop.postExternal(() -> {
+                    V6EventLoop.postExternalTo(capturedLoop, () -> {
                       try {
                         handleHttpExchange(exchange, server, latch);
                       } catch (IOException | RuntimeException e) {
@@ -358,9 +359,10 @@ public final class V6Http {
         }
       }
       V6EventLoop.ref();
+      Object capturedLoop = V6EventLoop.captureState();
       client.sendAsync(req, HttpResponse.BodyHandlers.ofByteArray())
           .whenComplete((resp, err) -> {
-            V6EventLoop.postExternal(() -> {
+            V6EventLoop.postExternalTo(capturedLoop, () -> {
               if (err != null) {
                 reqObj.get("emit").asCallable().call(
                     objValue(reqObj),

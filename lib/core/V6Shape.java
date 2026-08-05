@@ -1,32 +1,42 @@
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 public final class V6Shape {
-  public static final V6Shape EMPTY = new V6Shape(null, null, 0);
+  public static final V6Shape EMPTY =
+      new V6Shape(null, null, 0, Collections.emptyMap());
   private static final int MAX_FAST_SLOTS = 24;
 
   final V6Shape parent;
   final String addedKey;
   final int slotCount;
-  private java.util.HashMap<String, V6Shape> transitions;
-  private String[] orderedKeys;
+  private final Map<String, Integer> slotIndex;
+  private final ConcurrentHashMap<String, V6Shape> transitions =
+      new ConcurrentHashMap<>(4);
+  private volatile String[] orderedKeys;
 
-  private V6Shape(V6Shape parent, String addedKey, int slotCount) {
+  private V6Shape(V6Shape parent, String addedKey, int slotCount,
+                  Map<String, Integer> slotIndex) {
     this.parent = parent;
     this.addedKey = addedKey;
     this.slotCount = slotCount;
+    this.slotIndex = slotIndex;
   }
 
   public boolean isFull() {
     return slotCount >= MAX_FAST_SLOTS;
   }
 
-  public synchronized V6Shape transition(String key) {
-    if (transitions == null)
-      transitions = new java.util.HashMap<>(4);
-    V6Shape next = transitions.get(key);
-    if (next != null)
-      return next;
-    next = new V6Shape(this, key, slotCount + 1);
-    transitions.put(key, next);
-    return next;
+  public V6Shape transition(String key) {
+    V6Shape cached = transitions.get(key);
+    if (cached != null)
+      return cached;
+    return transitions.computeIfAbsent(key, k -> {
+      Map<String, Integer> next = new HashMap<>(slotIndex);
+      next.put(k, slotCount);
+      return new V6Shape(this, k, slotCount + 1, next);
+    });
   }
 
   public String[] orderedKeys() {
@@ -34,20 +44,14 @@ public final class V6Shape {
     if (keys != null)
       return keys;
     keys = new String[slotCount];
-    V6Shape s = this;
-    for (int i = slotCount - 1; i >= 0; i--) {
-      keys[i] = s.addedKey;
-      s = s.parent;
-    }
+    for (Map.Entry<String, Integer> e : slotIndex.entrySet())
+      keys[e.getValue()] = e.getKey();
     orderedKeys = keys;
     return keys;
   }
 
   public int slotOf(String key) {
-    String[] keys = orderedKeys();
-    for (int i = 0; i < keys.length; i++)
-      if (keys[i].equals(key))
-        return i;
-    return -1;
+    Integer slot = slotIndex.get(key);
+    return slot != null ? slot : -1;
   }
 }

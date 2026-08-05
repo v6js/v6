@@ -38,68 +38,85 @@ public final class V6Process {
     return o;
   }
 
-  private static V6EventEmitterObject processObj;
-  public static volatile String[] rawArgv = new String[0];
-  public static volatile String scriptPath = "";
-  private static boolean stdinStarted = false;
-  private static volatile java.util.Map<String, String> envOverride = null;
-  private static volatile String cwdOverride = null;
+  private static final InheritableThreadLocal<String[]> RAW_ARGV =
+      new InheritableThreadLocal<>();
+  private static final InheritableThreadLocal<String> SCRIPT_PATH =
+      new InheritableThreadLocal<>();
+  private static final InheritableThreadLocal<Boolean> STDIN_STARTED =
+      new InheritableThreadLocal<>();
+  private static final InheritableThreadLocal<java.util.Map<String, String>>
+      ENV_OVERRIDE = new InheritableThreadLocal<>();
+  private static final InheritableThreadLocal<String> CWD_OVERRIDE =
+      new InheritableThreadLocal<>();
+
+  private static String[] rawArgv() {
+    String[] v = RAW_ARGV.get();
+    return v != null ? v : new String[0];
+  }
+
+  private static String scriptPathValue() {
+    String v = SCRIPT_PATH.get();
+    return v != null ? v : "";
+  }
+
+  public static String scriptPath() {
+    return scriptPathValue();
+  }
 
   public static void setArgv(String[] args) {
-    rawArgv = args;
+    RAW_ARGV.set(args);
   }
 
   public static void setScriptPath(String path) {
-    scriptPath = path;
+    SCRIPT_PATH.set(path);
   }
 
   public static void resetForRequest(java.util.Map<String, String> env,
                                      String cwd) {
-    if (processObj != null)
-      processObj.listeners.clear();
-    envOverride = env;
-    cwdOverride = cwd;
-    if (processObj != null)
-      processObj.set("env", objValue(buildEnvObject()));
+    ENV_OVERRIDE.set(env);
+    CWD_OVERRIDE.set(cwd);
   }
 
   private static V6Object buildEnvObject() {
     V6Object env = new V6Object();
-    java.util.Map<String, String> src =
-        envOverride != null ? envOverride : System.getenv();
+    java.util.Map<String, String> src = ENV_OVERRIDE.get();
+    if (src == null)
+      src = System.getenv();
     for (java.util.Map.Entry<String, String> e : src.entrySet())
       env.set(e.getKey(), str(e.getValue()));
     return env;
   }
 
   public static void dispatchExit(int code) {
-    if (processObj == null)
+    V6EventEmitterObject o = V6ProcessDispatchObject.currentOrNull();
+    if (o == null)
       return;
-    processObj.get("emit").asCallable().call(
-        objValue(processObj),
+    o.get("emit").asCallable().call(
+        objValue(o),
         new V6Value[] {str("exit"), new V6Value(V6Value.TAG_NUM, code, null)});
   }
 
   public static boolean dispatchUncaught(V6Value err) {
-    if (processObj == null)
+    V6EventEmitterObject o = V6ProcessDispatchObject.currentOrNull();
+    if (o == null)
       return false;
-    int count = (int)processObj.get("listenerCount")
+    int count = (int)o.get("listenerCount")
                     .asCallable()
-                    .call(objValue(processObj),
+                    .call(objValue(o),
                           new V6Value[] {str("uncaughtException")})
                     .toNumber();
     if (count == 0)
       return false;
-    processObj.get("emit").asCallable().call(
-        objValue(processObj), new V6Value[] {str("uncaughtException"), err});
+    o.get("emit").asCallable().call(
+        objValue(o), new V6Value[] {str("uncaughtException"), err});
     return true;
   }
 
   private static synchronized void ensureStdinStarted(V6EventEmitterObject s,
                                                       String[] encodingHolder) {
-    if (stdinStarted)
+    if (Boolean.TRUE.equals(STDIN_STARTED.get()))
       return;
-    stdinStarted = true;
+    STDIN_STARTED.set(Boolean.TRUE);
     V6EventLoop.ref();
     Thread th = new Thread(() -> {
       try {
@@ -156,17 +173,25 @@ public final class V6Process {
     return s;
   }
 
-  public static V6Object build() {
+  public static V6EventEmitterObject build() {
+    return build(true);
+  }
+
+  public static V6EventEmitterObject buildForRequest() {
+    return build(false);
+  }
+
+  private static V6EventEmitterObject build(boolean wireSignals) {
     V6EventEmitterObject o = new V6EventEmitterObject();
     o.setProto(V6EventEmitterConstructor.PROTOTYPE);
-    processObj = o;
 
     o.defineGetter("argv", (t, a) -> {
       V6Array argv = new V6Array();
       argv.push(str("v6"));
-      if (!scriptPath.isEmpty())
-        argv.push(str(scriptPath));
-      for (String s : rawArgv)
+      String path = scriptPathValue();
+      if (!path.isEmpty())
+        argv.push(str(path));
+      for (String s : rawArgv())
         argv.push(str(s));
       return objValue(argv);
     });
@@ -180,9 +205,11 @@ public final class V6Process {
     versions.set("node", str("20.0.0"));
     o.set("versions", objValue(versions));
 
-    o.set("cwd", fn((thisArg, args) -> str(cwdOverride != null
-                                              ? cwdOverride
-                                              : System.getProperty("user.dir", "."))));
+    o.set("cwd", fn((thisArg, args) -> {
+            String cwd = CWD_OVERRIDE.get();
+            return str(cwd != null ? cwd
+                                   : System.getProperty("user.dir", "."));
+          }));
 
     o.set("exit", fn((thisArg, args) -> {
             int code = args.length > 0 ? (int)args[0].toNumber() : 0;
@@ -264,7 +291,8 @@ public final class V6Process {
             return new V6Value(V6Value.TAG_BOOL, 1, null);
           }));
 
-    wireSignalHandlers(o);
+    if (wireSignals)
+      wireSignalHandlers(o);
 
     return o;
   }

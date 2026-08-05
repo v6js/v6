@@ -915,7 +915,7 @@ public final class V6Builtins {
   }
 
   public static final V6Value NODE_EVENTS = buildEventsModule();
-  public static final V6Value PROCESS = objValue(V6Process.build());
+  public static final V6Value PROCESS = objValue(new V6ProcessDispatchObject());
   public static final V6Value BUFFER = objValue(new V6BufferConstructor());
 
   private static V6Object bufferNamespace() {
@@ -937,11 +937,7 @@ public final class V6Builtins {
   public static final V6Value SET_IMMEDIATE = V6Timers.SET_IMMEDIATE;
   public static final V6Value CLEAR_IMMEDIATE = V6Timers.CLEAR_IMMEDIATE;
   public static final V6Value QUEUE_MICROTASK = V6Timers.QUEUE_MICROTASK;
-  public static V6Value GLOBAL_OBJECT = objValue(new V6Object());
-
-  public static void resetGlobalObject() {
-    GLOBAL_OBJECT = objValue(new V6Object());
-  }
+  public static final V6Value GLOBAL_OBJECT = objValue(new V6GlobalDispatchObject());
 
   public static final V6Value NODE_ASSERT =
       new V6Value(V6Value.TAG_FUNC, 0, V6Assert.build());
