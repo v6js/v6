@@ -783,7 +783,7 @@ static int build_target(const target_spec* t, const strlist* sources) {
   copy_file(bin_path, dev_bin);
 
   char dev_zip[256];
-  snprintf(dev_zip, sizeof(dev_zip), "build/target/%s-developer.zip",
+  snprintf(dev_zip, sizeof(dev_zip), "build/target/v6-%s-developer.zip",
            t->zig_target);
   if (package_zip(dev_stage, dev_zip) != 0) {
     fprintf(stderr, "  [%s] error: failed to create %s\n", t->zig_target,
@@ -805,7 +805,7 @@ static int build_target(const target_spec* t, const strlist* sources) {
     return -1;
 
   char port_zip[256];
-  snprintf(port_zip, sizeof(port_zip), "build/target/%s-portable.zip",
+  snprintf(port_zip, sizeof(port_zip), "build/target/v6-%s-portable.zip",
            t->zig_target);
   if (package_zip(port_stage, port_zip) != 0) {
     fprintf(stderr, "  [%s] error: failed to create %s\n", t->zig_target,
