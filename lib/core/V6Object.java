@@ -96,7 +96,7 @@ public class V6Object {
   public java.util.Set<String> keySet() {
     if (dictMode)
       return dictProps.keySet();
-    return new java.util.LinkedHashSet<>(java.util.Arrays.asList(shape.orderedKeys()));
+    return shape.keySet();
   }
 
   public boolean hasOwn(String key) {
@@ -154,31 +154,6 @@ public class V6Object {
       demoteToDict();
     if (dictMode)
       dictProps.remove(key);
-  }
-
-  private V6Callable findGetter(String key) {
-    if (getters != null) {
-      V6Callable g = getters.get(key);
-      if (g != null)
-        return g;
-    }
-    return proto != null ? proto.findGetter(key) : null;
-  }
-
-  private boolean hasAccessor(String key) {
-    if ((getters != null && getters.containsKey(key)) ||
-        (setters != null && setters.containsKey(key)))
-      return true;
-    return proto != null && proto.hasAccessor(key);
-  }
-
-  private V6Callable findSetter(String key) {
-    if (setters != null) {
-      V6Callable s = setters.get(key);
-      if (s != null)
-        return s;
-    }
-    return proto != null ? proto.findSetter(key) : null;
   }
 
   private void ensureCapacity(int min) {
@@ -239,23 +214,24 @@ public class V6Object {
     int idx = parseIndex(key);
     if (idx >= 0 && idx < elemCount)
       return elements[idx];
-    if (hasAccessor(key)) {
-      V6Callable g = findGetter(key);
-      if (g == null)
+    for (V6Object cur = this; cur != null; cur = cur.proto) {
+      if (cur.getters != null) {
+        V6Callable g = cur.getters.get(key);
+        if (g != null)
+          return g.call(receiver, EMPTY_ARGS);
+      }
+      if (cur.setters != null && cur.setters.containsKey(key))
         return new V6Value(V6Value.TAG_UNDEF, 0, null);
-      return g.call(receiver, EMPTY_ARGS);
+      if (!cur.dictMode) {
+        int slot = cur.shape.slotOf(key);
+        if (slot >= 0)
+          return cur.slots[slot];
+      } else {
+        V6Value v = cur.dictProps.get(key);
+        if (v != null)
+          return v;
+      }
     }
-    if (!dictMode) {
-      int slot = shape.slotOf(key);
-      if (slot >= 0)
-        return slots[slot];
-    } else {
-      V6Value v = dictProps.get(key);
-      if (v != null)
-        return v;
-    }
-    if (proto != null)
-      return proto.get(key, receiver);
     return new V6Value(V6Value.TAG_UNDEF, 0, null);
   }
 
@@ -288,11 +264,16 @@ public class V6Object {
   }
 
   public void set(String key, V6Value value) {
-    if (hasAccessor(key)) {
-      V6Callable s = findSetter(key);
-      if (s != null)
-        s.call(new V6Value(V6Value.TAG_OBJ, 0, this), new V6Value[] {value});
-      return;
+    for (V6Object cur = this; cur != null; cur = cur.proto) {
+      if (cur.setters != null) {
+        V6Callable s = cur.setters.get(key);
+        if (s != null) {
+          s.call(new V6Value(V6Value.TAG_OBJ, 0, this), new V6Value[] {value});
+          return;
+        }
+      }
+      if (cur.getters != null && cur.getters.containsKey(key))
+        return;
     }
     if (frozen)
       return;

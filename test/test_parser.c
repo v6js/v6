@@ -134,7 +134,8 @@ int test_compile_program(void) {
 
   class_file cf;
   cf_init(&cf, "Main", "java/lang/Object");
-  compile_result rc = compile_program("console.log(1 + 2 * 3);", &cf, NULL, NULL);
+  compile_result rc =
+      compile_program("console.log(1 + 2 * 3);", &cf, NULL, NULL);
   v6_check(&fails, rc.ok);
   v6_check(&fails, cf.method_len == prelude_method_len);
   cf_free(&cf);
@@ -154,21 +155,24 @@ int test_compile_program(void) {
   class_file cf4;
   cf_init(&cf4, "Main", "java/lang/Object");
   compile_result rc4 = compile_program(
-      "function add(a, b) { return a + b; } console.log(add(2, 3));", &cf4, NULL, NULL);
+      "function add(a, b) { return a + b; } console.log(add(2, 3));", &cf4,
+      NULL, NULL);
   v6_check(&fails, rc4.ok);
   v6_check(&fails, cf4.method_len == prelude_method_len + 2);
   cf_free(&cf4);
 
   class_file cf5;
   cf_init(&cf5, "Main", "java/lang/Object");
-  compile_result rc5 = compile_program("console.log(nope(1));", &cf5, NULL, NULL);
+  compile_result rc5 =
+      compile_program("console.log(nope(1));", &cf5, NULL, NULL);
   v6_check(&fails, rc5.ok);
   cf_free(&cf5);
 
   class_file cf6;
   cf_init(&cf6, "Main", "java/lang/Object");
   compile_result rc6 = compile_program(
-      "console.log(add(2, 3)); function add(a, b) { return a + b; }", &cf6, NULL, NULL);
+      "console.log(add(2, 3)); function add(a, b) { return a + b; }", &cf6,
+      NULL, NULL);
   v6_check(&fails, rc6.ok);
   cf_free(&cf6);
 
@@ -181,8 +185,8 @@ int test_compile_program(void) {
 
   class_file cf8;
   cf_init(&cf8, "Main", "java/lang/Object");
-  compile_result rc8 =
-      compile_program("var x = 1; x += 2; x++; --x; console.log(x);", &cf8, NULL, NULL);
+  compile_result rc8 = compile_program(
+      "var x = 1; x += 2; x++; --x; console.log(x);", &cf8, NULL, NULL);
   v6_check(&fails, rc8.ok);
   cf_free(&cf8);
 
@@ -222,7 +226,8 @@ int test_compile_program(void) {
 
   class_file cf13;
   cf_init(&cf13, "Main", "java/lang/Object");
-  compile_result rc13 = compile_program("const x = 1; x = 2;", &cf13, NULL, NULL);
+  compile_result rc13 =
+      compile_program("const x = 1; x = 2;", &cf13, NULL, NULL);
   v6_check(&fails, !rc13.ok);
   cf_free(&cf13);
 

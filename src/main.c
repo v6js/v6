@@ -56,7 +56,7 @@ static int v6_run_daemon_serve(const char* lock_path) {
   }
 
   v6_jvm_serve_daemon(jvm, lock_path, v6_daemon_idle_ms(), mtime, size,
-                     v6_daemon_exec_timeout_ms());
+                      v6_daemon_exec_timeout_ms());
   v6_jvm_destroy(jvm);
   return 0;
 }
@@ -204,7 +204,8 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  int uses_stdin = strstr(src, "stdin") != NULL || strstr(src, "readline") != NULL;
+  int uses_stdin =
+      strstr(src, "stdin") != NULL || strstr(src, "readline") != NULL;
 
   if (!classpath && !no_daemon && !uses_stdin) {
     int num_classes = 1 + modctx.count;

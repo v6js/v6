@@ -2,7 +2,8 @@ public final class V6JavaInstanceObject extends V6Object {
   public final Object instance;
   private final java.util.Map<String, java.lang.reflect.Field> fieldCache =
       new java.util.HashMap<>();
-  private final java.util.Map<String, V6Value> props = new java.util.HashMap<>();
+  private final java.util.Map<String, V6Value> props =
+      new java.util.HashMap<>();
 
   public V6JavaInstanceObject(Object instance) {
     this.instance = instance;

@@ -16,8 +16,8 @@ static int num_ident_is_param(num_fn_ctx* nf, tok name, int* out_idx) {
   return 0;
 }
 
-const char* find_num_shadow_fn(compiler* c, const char* name,
-                                      size_t len, int* out_arity) {
+const char* find_num_shadow_fn(compiler* c, const char* name, size_t len,
+                               int* out_arity) {
   while (c) {
     for (int i = 0; i < c->param_count; i++) {
       if (c->params[i].len == len && memcmp(c->params[i].name, name, len) == 0)
@@ -47,9 +47,8 @@ void build_num_sig(char* out, int arity) {
 static int compile_num_expr(parser* p, class_file* cf, method* m,
                             num_fn_ctx* nf, int emit);
 
-int compile_num_call_args(parser* p, class_file* cf, method* m,
-                                 num_fn_ctx* nf, int emit,
-                                 int expected_arity) {
+int compile_num_call_args(parser* p, class_file* cf, method* m, num_fn_ctx* nf,
+                          int emit, int expected_arity) {
   if (!check(p, tok_lparen))
     return 0;
   advance(p);
@@ -108,9 +107,8 @@ static int compile_num_primary(parser* p, class_file* cf, method* m,
       target_arity = nf->param_count;
     } else {
       target_arity = 0;
-      target_method =
-          find_num_shadow_fn(nf->sibling_scope, name.start, name.len,
-                             &target_arity);
+      target_method = find_num_shadow_fn(nf->sibling_scope, name.start,
+                                         name.len, &target_arity);
       if (!target_method)
         return 0;
     }
@@ -141,8 +139,8 @@ static int compile_num_unary(parser* p, class_file* cf, method* m,
   return compile_num_primary(p, cf, m, nf, emit);
 }
 
-static int compile_num_mul(parser* p, class_file* cf, method* m,
-                           num_fn_ctx* nf, int emit) {
+static int compile_num_mul(parser* p, class_file* cf, method* m, num_fn_ctx* nf,
+                           int emit) {
   if (!compile_num_unary(p, cf, m, nf, emit))
     return 0;
   for (;;) {
@@ -271,9 +269,8 @@ static int compile_num_body(parser* p, class_file* cf, method* m,
   }
 }
 
-int try_compile_num_shadow(compiler* c, tok fn_name,
-                                  const char* params_start,
-                                  char* out_shadow_name, int* out_arity) {
+int try_compile_num_shadow(compiler* c, tok fn_name, const char* params_start,
+                           char* out_shadow_name, int* out_arity) {
   num_fn_ctx nf;
   nf.self_name = fn_name.start;
   nf.self_len = fn_name.len;
@@ -312,8 +309,7 @@ int try_compile_num_shadow(compiler* c, tok fn_name,
   advance(&probe);
 
   int id = (*c->lambda_counter)++;
-  snprintf(nf.self_shadow_method, sizeof(nf.self_shadow_method), "numfn%d",
-           id);
+  snprintf(nf.self_shadow_method, sizeof(nf.self_shadow_method), "numfn%d", id);
 
   if (!compile_num_body(&probe, NULL, NULL, &nf, 0))
     return 0;
@@ -568,8 +564,8 @@ static int compile_raw_add(parser* p, compiler* c, raw_loop_ctx* rl, int emit,
   return 1;
 }
 
-static int compile_raw_shift(parser* p, compiler* c, raw_loop_ctx* rl,
-                             int emit, int mode) {
+static int compile_raw_shift(parser* p, compiler* c, raw_loop_ctx* rl, int emit,
+                             int mode) {
   if (!compile_raw_add(p, c, rl, emit, mode))
     return 0;
   int any = 0;
@@ -648,8 +644,8 @@ static int compile_raw_bitxor(parser* p, compiler* c, raw_loop_ctx* rl,
   return 1;
 }
 
-static int compile_raw_bitor(parser* p, compiler* c, raw_loop_ctx* rl,
-                             int emit, int mode) {
+static int compile_raw_bitor(parser* p, compiler* c, raw_loop_ctx* rl, int emit,
+                             int mode) {
   if (!compile_raw_bitxor(p, c, rl, emit, mode))
     return 0;
   int any = 0;

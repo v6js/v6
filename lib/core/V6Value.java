@@ -15,7 +15,8 @@ public record V6Value(int tag, double num, Object ref) {
 
   private static final int SMI_LOW = -1024;
   private static final int SMI_HIGH = 4096;
-  private static final V6Value[] SMI_CACHE = new V6Value[SMI_HIGH - SMI_LOW + 1];
+  private static final V6Value[] SMI_CACHE =
+      new V6Value[SMI_HIGH - SMI_LOW + 1];
   static {
     for (int i = SMI_LOW; i <= SMI_HIGH; i++)
       SMI_CACHE[i - SMI_LOW] = new V6Value(TAG_NUM, i, null);
@@ -399,7 +400,7 @@ public record V6Value(int tag, double num, Object ref) {
 
   private static boolean isFastIndex(V6Value key) {
     return key.tag == TAG_NUM && key.num >= 0 && key.num <= Integer.MAX_VALUE &&
-           key.num == Math.floor(key.num);
+        key.num == Math.floor(key.num);
   }
 
   public V6Value getIndexedOrProp(V6Value key) {

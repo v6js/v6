@@ -937,7 +937,8 @@ public final class V6Builtins {
   public static final V6Value SET_IMMEDIATE = V6Timers.SET_IMMEDIATE;
   public static final V6Value CLEAR_IMMEDIATE = V6Timers.CLEAR_IMMEDIATE;
   public static final V6Value QUEUE_MICROTASK = V6Timers.QUEUE_MICROTASK;
-  public static final V6Value GLOBAL_OBJECT = objValue(new V6GlobalDispatchObject());
+  public static final V6Value GLOBAL_OBJECT =
+      objValue(new V6GlobalDispatchObject());
 
   public static final V6Value NODE_ASSERT =
       new V6Value(V6Value.TAG_FUNC, 0, V6Assert.build());
@@ -991,6 +992,7 @@ public final class V6Builtins {
   private static final String URI_UNRESERVED =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()";
   private static final String URI_RESERVED = ";/?:@&=+$,#";
+  private static final char[] URI_HEX_DIGITS = "0123456789ABCDEF".toCharArray();
 
   private static String uriEncode(String s, String extraUnescaped) {
     byte[] bytes = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);
@@ -1001,7 +1003,10 @@ public final class V6Builtins {
           (URI_UNRESERVED.indexOf(c) >= 0 || extraUnescaped.indexOf(c) >= 0)) {
         sb.append(c);
       } else {
-        sb.append(String.format("%%%02X", b & 0xFF));
+        int v = b & 0xFF;
+        sb.append('%')
+            .append(URI_HEX_DIGITS[v >>> 4])
+            .append(URI_HEX_DIGITS[v & 0xf]);
       }
     }
     return sb.toString();
@@ -1049,5 +1054,4 @@ public final class V6Builtins {
     throw new V6Throw(
         new V6Value(V6Value.TAG_STR, 0, "EvalError: eval is not supported"));
   });
-
 }

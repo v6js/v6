@@ -1,5 +1,10 @@
 #include "v6/bytecode.h"
 
+#include "v6/internal.h"
+#include "v6/module.h"
+#include "v6/parser.h"
+
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -430,4 +435,278 @@ void cf_emit(class_file* cf, buf* out) {
     buf_u16(out, 0);
   }
   buf_u16(out, 0);
+}
+
+uint16_t value_class(class_file* cf) {
+  return cf_class(cf, "V6Value");
+}
+
+uint16_t value_ctor(class_file* cf) {
+  return cf_methodref(cf, "V6Value", "<init>", "(IDLjava/lang/Object;)V");
+}
+
+uint16_t value_num_method(class_file* cf) {
+  return cf_methodref(cf, "V6Value", "num", "(D)LV6Value;");
+}
+
+void emit_to_int32_raw(class_file* cf, method* m) {
+  uint16_t idx = cf_methodref(cf, "V6Value", "toInt32", "(D)I");
+  op_emit2(m, op_invokestatic, idx);
+}
+
+void emit_dconst_val(class_file* cf, method* m, double v) {
+  uint16_t idx = cf_double(cf, v);
+  op_emit2(m, op_ldc2_w, idx);
+}
+
+static void emit_wide_slot_op(method* m, uint8_t opcode, uint16_t slot) {
+  if (slot > 255) {
+    op_emit(m, op_wide);
+    op_emit2(m, opcode, slot);
+  } else {
+    op_emit1(m, opcode, (uint8_t)slot);
+  }
+}
+
+void emit_dstore(method* m, uint16_t slot) {
+  switch (slot) {
+  case 0:
+    op_emit(m, op_dstore_0);
+    return;
+  case 1:
+    op_emit(m, op_dstore_1);
+    return;
+  case 2:
+    op_emit(m, op_dstore_2);
+    return;
+  case 3:
+    op_emit(m, op_dstore_3);
+    return;
+  default:
+    emit_wide_slot_op(m, op_dstore, slot);
+    return;
+  }
+}
+
+void emit_dload(method* m, uint16_t slot) {
+  switch (slot) {
+  case 0:
+    op_emit(m, op_dload_0);
+    return;
+  case 1:
+    op_emit(m, op_dload_1);
+    return;
+  case 2:
+    op_emit(m, op_dload_2);
+    return;
+  case 3:
+    op_emit(m, op_dload_3);
+    return;
+  default:
+    emit_wide_slot_op(m, op_dload, slot);
+    return;
+  }
+}
+
+void emit_aload(method* m, uint16_t slot) {
+  switch (slot) {
+  case 0:
+    op_emit(m, op_aload_0);
+    return;
+  case 1:
+    op_emit(m, op_aload_1);
+    return;
+  case 2:
+    op_emit(m, op_aload_2);
+    return;
+  case 3:
+    op_emit(m, op_aload_3);
+    return;
+  default:
+    emit_wide_slot_op(m, op_aload, slot);
+    return;
+  }
+}
+
+void emit_astore(method* m, uint16_t slot) {
+  switch (slot) {
+  case 0:
+    op_emit(m, op_astore_0);
+    return;
+  case 1:
+    op_emit(m, op_astore_1);
+    return;
+  case 2:
+    op_emit(m, op_astore_2);
+    return;
+  case 3:
+    op_emit(m, op_astore_3);
+    return;
+  default:
+    emit_wide_slot_op(m, op_astore, slot);
+    return;
+  }
+}
+
+void emit_box_const(class_file* cf, method* m, uint8_t tag_op, uint8_t num_op) {
+  if (tag_op == op_iconst_0) {
+    op_emit(m, num_op);
+    op_emit2(m, op_invokestatic, value_num_method(cf));
+    return;
+  }
+  op_emit2(m, op_new, value_class(cf));
+  op_emit(m, op_dup);
+  op_emit(m, tag_op);
+  op_emit(m, num_op);
+  op_emit(m, op_aconst_null);
+  op_emit2(m, op_invokespecial, value_ctor(cf));
+}
+
+void emit_const_singleton(class_file* cf, method* m, const char* field) {
+  uint16_t idx = cf_fieldref(cf, "V6Value", field, "LV6Value;");
+  op_emit2(m, op_getstatic, idx);
+}
+
+void emit_undef(class_file* cf, method* m) {
+  emit_const_singleton(cf, m, "UNDEF");
+}
+
+static void emit_box_tag_m(class_file* cf, method* m, uint16_t scratch_slot,
+                           uint8_t tag_op) {
+  if (tag_op == op_iconst_0) {
+    op_emit2(m, op_invokestatic, value_num_method(cf));
+    return;
+  }
+  emit_dstore(m, scratch_slot);
+  op_emit2(m, op_new, value_class(cf));
+  op_emit(m, op_dup);
+  op_emit(m, tag_op);
+  emit_dload(m, scratch_slot);
+  op_emit(m, op_aconst_null);
+  op_emit2(m, op_invokespecial, value_ctor(cf));
+}
+
+void emit_box_tag(compiler* c, uint8_t tag_op) {
+  emit_box_tag_m(c->cf, c->m, c->scratch_slot, tag_op);
+}
+
+void emit_box_bool(compiler* c) {
+  emit_dstore(c->m, c->scratch_slot);
+  emit_dload(c->m, c->scratch_slot);
+  op_emit(c->m, op_dconst_0);
+  op_emit(c->m, op_dcmpg);
+  size_t false_jump = op_pos(c->m);
+  op_emit2(c->m, op_ifeq, 0);
+  emit_const_singleton(c->cf, c->m, "TRUE");
+  size_t end_jump = op_pos(c->m);
+  op_emit2(c->m, op_goto, 0);
+  size_t false_pos = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(false_jump + 1),
+            (uint16_t)(false_pos - false_jump));
+  emit_const_singleton(c->cf, c->m, "FALSE");
+  size_t end_pos = op_pos(c->m);
+  op_patch2(c->m, (uint16_t)(end_jump + 1), (uint16_t)(end_pos - end_jump));
+}
+
+void emit_to_number(compiler* c) {
+  uint16_t idx = cf_methodref(c->cf, "V6Value", "toNumber", "()D");
+  op_emit2(c->m, op_invokevirtual, idx);
+}
+
+void emit_truthy(compiler* c) {
+  uint16_t idx = cf_methodref(c->cf, "V6Value", "truthy", "()Z");
+  op_emit2(c->m, op_invokevirtual, idx);
+}
+
+void emit_iconst(method* m, int n) {
+  if (n >= -1 && n <= 5) {
+    op_emit(m, (uint8_t)(op_iconst_0 + n));
+    return;
+  }
+  if (n >= -128 && n <= 127) {
+    op_emit1(m, op_bipush, (uint8_t)n);
+    return;
+  }
+  op_emit2(m, op_sipush, (uint16_t)n);
+}
+
+static uint16_t ref_class(class_file* cf) {
+  return cf_class(cf, "V6Ref");
+}
+
+static uint16_t ref_ctor(class_file* cf) {
+  return cf_methodref(cf, "V6Ref", "<init>", "(LV6Value;)V");
+}
+
+static uint16_t ref_field(class_file* cf) {
+  return cf_fieldref(cf, "V6Ref", "value", "LV6Value;");
+}
+
+void emit_ref_push(compiler* c, int is_upvalue, uint16_t index) {
+  if (!is_upvalue) {
+    emit_aload(c->m, index);
+    return;
+  }
+  emit_aload(c->m, 0);
+  emit_iconst(c->m, (int)index);
+  op_emit(c->m, op_aaload);
+}
+
+static void emit_var_read(compiler* c, int is_upvalue, uint16_t index) {
+  emit_ref_push(c, is_upvalue, index);
+  op_emit2(c->m, op_getfield, ref_field(c->cf));
+}
+
+static void emit_var_write(compiler* c, int is_upvalue, uint16_t index) {
+  emit_ref_push(c, is_upvalue, index);
+  op_emit(c->m, op_swap);
+  op_emit(c->m, op_dup_x1);
+  op_emit2(c->m, op_putfield, ref_field(c->cf));
+}
+
+void emit_var_declare(compiler* c, uint16_t slot) {
+  if (!c->box_locals) {
+    emit_astore(c->m, slot);
+    return;
+  }
+  op_emit2(c->m, op_new, ref_class(c->cf));
+  op_emit(c->m, op_dup_x1);
+  op_emit(c->m, op_swap);
+  op_emit2(c->m, op_invokespecial, ref_ctor(c->cf));
+  emit_astore(c->m, slot);
+}
+
+void emit_var_read_ref(compiler* c, var_ref vr) {
+  if (!c->box_locals && vr.kind == var_local) {
+    emit_aload(c->m, vr.index);
+    return;
+  }
+  emit_var_read(c, vr.kind == var_upvalue, vr.index);
+}
+
+void emit_var_write_ref(compiler* c, var_ref vr) {
+  if (!c->box_locals && vr.kind == var_local) {
+    op_emit(c->m, op_dup);
+    emit_astore(c->m, vr.index);
+    return;
+  }
+  emit_var_write(c, vr.kind == var_upvalue, vr.index);
+}
+
+uint16_t object_class(class_file* cf) {
+  return cf_class(cf, "V6Object");
+}
+
+void emit_box_ref_computed(compiler* c, int tag_val) {
+  emit_astore(c->m, c->scratch_slot);
+  op_emit2(c->m, op_new, value_class(c->cf));
+  op_emit(c->m, op_dup);
+  emit_iconst(c->m, tag_val);
+  op_emit(c->m, op_dconst_0);
+  emit_aload(c->m, c->scratch_slot);
+  op_emit2(c->m, op_invokespecial, value_ctor(c->cf));
+}
+
+void emit_box_object_ref(compiler* c) {
+  emit_box_ref_computed(c, V6_TAG_OBJ);
 }

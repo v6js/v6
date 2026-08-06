@@ -21,8 +21,8 @@ public final class V6DiagnosticsChannel {
 
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
 
-  private static final InheritableThreadLocal<Map<String, V6Object>> CHANNELS_TL =
-      new InheritableThreadLocal<>();
+  private static final InheritableThreadLocal<Map<String, V6Object>>
+      CHANNELS_TL = new InheritableThreadLocal<>();
   private static final InheritableThreadLocal<Map<String, List<V6Callable>>>
       SUBSCRIBERS_TL = new InheritableThreadLocal<>();
 

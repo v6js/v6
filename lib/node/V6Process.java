@@ -102,8 +102,7 @@ public final class V6Process {
       return false;
     int count = (int)o.get("listenerCount")
                     .asCallable()
-                    .call(objValue(o),
-                          new V6Value[] {str("uncaughtException")})
+                    .call(objValue(o), new V6Value[] {str("uncaughtException")})
                     .toNumber();
     if (count == 0)
       return false;
@@ -207,8 +206,7 @@ public final class V6Process {
 
     o.set("cwd", fn((thisArg, args) -> {
             String cwd = CWD_OVERRIDE.get();
-            return str(cwd != null ? cwd
-                                   : System.getProperty("user.dir", "."));
+            return str(cwd != null ? cwd : System.getProperty("user.dir", "."));
           }));
 
     o.set("exit", fn((thisArg, args) -> {

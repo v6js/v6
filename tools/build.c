@@ -332,8 +332,7 @@ typedef struct {
 
 static int spawn_async(char* const argv[], proc_handle* out) {
 #ifdef _WIN32
-  out->handle =
-      _spawnvp(_P_NOWAIT, argv[0], (const char* const*)argv);
+  out->handle = _spawnvp(_P_NOWAIT, argv[0], (const char* const*)argv);
   return out->handle == -1 ? -1 : 0;
 #else
   int rc = posix_spawnp(&out->pid, argv[0], NULL, NULL, argv, environ);
@@ -469,8 +468,7 @@ static void list_files(const char* dir, const char* ext, strlist* out) {
 #endif
 }
 
-static int find_single_subdir(const char* parent, char* out,
-                              size_t out_size) {
+static int find_single_subdir(const char* parent, char* out, size_t out_size) {
 #ifdef _WIN32
   char pattern[1024];
   snprintf(pattern, sizeof(pattern), "%s\\*", parent);
@@ -579,7 +577,7 @@ static int ensure_jdk_downloaded(const target_spec* t, char* archive_path,
   }
   clean_name[j] = '\0';
   snprintf(archive_path, archive_path_size, "build/target/cache/%s-%s",
-          t->zig_target, clean_name);
+           t->zig_target, clean_name);
 
   if (path_exists(archive_path)) {
     char hash[65];
@@ -589,7 +587,7 @@ static int ensure_jdk_downloaded(const target_spec* t, char* archive_path,
       return 0;
     }
     printf("  [%s] cached jdk archive missing/mismatched, re-downloading\n",
-          t->zig_target);
+           t->zig_target);
   }
 
   printf("  [%s] downloading JDK: %s\n", t->zig_target, t->jdk_url);
@@ -618,13 +616,13 @@ static int stage_portable_jdk(const target_spec* t, const char* stage_dir) {
 
   char extract_dir[512];
   snprintf(extract_dir, sizeof(extract_dir), "build/target/jdk-extract/%s",
-          t->zig_target);
+           t->zig_target);
   remove_dir(extract_dir);
   ensure_dir(extract_dir);
 
   int rc = strcmp(t->jdk_archive_ext, "zip") == 0
-              ? extract_zip(archive_path, extract_dir)
-              : extract_targz(archive_path, extract_dir);
+               ? extract_zip(archive_path, extract_dir)
+               : extract_targz(archive_path, extract_dir);
   if (rc != 0) {
     fprintf(stderr, "  [%s] error: failed to extract JDK archive\n",
             t->zig_target);
@@ -653,8 +651,8 @@ static int stage_portable_jdk(const target_spec* t, const char* stage_dir) {
 #define MAX_PARALLEL 16
 
 static int compile_sources_parallel(const target_spec* t,
-                                    const strlist* sources,
-                                    const char* obj_dir, FILE* rsp) {
+                                    const strlist* sources, const char* obj_dir,
+                                    FILE* rsp) {
   int njobs = get_cpu_count();
   if (njobs < 1)
     njobs = 1;
@@ -676,7 +674,7 @@ static int compile_sources_parallel(const target_spec* t,
       base = base ? base + 1 : src;
       snprintf(obj_paths[k], sizeof(obj_paths[k]), "%s/%s.o", obj_dir, base);
       snprintf(inc_flags[k], sizeof(inc_flags[k]), "-Iinclude/jni/%s",
-              t->jni_dir);
+               t->jni_dir);
 
       int ac = 0;
       argvs[k][ac++] = "zig";
@@ -734,7 +732,7 @@ static int compile_and_link(const target_spec* t, const strlist* sources,
 
   char rsp_path[256];
   snprintf(rsp_path, sizeof(rsp_path), "build/target/obj/%s/link.rsp",
-          t->zig_target);
+           t->zig_target);
   FILE* rsp = fopen(rsp_path, "w");
   if (!rsp)
     return -1;
@@ -768,8 +766,8 @@ static int build_target(const target_spec* t, const strlist* sources) {
   char bin_name[64];
   snprintf(bin_name, sizeof(bin_name), "v6%s", t->exe_suffix);
   char bin_path[256];
-  snprintf(bin_path, sizeof(bin_path), "build/target/bin/%s/%s",
-          t->zig_target, bin_name);
+  snprintf(bin_path, sizeof(bin_path), "build/target/bin/%s/%s", t->zig_target,
+           bin_name);
 
   if (compile_and_link(t, sources, bin_path) != 0)
     return -1;
@@ -777,7 +775,7 @@ static int build_target(const target_spec* t, const strlist* sources) {
 
   char dev_stage[256];
   snprintf(dev_stage, sizeof(dev_stage), "build/target/stage/%s-developer",
-          t->zig_target);
+           t->zig_target);
   remove_dir(dev_stage);
   ensure_dir(dev_stage);
   char dev_bin[256];
@@ -786,7 +784,7 @@ static int build_target(const target_spec* t, const strlist* sources) {
 
   char dev_zip[256];
   snprintf(dev_zip, sizeof(dev_zip), "build/target/%s-developer.zip",
-          t->zig_target);
+           t->zig_target);
   if (package_zip(dev_stage, dev_zip) != 0) {
     fprintf(stderr, "  [%s] error: failed to create %s\n", t->zig_target,
             dev_zip);
@@ -796,7 +794,7 @@ static int build_target(const target_spec* t, const strlist* sources) {
 
   char port_stage[256];
   snprintf(port_stage, sizeof(port_stage), "build/target/stage/%s-portable",
-          t->zig_target);
+           t->zig_target);
   remove_dir(port_stage);
   ensure_dir(port_stage);
   char port_bin[256];
@@ -808,7 +806,7 @@ static int build_target(const target_spec* t, const strlist* sources) {
 
   char port_zip[256];
   snprintf(port_zip, sizeof(port_zip), "build/target/%s-portable.zip",
-          t->zig_target);
+           t->zig_target);
   if (package_zip(port_stage, port_zip) != 0) {
     fprintf(stderr, "  [%s] error: failed to create %s\n", t->zig_target,
             port_zip);
@@ -870,7 +868,7 @@ int main(int argc, char** argv) {
   strlist_free(&sources);
 
   printf("\n%d/%d targets succeeded (2 zip(s) each)\n", ok_count,
-        selected_count);
+         selected_count);
   if (fail_count > 0) {
     printf("failed targets:\n");
     for (int i = 0; i < fail_count; i++)

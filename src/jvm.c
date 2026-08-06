@@ -340,8 +340,7 @@ int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
 
 int v6_jvm_serve_daemon(v6_jvm* jvm, const char* lock_file_path,
                         long idle_timeout_ms, long long binary_mtime,
-                        long long binary_size,
-                        long long execution_timeout_ms) {
+                        long long binary_size, long long execution_timeout_ms) {
   JNIEnv* env = jvm->env;
   jclass daemon_cls = (*env)->FindClass(env, "V6Daemon");
   if (!daemon_cls) {
@@ -363,8 +362,7 @@ int v6_jvm_serve_daemon(v6_jvm* jvm, const char* lock_file_path,
   jstring lock_str = (*env)->NewStringUTF(env, lock_file_path);
   (*env)->CallStaticVoidMethod(env, daemon_cls, serve_m, lock_str,
                                (jlong)idle_timeout_ms, (jlong)binary_mtime,
-                               (jlong)binary_size,
-                               (jlong)execution_timeout_ms);
+                               (jlong)binary_size, (jlong)execution_timeout_ms);
   if ((*env)->ExceptionCheck(env)) {
     (*env)->ExceptionDescribe(env);
     (*env)->ExceptionClear(env);
@@ -428,8 +426,7 @@ int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
 
 int v6_jvm_serve_daemon(v6_jvm* jvm, const char* lock_file_path,
                         long idle_timeout_ms, long long binary_mtime,
-                        long long binary_size,
-                        long long execution_timeout_ms) {
+                        long long binary_size, long long execution_timeout_ms) {
   (void)jvm;
   (void)lock_file_path;
   (void)idle_timeout_ms;

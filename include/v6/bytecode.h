@@ -5,6 +5,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+enum {
+  V6_TAG_NUM = 0,
+  V6_TAG_BOOL = 1,
+  V6_TAG_NULL = 2,
+  V6_TAG_UNDEF = 3,
+  V6_TAG_OBJ = 4,
+  V6_TAG_STR = 5,
+  V6_TAG_FUNC = 6,
+  V6_TAG_BIGINT = 7,
+};
+
 typedef enum {
   op_nop = 0x00,
   op_aconst_null = 0x01,
@@ -241,3 +252,10 @@ void method_add_exception(method* m, uint16_t start_pc, uint16_t end_pc,
                           uint16_t handler_pc, uint16_t catch_type);
 
 void cf_emit(class_file* cf, buf* out);
+
+uint16_t value_ctor(class_file* cf);
+uint16_t value_num_method(class_file* cf);
+void emit_box_const(class_file* cf, method* m, uint8_t tag_op, uint8_t num_op);
+void emit_const_singleton(class_file* cf, method* m, const char* field);
+void emit_undef(class_file* cf, method* m);
+uint16_t object_class(class_file* cf);

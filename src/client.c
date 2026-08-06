@@ -258,7 +258,7 @@ static void v6_spawn_daemon(const char* exe_path, const char* lock_path) {
 #ifdef _WIN32
   char cmdline[2048];
   snprintf(cmdline, sizeof(cmdline), "\"%s\" --__v6_daemon_serve__ \"%s\"",
-          exe_path, lock_path);
+           exe_path, lock_path);
   STARTUPINFOA si;
   PROCESS_INFORMATION pi;
   memset(&si, 0, sizeof(si));
@@ -285,7 +285,7 @@ static void v6_spawn_daemon(const char* exe_path, const char* lock_path) {
           close(devnull);
       }
       execl(exe_path, exe_path, "--__v6_daemon_serve__", lock_path,
-           (char*)NULL);
+            (char*)NULL);
       _exit(127);
     }
     _exit(0);
@@ -449,8 +449,8 @@ static int v6_stream_response(v6_sock s, int* exit_code) {
 }
 
 int v6_daemon_run(const char* exe_path, v6_daemon_class_entry* classes,
-                  int num_classes, const char* script_path,
-                  char** script_args, int script_argc, int* exit_code) {
+                  int num_classes, const char* script_path, char** script_args,
+                  int script_argc, int* exit_code) {
   if (v6_sockets_init() != 0)
     return 0;
 

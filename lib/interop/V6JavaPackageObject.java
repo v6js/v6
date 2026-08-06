@@ -1,6 +1,7 @@
 public final class V6JavaPackageObject extends V6Object {
   private final String prefix;
-  private final java.util.Map<String, V6Value> props = new java.util.HashMap<>();
+  private final java.util.Map<String, V6Value> props =
+      new java.util.HashMap<>();
 
   public V6JavaPackageObject(String prefix) {
     this.prefix = prefix;

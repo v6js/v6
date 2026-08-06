@@ -101,13 +101,26 @@ public final class V6BufferConstructor
     return new byte[0];
   }
 
+  private static int hexNibble(char c) {
+    if (c >= '0' && c <= '9')
+      return c - '0';
+    if (c >= 'a' && c <= 'f')
+      return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+      return c - 'A' + 10;
+    return -1;
+  }
+
   static byte[] decodeString(String s, String encoding) {
     switch (encoding.toLowerCase()) {
     case "hex":
       int n = s.length() / 2;
       byte[] out = new byte[n];
-      for (int i = 0; i < n; i++)
-        out[i] = (byte)Integer.parseInt(s.substring(i * 2, i * 2 + 2), 16);
+      for (int i = 0; i < n; i++) {
+        int hi = hexNibble(s.charAt(i * 2));
+        int lo = hexNibble(s.charAt(i * 2 + 1));
+        out[i] = (byte)((hi << 4) | lo);
+      }
       return out;
     case "base64":
       return Base64.getDecoder().decode(s);
@@ -120,13 +133,18 @@ public final class V6BufferConstructor
     }
   }
 
+  private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
+
   static String encodeBytes(byte[] bytes, String encoding) {
     switch (encoding.toLowerCase()) {
     case "hex":
-      StringBuilder sb = new StringBuilder();
-      for (byte b : bytes)
-        sb.append(String.format("%02x", b));
-      return sb.toString();
+      char[] out = new char[bytes.length * 2];
+      for (int i = 0; i < bytes.length; i++) {
+        int b = bytes[i] & 0xff;
+        out[i * 2] = HEX_DIGITS[b >>> 4];
+        out[i * 2 + 1] = HEX_DIGITS[b & 0xf];
+      }
+      return new String(out);
     case "base64":
       return Base64.getEncoder().encodeToString(bytes);
     case "ascii":

@@ -1,6 +1,8 @@
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class V6Shape {
@@ -15,6 +17,7 @@ public final class V6Shape {
   private final ConcurrentHashMap<String, V6Shape> transitions =
       new ConcurrentHashMap<>(4);
   private volatile String[] orderedKeys;
+  private volatile Set<String> keySetCache;
 
   private V6Shape(V6Shape parent, String addedKey, int slotCount,
                   Map<String, Integer> slotIndex) {
@@ -53,5 +56,15 @@ public final class V6Shape {
   public int slotOf(String key) {
     Integer slot = slotIndex.get(key);
     return slot != null ? slot : -1;
+  }
+
+  public Set<String> keySet() {
+    Set<String> ks = keySetCache;
+    if (ks != null)
+      return ks;
+    ks = Collections.unmodifiableSet(
+        new LinkedHashSet<>(java.util.Arrays.asList(orderedKeys())));
+    keySetCache = ks;
+    return ks;
   }
 }

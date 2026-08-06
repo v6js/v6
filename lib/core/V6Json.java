@@ -2,6 +2,8 @@ public final class V6Json {
   private V6Json() {
   }
 
+  private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
+
   public static V6Value parse(String text) {
     int[] pos = {0};
     skipWs(text, pos);
@@ -433,10 +435,13 @@ public final class V6Json {
         out.append("\\f");
         break;
       default:
-        if (c < 0x20)
-          out.append(String.format("\\u%04x", (int)c));
-        else
+        if (c < 0x20) {
+          out.append("\\u00");
+          out.append(HEX_DIGITS[(c >>> 4) & 0xf]);
+          out.append(HEX_DIGITS[c & 0xf]);
+        } else {
           out.append(c);
+        }
       }
     }
     out.append('"');

@@ -49,7 +49,8 @@ public final class V6BroadcastChannelConstructor
     V6BroadcastChannelObject ch = new V6BroadcastChannelObject();
     ch.setProto(PROTOTYPE);
     ch.name = V6Value.argAt(args, 0).toString();
-    registry().computeIfAbsent(ch.name, k -> new CopyOnWriteArrayList<>())
+    registry()
+        .computeIfAbsent(ch.name, k -> new CopyOnWriteArrayList<>())
         .add(ch);
     return objValue(ch);
   }

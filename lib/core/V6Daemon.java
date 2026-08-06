@@ -64,7 +64,7 @@ public final class V6Daemon {
         pid + "\n" + port + "\n" + binaryMtime + "\n" + binarySize + "\n";
     Files.writeString(tmp, content, StandardCharsets.UTF_8);
     Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING,
-              StandardCopyOption.ATOMIC_MOVE);
+               StandardCopyOption.ATOMIC_MOVE);
   }
 
   private static int maxConcurrentRequests() {
@@ -90,9 +90,8 @@ public final class V6Daemon {
       s.setSoTimeout(15000);
       DataInputStream in = new DataInputStream(
           new java.io.BufferedInputStream(s.getInputStream()));
-      DataOutputStream out =
-          new DataOutputStream(new java.io.BufferedOutputStream(
-              s.getOutputStream(), 8192));
+      DataOutputStream out = new DataOutputStream(
+          new java.io.BufferedOutputStream(s.getOutputStream(), 8192));
 
       int numClasses = in.readInt();
       String[] classNames = new String[numClasses];
@@ -227,8 +226,7 @@ public final class V6Daemon {
         try {
           synchronized (lock) {
             taggedErr.println("error: script execution exceeded " +
-                              executionTimeoutMillis +
-                              "ms; daemon restarting");
+                              executionTimeoutMillis + "ms; daemon restarting");
             out.writeByte(TAG_EXIT);
             out.writeInt(124);
             out.flush();
@@ -280,8 +278,8 @@ public final class V6Daemon {
           socket = server.accept();
         } catch (java.net.SocketTimeoutException te) {
           boolean idle = permits.availablePermits() == maxConcurrent;
-          if (idle && System.currentTimeMillis() - lastActivity >
-                          idleTimeoutMillis)
+          if (idle &&
+              System.currentTimeMillis() - lastActivity > idleTimeoutMillis)
             break;
           continue;
         }
@@ -294,9 +292,9 @@ public final class V6Daemon {
         }
         Thread connHandler = new Thread(() -> {
           try {
-            boolean didWedge = handleConnection(
-                socket, parentLoader, dispatchOut, dispatchErr,
-                executionTimeoutMillis);
+            boolean didWedge =
+                handleConnection(socket, parentLoader, dispatchOut, dispatchErr,
+                                 executionTimeoutMillis);
             if (didWedge) {
               wedged.set(true);
               try {

@@ -46,7 +46,8 @@ public final class V6EventEmitterConstructor
         key instanceof V6Object ? ((V6Object)key).resolveEmitterTarget() : key;
     if (resolved instanceof V6EventEmitterObject)
       return (V6EventEmitterObject)resolved;
-    return MIXIN_STATE.computeIfAbsent(resolved, k -> new V6EventEmitterObject());
+    return MIXIN_STATE.computeIfAbsent(resolved,
+                                       k -> new V6EventEmitterObject());
   }
 
   private static V6Object buildPrototype() {
