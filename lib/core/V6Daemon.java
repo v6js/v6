@@ -142,6 +142,7 @@ public final class V6Daemon {
         String v = readString(in);
         env.put(k, v);
       }
+      boolean colorEnabled = in.readByte() != 0;
 
       if (mainClass == null) {
         out.writeByte(TAG_EXIT);
@@ -157,6 +158,7 @@ public final class V6Daemon {
       V6GlobalDispatchObject.resetForThread();
       V6Process.resetForRequest(env, cwd);
       V6ProcessDispatchObject.bindForThread(V6Process.buildForRequest());
+      V6Builtins.setColorEnabled(colorEnabled);
 
       Object lock = new Object();
       V6TaggedStream rawOut = new V6TaggedStream(out, TAG_STDOUT, lock);
@@ -182,6 +184,7 @@ public final class V6Daemon {
         }
         dispatchOut.unbind();
         dispatchErr.unbind();
+        V6Builtins.clearColorEnabled();
         return false;
       }
 
@@ -196,7 +199,7 @@ public final class V6Daemon {
             exitCodeHolder[0] = ((V6ProcessExit)cause).code;
           } else if (cause instanceof V6Throw) {
             V6Value v = ((V6Throw)cause).value;
-            taggedErr.println("Uncaught " + v.toString());
+            taggedErr.println("Uncaught " + V6Throw.formatUncaught(v));
             exitCodeHolder[0] = 1;
           } else {
             if (cause != null)
@@ -221,6 +224,7 @@ public final class V6Daemon {
 
       dispatchOut.unbind();
       dispatchErr.unbind();
+      V6Builtins.clearColorEnabled();
 
       if (worker.isAlive()) {
         try {

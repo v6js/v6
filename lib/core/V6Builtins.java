@@ -34,6 +34,30 @@ public final class V6Builtins {
 
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
 
+  private static final InheritableThreadLocal<Boolean> COLOR_ENABLED =
+      new InheritableThreadLocal<>();
+
+  public static void setColorEnabled(boolean v) {
+    COLOR_ENABLED.set(v);
+  }
+
+  public static void clearColorEnabled() {
+    COLOR_ENABLED.remove();
+  }
+
+  private static boolean colorEnabled() {
+    Boolean v = COLOR_ENABLED.get();
+    return v != null && v;
+  }
+
+  private static final String C_RESET = "[0m";
+  private static final String C_YELLOW = "[33m";
+  private static final String C_GREEN = "[32m";
+
+  private static String colorize(String code, String s) {
+    return colorEnabled() ? code + s + C_RESET : s;
+  }
+
   private static void flattenInto(V6Object arr, int depth, V6Array out) {
     int len = (int)arr.get("length").num();
     for (int i = 0; i < len; i++) {
@@ -55,9 +79,13 @@ public final class V6Builtins {
 
   static String inspect(V6Value v, java.util.Map<Object, Boolean> seen) {
     if (v.tag() == V6Value.TAG_STR)
-      return "'" + v.toString().replace("'", "\\'") + "'";
+      return colorize(C_GREEN, "'" + v.toString().replace("'", "\\'") + "'");
     if (v.tag() == V6Value.TAG_BIGINT)
-      return v.toString() + "n";
+      return colorize(C_YELLOW, v.toString() + "n");
+    if (v.tag() == V6Value.TAG_BOOL)
+      return colorize(C_YELLOW, v.toString());
+    if (v.tag() == V6Value.TAG_NUM)
+      return colorize(C_YELLOW, v.toString());
     if (v.tag() != V6Value.TAG_OBJ)
       return v.toString();
     Object ref = v.ref();
@@ -116,6 +144,12 @@ public final class V6Builtins {
       sb.append(inspectTop(args[i]));
     }
     System.out.println(sb.toString());
+    return UNDEF;
+  });
+
+  public static final V6Value REPL_ECHO = fn((thisArg, args) -> {
+    V6Value v = V6Value.argAt(args, 0);
+    System.out.println(inspect(v, new java.util.IdentityHashMap<>()));
     return UNDEF;
   });
 

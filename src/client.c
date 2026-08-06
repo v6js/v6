@@ -372,7 +372,8 @@ static void v6_write_env_block(buf* b) {
 
 static void v6_build_request(buf* b, v6_daemon_class_entry* classes,
                              int num_classes, const char* script_path,
-                             char** script_args, int script_argc) {
+                             char** script_args, int script_argc,
+                             int color_enabled) {
   buf_u32(b, (uint32_t)num_classes);
   for (int i = 0; i < num_classes; i++) {
     size_t nlen = strlen(classes[i].name);
@@ -401,6 +402,7 @@ static void v6_build_request(buf* b, v6_daemon_class_entry* classes,
   buf_bytes(b, (const uint8_t*)cwd, cwlen);
 
   v6_write_env_block(b);
+  buf_u8(b, (uint8_t)(color_enabled ? 1 : 0));
 }
 
 static int v6_stream_response(v6_sock s, int* exit_code) {
@@ -450,7 +452,7 @@ static int v6_stream_response(v6_sock s, int* exit_code) {
 
 int v6_daemon_run(const char* exe_path, v6_daemon_class_entry* classes,
                   int num_classes, const char* script_path, char** script_args,
-                  int script_argc, int* exit_code) {
+                  int script_argc, int color_enabled, int* exit_code) {
   if (v6_sockets_init() != 0)
     return 0;
 
@@ -489,7 +491,7 @@ int v6_daemon_run(const char* exe_path, v6_daemon_class_entry* classes,
   buf req;
   buf_init(&req);
   v6_build_request(&req, classes, num_classes, script_path, script_args,
-                   script_argc);
+                   script_argc, color_enabled);
 
   int ok = v6_send_all(sock, req.data, req.len) == 0;
   buf_free(&req);

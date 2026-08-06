@@ -5,6 +5,7 @@
 typedef struct v6_jvm v6_jvm;
 
 int v6_jvm_available(void);
+int v6_jvm_detect_version(char* out, size_t out_cap);
 v6_jvm* v6_jvm_create(const char* classpath, int is_daemon);
 int v6_jvm_load_runtime(v6_jvm* jvm);
 int v6_jvm_define_extra(v6_jvm* jvm, const char* name,

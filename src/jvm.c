@@ -2,6 +2,7 @@
 #define _DEFAULT_SOURCE
 #endif
 
+#include "v6/color.h"
 #include "v6/jvm.h"
 #include "v6/runtime.h"
 
@@ -107,6 +108,50 @@ static v6_lib v6_open_jvm_lib(void) {
   char path[1024];
   snprintf(path, sizeof(path), "%s/%s", home, v6_jvm_lib_rel);
   return v6_lib_open(path);
+}
+
+static int v6_parse_release_file(const char* root, char* out, size_t out_cap) {
+  char path[1200];
+  snprintf(path, sizeof(path), "%s/release", root);
+  FILE* f = fopen(path, "rb");
+  if (!f)
+    return -1;
+  char line[256];
+  int found = -1;
+  while (fgets(line, sizeof(line), f)) {
+    if (strncmp(line, "JAVA_VERSION=", 13) != 0)
+      continue;
+    char* start = strchr(line, '"');
+    if (!start)
+      break;
+    start++;
+    char* end = strchr(start, '"');
+    if (!end)
+      break;
+    size_t n = (size_t)(end - start);
+    if (n >= out_cap)
+      n = out_cap - 1;
+    memcpy(out, start, n);
+    out[n] = '\0';
+    found = 0;
+    break;
+  }
+  fclose(f);
+  return found;
+}
+
+int v6_jvm_detect_version(char* out, size_t out_cap) {
+  char exe_dir[1024];
+  if (v6_get_exe_dir(exe_dir, sizeof(exe_dir)) == 0) {
+    char root[1024];
+    snprintf(root, sizeof(root), "%s/jdk", exe_dir);
+    if (v6_parse_release_file(root, out, out_cap) == 0)
+      return 0;
+  }
+  const char* home = getenv("JAVA_HOME");
+  if (home && v6_parse_release_file(home, out, out_cap) == 0)
+    return 0;
+  return -1;
 }
 
 typedef jint(JNICALL* v6_create_vm_fn)(JavaVM**, void**, void*);
@@ -265,26 +310,47 @@ int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
 
   jclass cls = (*env)->DefineClass(env, "Main", jvm->loader,
                                    (const jbyte*)class_bytes, (jsize)len);
-  if (!cls)
+  if (!cls) {
+    fprintf(stderr, "error: failed to load compiled program\n");
     return -1;
+  }
 
   jmethodID main_m =
       (*env)->GetStaticMethodID(env, cls, "main", "([Ljava/lang/String;)V");
-  if (!main_m)
+  if (!main_m) {
+    fprintf(stderr, "error: compiled program has no entry point\n");
     return -1;
+  }
 
   jclass str_cls = (*env)->FindClass(env, "java/lang/String");
-  if (!str_cls)
+  if (!str_cls) {
+    fprintf(stderr, "error: internal JVM setup failure\n");
     return -1;
+  }
 
   jobjectArray args =
       (*env)->NewObjectArray(env, (jsize)script_argc, str_cls, NULL);
-  if (!args)
+  if (!args) {
+    fprintf(stderr, "error: internal JVM setup failure\n");
     return -1;
+  }
 
   for (int i = 0; i < script_argc; i++) {
     jstring s = (*env)->NewStringUTF(env, script_args[i]);
     (*env)->SetObjectArrayElement(env, args, i, s);
+  }
+
+  jclass builtins_cls = (*env)->FindClass(env, "V6Builtins");
+  if ((*env)->ExceptionCheck(env))
+    (*env)->ExceptionClear(env);
+  if (builtins_cls) {
+    jmethodID set_color =
+        (*env)->GetStaticMethodID(env, builtins_cls, "setColorEnabled", "(Z)V");
+    if (set_color)
+      (*env)->CallStaticVoidMethod(env, builtins_cls, set_color,
+                                   (jboolean)v6_color_enabled_out());
+    if ((*env)->ExceptionCheck(env))
+      (*env)->ExceptionClear(env);
   }
 
   (*env)->CallStaticVoidMethod(env, cls, main_m, args);
@@ -311,20 +377,22 @@ int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
           (*env)->GetFieldID(env, throw_cls, "value", "LV6Value;");
       jobject value =
           value_fld ? (*env)->GetObjectField(env, exc, value_fld) : NULL;
-      jclass value_cls = value ? (*env)->GetObjectClass(env, value) : NULL;
-      jmethodID to_string =
-          value_cls ? (*env)->GetMethodID(env, value_cls, "toString",
-                                          "()Ljava/lang/String;")
-                    : NULL;
-      jstring msg =
-          to_string ? (jstring)(*env)->CallObjectMethod(env, value, to_string)
-                    : NULL;
+      jmethodID format_m =
+          value ? (*env)->GetStaticMethodID(env, throw_cls, "formatUncaught",
+                                            "(LV6Value;)Ljava/lang/String;")
+                : NULL;
+      jstring msg = format_m ? (jstring)(*env)->CallStaticObjectMethod(
+                                   env, throw_cls, format_m, value)
+                             : NULL;
+      int c = v6_color_enabled_err();
       if (msg) {
         const char* msg_c = (*env)->GetStringUTFChars(env, msg, NULL);
-        fprintf(stderr, "Uncaught %s\n", msg_c);
+        fprintf(stderr, "%s%sUncaught%s %s\n", v6_c_bold(c), v6_c_red(c),
+                v6_c_reset(c), msg_c);
         (*env)->ReleaseStringUTFChars(env, msg, msg_c);
       } else {
-        fprintf(stderr, "Uncaught exception (V6Throw)\n");
+        fprintf(stderr, "%s%sUncaught exception (V6Throw)%s\n", v6_c_bold(c),
+                v6_c_red(c), v6_c_reset(c));
       }
       (*env)->ExceptionClear(env);
     } else {
@@ -392,6 +460,12 @@ struct v6_jvm {
 
 int v6_jvm_available(void) {
   return 0;
+}
+
+int v6_jvm_detect_version(char* out, size_t out_cap) {
+  (void)out;
+  (void)out_cap;
+  return -1;
 }
 
 v6_jvm* v6_jvm_create(const char* classpath, int is_daemon) {
