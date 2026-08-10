@@ -2,6 +2,8 @@
 
 V6 is a JavaScript runtime built on the JVM. It compiles JavaScript directly to JVM bytecode and runs it with a persistent warm process so repeated runs start fast. V6 also runs Java code from JavaScript through a built-in `java:` import scheme and can compile a script into a standalone executable JAR.
 
+V6 is experimental. Test262 conformance testing is not yet part of the release process and many other features are not yet implemented.
+
 ### Installation
 
 Each release ships two variants per platform.

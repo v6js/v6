@@ -197,11 +197,7 @@ RT_CLASS_OBJS := $(patsubst %,$(OBJ)/rt/%.o,$(RT_CLASS_NAMES))
 RT_TABLE_C := $(GEN)/runtime_classes.c
 GEN_ABS := $(abspath $(GEN))
 
-ifeq ($(PLATFORM),windows)
-  GRADLE ?= C:/Users/abdi/Downloads/gradle-9.6.1/bin/gradle.bat
-else
-  GRADLE ?= gradle
-endif
+GRADLE ?= gradle
 
 FMT_FILES := $(wildcard src/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java) $(wildcard lib/node/*.java) $(wildcard lib/shared/*.java) $(wildcard lib/web/*.java) $(wildcard lib/interop/*.java)
 
