@@ -48,6 +48,10 @@ else
   LDLIBS :=
 endif
 
+ifeq ($(PLATFORM),windows)
+  LDFLAGS += -Wl,/STACK:8388608
+endif
+
 BUILD_TYPE ?= debug
 
 ifeq ($(BUILD_TYPE),release)
@@ -95,6 +99,7 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Shape.ja
                 lib/core/V6AsyncFunction.java lib/core/V6AsyncGenerator.java \
                 lib/core/V6AsyncGeneratorFunction.java \
                 lib/core/V6Regex.java lib/core/V6RegexConstructor.java \
+                lib/core/V6ErrorConstructor.java \
                 lib/core/V6FunctionConstructor.java \
                 lib/core/V6ArrayConstructor.java \
                 lib/core/V6StringConstructor.java \

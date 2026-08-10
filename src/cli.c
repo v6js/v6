@@ -1,6 +1,7 @@
 #include "v6/cli.h"
 
 #include "v6/bytecode.h"
+#include "v6/cache.h"
 #include "v6/daemon.h"
 #include "v6/jar.h"
 #include "v6/jvm.h"
@@ -182,32 +183,87 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
 
 int v6_cli_run_source(const char* src, const char* in_path,
                       v6_cli_options* opts) {
-  class_file cf;
-  cf_init(&cf, "Main", "java/lang/Object");
+  int cacheable = strcmp(in_path, "[eval]") != 0;
 
   module_ctx modctx;
-  compile_result rc = compile_program(src, &cf, in_path, &modctx);
-
-  if (!rc.ok) {
-    int c = v6_color_enabled_err();
-    fprintf(stderr, "%s%serror%s: %s:%d: %s\n", v6_c_bold(c), v6_c_red(c),
-            v6_c_reset(c), in_path, rc.line, rc.message);
-    cf_free(&cf);
-    return 1;
-  }
-
   buf out;
-  buf_init(&out);
-  cf_emit(&cf, &out);
-  cf_free(&cf);
+  buf* mod_bufs = NULL;
 
-  buf* mod_bufs =
-      modctx.count > 0 ? malloc(sizeof(buf) * (size_t)modctx.count) : NULL;
-  for (int i = 0; i < modctx.count; i++) {
-    buf_init(&mod_bufs[i]);
-    cf_emit(modctx.modules[i].cf, &mod_bufs[i]);
-    cf_free(modctx.modules[i].cf);
-    free(modctx.modules[i].cf);
+  v6_cache_result cached;
+  int cache_hit = cacheable && v6_cache_try_load(in_path, &cached) == 0;
+
+  if (cache_hit) {
+    module_ctx_init(&modctx);
+    modctx.count = cached.count - 1;
+    buf_init(&out);
+    buf_bytes(&out, cached.entries[0].data, cached.entries[0].len);
+    mod_bufs =
+        modctx.count > 0 ? malloc(sizeof(buf) * (size_t)modctx.count) : NULL;
+    for (int i = 0; i < modctx.count; i++) {
+      buf_init(&mod_bufs[i]);
+      buf_bytes(&mod_bufs[i], cached.entries[i + 1].data,
+                cached.entries[i + 1].len);
+      snprintf(modctx.modules[i].class_name,
+               sizeof(modctx.modules[i].class_name), "%s",
+               cached.entries[i + 1].name);
+    }
+    v6_cache_free_result(&cached);
+  } else {
+    class_file cf;
+    cf_init(&cf, "Main", "java/lang/Object");
+
+    compile_result rc = compile_program(src, &cf, in_path, &modctx);
+
+    if (!rc.ok) {
+      int c = v6_color_enabled_err();
+      fprintf(stderr, "%s%serror%s: %s:%d: %s\n", v6_c_bold(c), v6_c_red(c),
+              v6_c_reset(c), in_path, rc.line, rc.message);
+      cf_free(&cf);
+      return 1;
+    }
+
+    buf_init(&out);
+    cf_emit(&cf, &out);
+    cf_free(&cf);
+
+    mod_bufs =
+        modctx.count > 0 ? malloc(sizeof(buf) * (size_t)modctx.count) : NULL;
+    for (int i = 0; i < modctx.count; i++) {
+      buf_init(&mod_bufs[i]);
+      cf_emit(modctx.modules[i].cf, &mod_bufs[i]);
+      cf_free(modctx.modules[i].cf);
+      free(modctx.modules[i].cf);
+    }
+
+    if (cacheable) {
+      int tracked_count = 1 + modctx.count;
+      const char** tracked_paths = malloc(sizeof(char*) * tracked_count);
+      tracked_paths[0] = in_path;
+      for (int i = 0; i < modctx.count; i++)
+        tracked_paths[i + 1] = modctx.modules[i].abs_path;
+
+      int entry_count = 1 + modctx.count;
+      const char** entry_names = malloc(sizeof(char*) * entry_count);
+      const unsigned char** entry_datas =
+          malloc(sizeof(unsigned char*) * entry_count);
+      size_t* entry_lens = malloc(sizeof(size_t) * entry_count);
+      entry_names[0] = "Main";
+      entry_datas[0] = out.data;
+      entry_lens[0] = out.len;
+      for (int i = 0; i < modctx.count; i++) {
+        entry_names[i + 1] = modctx.modules[i].class_name;
+        entry_datas[i + 1] = mod_bufs[i].data;
+        entry_lens[i + 1] = mod_bufs[i].len;
+      }
+
+      v6_cache_store(in_path, tracked_paths, tracked_count, entry_names,
+                     entry_datas, entry_lens, entry_count);
+
+      free(tracked_paths);
+      free(entry_names);
+      free(entry_datas);
+      free(entry_lens);
+    }
   }
 
   if (opts->out_path) {

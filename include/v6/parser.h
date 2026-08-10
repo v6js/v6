@@ -7,9 +7,11 @@ struct module_ctx;
 
 #define v6_max_params 64
 #define v6_max_locals 512
+#define v6_initial_locals 24
 #define v6_max_loops 32
 #define v6_max_breaks 32
 #define v6_max_upvalues 1024
+#define v6_initial_upvalues 16
 #define v6_max_catches 16
 #define v6_max_fields 32
 #define v6_max_labels 32
@@ -63,10 +65,12 @@ typedef struct compiler {
   int param_count;
   local* locals;
   int local_count;
+  int local_cap;
   uint16_t scratch_slot;
   uint16_t next_local_slot;
   upvalue* upvalues;
   int upvalue_count;
+  int upvalue_cap;
   break_ctx breaks[v6_max_loops];
   int break_depth;
   size_t continues[v6_max_loops];

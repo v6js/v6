@@ -26,6 +26,52 @@ static char* cf_strdup(const char* s) {
   return out;
 }
 
+static uint32_t fnv1a(const char* s) {
+  uint32_t h = 2166136261u;
+  while (*s) {
+    h ^= (uint8_t)*s++;
+    h *= 16777619u;
+  }
+  return h;
+}
+
+static uint32_t fnv1a_more(uint32_t h, const char* s) {
+  while (*s) {
+    h ^= (uint8_t)*s++;
+    h *= 16777619u;
+  }
+  return h;
+}
+
+static void cp_hash_grow(cp_hash* h) {
+  size_t old_cap = h->cap;
+  cp_hash_bucket* old = h->buckets;
+  h->cap = old_cap ? old_cap * 2 : 128;
+  h->buckets = malloc(h->cap * sizeof(cp_hash_bucket));
+  for (size_t i = 0; i < h->cap; i++)
+    h->buckets[i].entry_idx = -1;
+  for (size_t i = 0; i < old_cap; i++) {
+    if (old[i].entry_idx < 0)
+      continue;
+    size_t j = old[i].hash & (h->cap - 1);
+    while (h->buckets[j].entry_idx >= 0)
+      j = (j + 1) & (h->cap - 1);
+    h->buckets[j] = old[i];
+  }
+  free(old);
+}
+
+static void cp_hash_insert(cp_hash* h, uint32_t hash, int32_t entry_idx) {
+  if (h->cap == 0 || h->count * 10 >= h->cap * 7)
+    cp_hash_grow(h);
+  size_t j = hash & (h->cap - 1);
+  while (h->buckets[j].entry_idx >= 0)
+    j = (j + 1) & (h->cap - 1);
+  h->buckets[j].hash = hash;
+  h->buckets[j].entry_idx = entry_idx;
+  h->count++;
+}
+
 static int has_4byte_utf8(const uint8_t* s, size_t n) {
   for (size_t i = 0; i < n; i++)
     if ((s[i] & 0xf8) == 0xf0)
@@ -63,9 +109,17 @@ static uint8_t* to_modified_utf8(const uint8_t* s, size_t n, size_t* out_len) {
 }
 
 uint16_t cf_utf8(class_file* cf, const char* s) {
-  for (size_t i = 0; i < cf->utf8_cache_len; i++) {
-    if (strcmp(cf->utf8_cache[i].s, s) == 0)
-      return cf->utf8_cache[i].idx;
+  uint32_t h = fnv1a(s);
+  if (cf->utf8_hash.cap) {
+    size_t j = h & (cf->utf8_hash.cap - 1);
+    while (cf->utf8_hash.buckets[j].entry_idx >= 0) {
+      if (cf->utf8_hash.buckets[j].hash == h) {
+        int32_t ei = cf->utf8_hash.buckets[j].entry_idx;
+        if (strcmp(cf->utf8_cache[ei].s, s) == 0)
+          return cf->utf8_cache[ei].idx;
+      }
+      j = (j + 1) & (cf->utf8_hash.cap - 1);
+    }
   }
   size_t n = strlen(s);
   const uint8_t* bytes = (const uint8_t*)s;
@@ -85,6 +139,7 @@ uint16_t cf_utf8(class_file* cf, const char* s) {
     cf->utf8_cache =
         realloc(cf->utf8_cache, cf->utf8_cache_cap * sizeof(cp_utf8_entry));
   }
+  cp_hash_insert(&cf->utf8_hash, h, (int32_t)cf->utf8_cache_len);
   cf->utf8_cache[cf->utf8_cache_len].s = cf_strdup(s);
   cf->utf8_cache[cf->utf8_cache_len].idx = idx;
   cf->utf8_cache_len++;
@@ -92,9 +147,17 @@ uint16_t cf_utf8(class_file* cf, const char* s) {
 }
 
 uint16_t cf_class(class_file* cf, const char* name) {
-  for (size_t i = 0; i < cf->class_cache_len; i++) {
-    if (strcmp(cf->class_cache[i].name, name) == 0)
-      return cf->class_cache[i].idx;
+  uint32_t h = fnv1a(name);
+  if (cf->class_hash.cap) {
+    size_t j = h & (cf->class_hash.cap - 1);
+    while (cf->class_hash.buckets[j].entry_idx >= 0) {
+      if (cf->class_hash.buckets[j].hash == h) {
+        int32_t ei = cf->class_hash.buckets[j].entry_idx;
+        if (strcmp(cf->class_cache[ei].name, name) == 0)
+          return cf->class_cache[ei].idx;
+      }
+      j = (j + 1) & (cf->class_hash.cap - 1);
+    }
   }
   uint16_t name_idx = cf_utf8(cf, name);
   cf->cp_count++;
@@ -106,6 +169,7 @@ uint16_t cf_class(class_file* cf, const char* name) {
     cf->class_cache =
         realloc(cf->class_cache, cf->class_cache_cap * sizeof(cp_class_entry));
   }
+  cp_hash_insert(&cf->class_hash, h, (int32_t)cf->class_cache_len);
   cf->class_cache[cf->class_cache_len].name = cf_strdup(name);
   cf->class_cache[cf->class_cache_len].idx = idx;
   cf->class_cache_len++;
@@ -113,10 +177,18 @@ uint16_t cf_class(class_file* cf, const char* name) {
 }
 
 uint16_t cf_name_type(class_file* cf, const char* name, const char* desc) {
-  for (size_t i = 0; i < cf->nt_cache_len; i++) {
-    if (strcmp(cf->nt_cache[i].name, name) == 0 &&
-        strcmp(cf->nt_cache[i].desc, desc) == 0)
-      return cf->nt_cache[i].idx;
+  uint32_t h = fnv1a_more(fnv1a(name), desc);
+  if (cf->nt_hash.cap) {
+    size_t j = h & (cf->nt_hash.cap - 1);
+    while (cf->nt_hash.buckets[j].entry_idx >= 0) {
+      if (cf->nt_hash.buckets[j].hash == h) {
+        int32_t ei = cf->nt_hash.buckets[j].entry_idx;
+        if (strcmp(cf->nt_cache[ei].name, name) == 0 &&
+            strcmp(cf->nt_cache[ei].desc, desc) == 0)
+          return cf->nt_cache[ei].idx;
+      }
+      j = (j + 1) & (cf->nt_hash.cap - 1);
+    }
   }
   uint16_t name_idx = cf_utf8(cf, name);
   uint16_t desc_idx = cf_utf8(cf, desc);
@@ -130,6 +202,7 @@ uint16_t cf_name_type(class_file* cf, const char* name, const char* desc) {
     cf->nt_cache =
         realloc(cf->nt_cache, cf->nt_cache_cap * sizeof(cp_nt_entry));
   }
+  cp_hash_insert(&cf->nt_hash, h, (int32_t)cf->nt_cache_len);
   cf->nt_cache[cf->nt_cache_len].name = cf_strdup(name);
   cf->nt_cache[cf->nt_cache_len].desc = cf_strdup(desc);
   cf->nt_cache[cf->nt_cache_len].idx = idx;
@@ -138,13 +211,21 @@ uint16_t cf_name_type(class_file* cf, const char* name, const char* desc) {
 }
 
 static uint16_t cf_ref(class_file* cf, cp_ref_entry** cache, size_t* len,
-                       size_t* cap, uint8_t tag, const char* cls,
-                       const char* name, const char* desc) {
+                       size_t* cap, cp_hash* hash_tbl, uint8_t tag,
+                       const char* cls, const char* name, const char* desc) {
   cp_ref_entry* arr = *cache;
-  for (size_t i = 0; i < *len; i++) {
-    if (strcmp(arr[i].cls, cls) == 0 && strcmp(arr[i].name, name) == 0 &&
-        strcmp(arr[i].desc, desc) == 0)
-      return arr[i].idx;
+  uint32_t h = fnv1a_more(fnv1a_more(fnv1a(cls), name), desc);
+  if (hash_tbl->cap) {
+    size_t j = h & (hash_tbl->cap - 1);
+    while (hash_tbl->buckets[j].entry_idx >= 0) {
+      if (hash_tbl->buckets[j].hash == h) {
+        int32_t ei = hash_tbl->buckets[j].entry_idx;
+        if (strcmp(arr[ei].cls, cls) == 0 && strcmp(arr[ei].name, name) == 0 &&
+            strcmp(arr[ei].desc, desc) == 0)
+          return arr[ei].idx;
+      }
+      j = (j + 1) & (hash_tbl->cap - 1);
+    }
   }
   uint16_t cls_idx = cf_class(cf, cls);
   uint16_t nt_idx = cf_name_type(cf, name, desc);
@@ -158,6 +239,7 @@ static uint16_t cf_ref(class_file* cf, cp_ref_entry** cache, size_t* len,
     *cache = realloc(*cache, *cap * sizeof(cp_ref_entry));
   }
   arr = *cache;
+  cp_hash_insert(hash_tbl, h, (int32_t)*len);
   arr[*len].cls = cf_strdup(cls);
   arr[*len].name = cf_strdup(name);
   arr[*len].desc = cf_strdup(desc);
@@ -169,19 +251,29 @@ static uint16_t cf_ref(class_file* cf, cp_ref_entry** cache, size_t* len,
 uint16_t cf_methodref(class_file* cf, const char* cls, const char* name,
                       const char* desc) {
   return cf_ref(cf, &cf->methodref_cache, &cf->methodref_cache_len,
-                &cf->methodref_cache_cap, cp_methodref, cls, name, desc);
+                &cf->methodref_cache_cap, &cf->methodref_hash, cp_methodref,
+                cls, name, desc);
 }
 
 uint16_t cf_fieldref(class_file* cf, const char* cls, const char* name,
                      const char* desc) {
   return cf_ref(cf, &cf->fieldref_cache, &cf->fieldref_cache_len,
-                &cf->fieldref_cache_cap, cp_fieldref, cls, name, desc);
+                &cf->fieldref_cache_cap, &cf->fieldref_hash, cp_fieldref, cls,
+                name, desc);
 }
 
 uint16_t cf_string(class_file* cf, const char* s) {
-  for (size_t i = 0; i < cf->str_cache_len; i++) {
-    if (strcmp(cf->str_cache[i].s, s) == 0)
-      return cf->str_cache[i].idx;
+  uint32_t h = fnv1a(s);
+  if (cf->str_hash.cap) {
+    size_t j = h & (cf->str_hash.cap - 1);
+    while (cf->str_hash.buckets[j].entry_idx >= 0) {
+      if (cf->str_hash.buckets[j].hash == h) {
+        int32_t ei = cf->str_hash.buckets[j].entry_idx;
+        if (strcmp(cf->str_cache[ei].s, s) == 0)
+          return cf->str_cache[ei].idx;
+      }
+      j = (j + 1) & (cf->str_hash.cap - 1);
+    }
   }
   uint16_t str_idx = cf_utf8(cf, s);
   cf->cp_count++;
@@ -193,6 +285,7 @@ uint16_t cf_string(class_file* cf, const char* s) {
     cf->str_cache =
         realloc(cf->str_cache, cf->str_cache_cap * sizeof(cp_str_entry));
   }
+  cp_hash_insert(&cf->str_hash, h, (int32_t)cf->str_cache_len);
   cf->str_cache[cf->str_cache_len].s = cf_strdup(s);
   cf->str_cache[cf->str_cache_len].idx = idx;
   cf->str_cache_len++;
@@ -200,9 +293,17 @@ uint16_t cf_string(class_file* cf, const char* s) {
 }
 
 uint16_t cf_integer(class_file* cf, int32_t v) {
-  for (size_t i = 0; i < cf->int_cache_len; i++) {
-    if (cf->int_cache[i].v == v)
-      return cf->int_cache[i].idx;
+  uint32_t h = (uint32_t)v * 2654435761u;
+  if (cf->int_hash.cap) {
+    size_t j = h & (cf->int_hash.cap - 1);
+    while (cf->int_hash.buckets[j].entry_idx >= 0) {
+      if (cf->int_hash.buckets[j].hash == h) {
+        int32_t ei = cf->int_hash.buckets[j].entry_idx;
+        if (cf->int_cache[ei].v == v)
+          return cf->int_cache[ei].idx;
+      }
+      j = (j + 1) & (cf->int_hash.cap - 1);
+    }
   }
   cf->cp_count++;
   uint16_t idx = cf->cp_count;
@@ -213,6 +314,7 @@ uint16_t cf_integer(class_file* cf, int32_t v) {
     cf->int_cache =
         realloc(cf->int_cache, cf->int_cache_cap * sizeof(cp_int_entry));
   }
+  cp_hash_insert(&cf->int_hash, h, (int32_t)cf->int_cache_len);
   cf->int_cache[cf->int_cache_len].v = v;
   cf->int_cache[cf->int_cache_len].idx = idx;
   cf->int_cache_len++;
@@ -220,23 +322,32 @@ uint16_t cf_integer(class_file* cf, int32_t v) {
 }
 
 uint16_t cf_double(class_file* cf, double v) {
-  for (size_t i = 0; i < cf->dbl_cache_len; i++) {
-    if (cf->dbl_cache[i].v == v)
-      return cf->dbl_cache[i].idx;
+  uint64_t key_bits;
+  memcpy(&key_bits, &v, sizeof(key_bits));
+  uint32_t h = (uint32_t)(key_bits ^ (key_bits >> 32)) * 2654435761u;
+  if (cf->dbl_hash.cap) {
+    size_t j = h & (cf->dbl_hash.cap - 1);
+    while (cf->dbl_hash.buckets[j].entry_idx >= 0) {
+      if (cf->dbl_hash.buckets[j].hash == h) {
+        int32_t ei = cf->dbl_hash.buckets[j].entry_idx;
+        if (cf->dbl_cache[ei].v == v)
+          return cf->dbl_cache[ei].idx;
+      }
+      j = (j + 1) & (cf->dbl_hash.cap - 1);
+    }
   }
-  uint64_t bits;
-  memcpy(&bits, &v, sizeof(bits));
   cf->cp_count++;
   uint16_t idx = cf->cp_count;
   buf_u8(&cf->cp, cp_double);
-  buf_u32(&cf->cp, (uint32_t)(bits >> 32));
-  buf_u32(&cf->cp, (uint32_t)bits);
+  buf_u32(&cf->cp, (uint32_t)(key_bits >> 32));
+  buf_u32(&cf->cp, (uint32_t)key_bits);
   cf->cp_count++;
   if (cf->dbl_cache_len == cf->dbl_cache_cap) {
     cf->dbl_cache_cap = cf->dbl_cache_cap ? cf->dbl_cache_cap * 2 : 64;
     cf->dbl_cache =
         realloc(cf->dbl_cache, cf->dbl_cache_cap * sizeof(cp_dbl_entry));
   }
+  cp_hash_insert(&cf->dbl_hash, h, (int32_t)cf->dbl_cache_len);
   cf->dbl_cache[cf->dbl_cache_len].v = v;
   cf->dbl_cache[cf->dbl_cache_len].idx = idx;
   cf->dbl_cache_len++;
@@ -270,6 +381,14 @@ void cf_init(class_file* cf, const char* this_name, const char* super_name) {
   cf->dbl_cache = NULL;
   cf->dbl_cache_len = 0;
   cf->dbl_cache_cap = 0;
+  memset(&cf->utf8_hash, 0, sizeof(cf->utf8_hash));
+  memset(&cf->class_hash, 0, sizeof(cf->class_hash));
+  memset(&cf->nt_hash, 0, sizeof(cf->nt_hash));
+  memset(&cf->methodref_hash, 0, sizeof(cf->methodref_hash));
+  memset(&cf->fieldref_hash, 0, sizeof(cf->fieldref_hash));
+  memset(&cf->str_hash, 0, sizeof(cf->str_hash));
+  memset(&cf->int_hash, 0, sizeof(cf->int_hash));
+  memset(&cf->dbl_hash, 0, sizeof(cf->dbl_hash));
   cf->access = acc_public | acc_super;
   cf->this_idx = cf_class(cf, this_name);
   cf->super_idx = cf_class(cf, super_name);
@@ -319,6 +438,14 @@ void cf_free(class_file* cf) {
   free(cf->str_cache);
   free(cf->int_cache);
   free(cf->dbl_cache);
+  free(cf->utf8_hash.buckets);
+  free(cf->class_hash.buckets);
+  free(cf->nt_hash.buckets);
+  free(cf->methodref_hash.buckets);
+  free(cf->fieldref_hash.buckets);
+  free(cf->str_hash.buckets);
+  free(cf->int_hash.buckets);
+  free(cf->dbl_hash.buckets);
 }
 
 method* cf_method(class_file* cf, uint16_t access, const char* name,

@@ -882,6 +882,62 @@ public final class V6Builtins {
   public static final V6Value REGEXP = objValue(new V6RegexConstructor());
   public static final V6Value DATE = objValue(new V6DateConstructor());
   public static final V6Value FUNCTION = objValue(new V6FunctionConstructor());
+
+  private static V6Object errorPrototype() {
+    V6Object o = new V6Object();
+    o.set("name", str("Error"));
+    o.set("message", str(""));
+    o.set("toString", fn((thisArg, args) -> {
+            V6Object e = (V6Object)thisArg.ref();
+            V6Value nameVal = e.get("name");
+            String name =
+                nameVal.tag() == V6Value.TAG_STR ? nameVal.toString() : "Error";
+            V6Value msgVal = e.get("message");
+            String msg =
+                msgVal.tag() == V6Value.TAG_STR ? msgVal.toString() : "";
+            return str(msg.isEmpty() ? name : name + ": " + msg);
+          }));
+    return o;
+  }
+
+  private static V6Object subErrorPrototype(V6Object parent, String name) {
+    V6Object o = new V6Object();
+    o.setProto(parent);
+    o.set("name", str(name));
+    return o;
+  }
+
+  public static final V6Object ERROR_PROTOTYPE = errorPrototype();
+  public static final V6Value ERROR =
+      objValue(new V6ErrorConstructor(ERROR_PROTOTYPE, "Error"));
+  public static final V6Object TYPE_ERROR_PROTOTYPE =
+      subErrorPrototype(ERROR_PROTOTYPE, "TypeError");
+  public static final V6Value TYPE_ERROR =
+      objValue(new V6ErrorConstructor(TYPE_ERROR_PROTOTYPE, "TypeError"));
+  public static final V6Object RANGE_ERROR_PROTOTYPE =
+      subErrorPrototype(ERROR_PROTOTYPE, "RangeError");
+  public static final V6Value RANGE_ERROR =
+      objValue(new V6ErrorConstructor(RANGE_ERROR_PROTOTYPE, "RangeError"));
+  public static final V6Object SYNTAX_ERROR_PROTOTYPE =
+      subErrorPrototype(ERROR_PROTOTYPE, "SyntaxError");
+  public static final V6Value SYNTAX_ERROR =
+      objValue(new V6ErrorConstructor(SYNTAX_ERROR_PROTOTYPE, "SyntaxError"));
+  public static final V6Object REFERENCE_ERROR_PROTOTYPE =
+      subErrorPrototype(ERROR_PROTOTYPE, "ReferenceError");
+  public static final V6Value REFERENCE_ERROR = objValue(
+      new V6ErrorConstructor(REFERENCE_ERROR_PROTOTYPE, "ReferenceError"));
+  public static final V6Object EVAL_ERROR_PROTOTYPE =
+      subErrorPrototype(ERROR_PROTOTYPE, "EvalError");
+  public static final V6Value EVAL_ERROR =
+      objValue(new V6ErrorConstructor(EVAL_ERROR_PROTOTYPE, "EvalError"));
+  public static final V6Object URI_ERROR_PROTOTYPE =
+      subErrorPrototype(ERROR_PROTOTYPE, "URIError");
+  public static final V6Value URI_ERROR =
+      objValue(new V6ErrorConstructor(URI_ERROR_PROTOTYPE, "URIError"));
+  public static final V6Object DOM_EXCEPTION_PROTOTYPE =
+      subErrorPrototype(ERROR_PROTOTYPE, "Error");
+  public static final V6Value DOM_EXCEPTION =
+      objValue(new V6ErrorConstructor(DOM_EXCEPTION_PROTOTYPE, null));
   public static final V6Value STRING = objValue(new V6StringConstructor());
   public static final V6Value BOOLEAN = objValue(new V6BooleanConstructor());
 

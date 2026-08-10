@@ -323,12 +323,14 @@ void compile_closure_value(parser* p, compiler* c, int is_arrow,
   fc.lambda_counter = c->lambda_counter;
   fc.is_arrow = is_arrow;
   fc.param_count = 0;
-  fc.locals = malloc(sizeof(local) * v6_max_locals);
+  fc.locals = malloc(sizeof(local) * v6_initial_locals);
   fc.local_count = 0;
+  fc.local_cap = v6_initial_locals;
   fc.scratch_slot = 3;
   fc.next_local_slot = 5;
-  fc.upvalues = malloc(sizeof(upvalue) * v6_max_upvalues);
+  fc.upvalues = malloc(sizeof(upvalue) * v6_initial_upvalues);
   fc.upvalue_count = 0;
+  fc.upvalue_cap = v6_initial_upvalues;
   fc.break_depth = 0;
   fc.continue_depth = 0;
   fc.catch_depth = 0;

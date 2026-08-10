@@ -94,6 +94,10 @@ int find_slot(compiler* c, const char* name, size_t len, uint16_t* out) {
 void add_local(compiler* c, tok name, uint16_t slot, int is_var, int is_const) {
   if (c->local_count >= v6_max_locals)
     return;
+  if (c->local_count >= c->local_cap) {
+    c->local_cap *= 2;
+    c->locals = realloc(c->locals, sizeof(local) * c->local_cap);
+  }
   c->locals[c->local_count].name = name.start;
   c->locals[c->local_count].len = name.len;
   c->locals[c->local_count].slot = slot;
@@ -138,6 +142,10 @@ var_ref resolve_var(compiler* c, const char* name, size_t len) {
     vr.kind = var_not_found;
     vr.index = 0;
     return vr;
+  }
+  if (c->upvalue_count >= c->upvalue_cap) {
+    c->upvalue_cap *= 2;
+    c->upvalues = realloc(c->upvalues, sizeof(upvalue) * c->upvalue_cap);
   }
   upvalue* uv = &c->upvalues[c->upvalue_count];
   uv->name = name;

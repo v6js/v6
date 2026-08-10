@@ -372,87 +372,6 @@ static void bind_builtin(compiler* c, const char* name, const char* field) {
   bind_builtin_cls(c, name, "V6Builtins", field);
 }
 
-static const char* const v6_prelude_src =
-    "class Error {\n"
-    "  constructor(message) {\n"
-    "    this.message = message === undefined ? \"\" : message;\n"
-    "    this.name = \"Error\";\n"
-    "    Error.captureStackTrace(this);\n"
-    "  }\n"
-    "  toString() {\n"
-    "    return this.message ? (this.name + \": \" + this.message) : "
-    "this.name;\n"
-    "  }\n"
-    "}\n"
-    "Error.captureStackTrace = function(targetObject, constructorOpt) {\n"
-    "  if (typeof Error.prepareStackTrace === \"function\") {\n"
-    "    var frames = __v6CaptureCallSites();\n"
-    "    targetObject.stack = Error.prepareStackTrace(targetObject, frames);\n"
-    "    return;\n"
-    "  }\n"
-    "  var head = targetObject.name ? targetObject.name : \"Error\";\n"
-    "  if (targetObject.message) head = head + \": \" + targetObject.message;\n"
-    "  targetObject.stack = head;\n"
-    "};\n"
-    "Error.stackTraceLimit = 10;\n"
-    "class TypeError extends Error {\n"
-    "  constructor(message) {\n"
-    "    super(message);\n"
-    "    this.name = \"TypeError\";\n"
-    "    Error.captureStackTrace(this);\n"
-    "  }\n"
-    "}\n"
-    "class RangeError extends Error {\n"
-    "  constructor(message) {\n"
-    "    super(message);\n"
-    "    this.name = \"RangeError\";\n"
-    "    Error.captureStackTrace(this);\n"
-    "  }\n"
-    "}\n"
-    "class SyntaxError extends Error {\n"
-    "  constructor(message) {\n"
-    "    super(message);\n"
-    "    this.name = \"SyntaxError\";\n"
-    "    Error.captureStackTrace(this);\n"
-    "  }\n"
-    "}\n"
-    "class ReferenceError extends Error {\n"
-    "  constructor(message) {\n"
-    "    super(message);\n"
-    "    this.name = \"ReferenceError\";\n"
-    "    Error.captureStackTrace(this);\n"
-    "  }\n"
-    "}\n"
-    "class EvalError extends Error {\n"
-    "  constructor(message) {\n"
-    "    super(message);\n"
-    "    this.name = \"EvalError\";\n"
-    "    Error.captureStackTrace(this);\n"
-    "  }\n"
-    "}\n"
-    "class URIError extends Error {\n"
-    "  constructor(message) {\n"
-    "    super(message);\n"
-    "    this.name = \"URIError\";\n"
-    "    Error.captureStackTrace(this);\n"
-    "  }\n"
-    "}\n"
-    "class DOMException extends Error {\n"
-    "  constructor(message, name) {\n"
-    "    super(message === undefined ? \"\" : message);\n"
-    "    this.name = name === undefined ? \"Error\" : name;\n"
-    "    Error.captureStackTrace(this);\n"
-    "  }\n"
-    "}\n";
-
-static int count_newlines(const char* s) {
-  int n = 0;
-  for (; *s; s++)
-    if (*s == '\n')
-      n++;
-  return n;
-}
-
 static int is_ident_char(char c) {
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
          (c >= '0' && c <= '9') || c == '_' || c == '$';
@@ -477,17 +396,14 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
                                    const char* user_src, const char* module_dir,
                                    module_ctx* modctx, int is_entry,
                                    int is_cjs) {
-  size_t prelude_len = strlen(v6_prelude_src);
   size_t user_len = strlen(user_src);
-  char* src = malloc(prelude_len + user_len + 1);
-  memcpy(src, v6_prelude_src, prelude_len);
-  memcpy(src + prelude_len, user_src, user_len + 1);
-  int prelude_lines = count_newlines(v6_prelude_src);
+  char* src = malloc(user_len + 1);
+  memcpy(src, user_src, user_len + 1);
 
   export_binding exports_list[v6_max_exports];
   int exports_count = 0;
   if (!is_cjs)
-    preprocess_exports(src + prelude_len, exports_list, &exports_count);
+    preprocess_exports(src, exports_list, &exports_count);
 
   method* main_m;
   if (is_entry) {
@@ -512,12 +428,14 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
   c.lambda_counter = &lambda_counter;
   c.is_arrow = 0;
   c.param_count = 0;
-  c.locals = malloc(sizeof(local) * v6_max_locals);
+  c.locals = malloc(sizeof(local) * v6_initial_locals);
   c.local_count = 0;
+  c.local_cap = v6_initial_locals;
   c.scratch_slot = 1;
   c.next_local_slot = 3;
-  c.upvalues = malloc(sizeof(upvalue) * v6_max_upvalues);
+  c.upvalues = malloc(sizeof(upvalue) * v6_initial_upvalues);
   c.upvalue_count = 0;
+  c.upvalue_cap = v6_initial_upvalues;
   c.break_depth = 0;
   c.continue_depth = 0;
   c.catch_depth = 0;
@@ -537,22 +455,24 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
   c.modctx = modctx;
   c.module_dir = module_dir;
 
-  int top_has_closures = 0;
-  {
-    lexer scan_lx;
-    lex_init(&scan_lx, src);
-    tok st = lex_next(&scan_lx);
-    while (st.kind != tok_eof) {
-      if (st.kind == tok_kw_function || st.kind == tok_arrow ||
-          st.kind == tok_kw_class) {
-        top_has_closures = 1;
-        break;
-      }
-      st = lex_next(&scan_lx);
-    }
-  }
-  c.box_locals = top_has_closures;
+  c.box_locals = 1;
 
+  if (src_has_ident(src, "Error"))
+    bind_builtin(&c, "Error", "ERROR");
+  if (src_has_ident(src, "TypeError"))
+    bind_builtin(&c, "TypeError", "TYPE_ERROR");
+  if (src_has_ident(src, "RangeError"))
+    bind_builtin(&c, "RangeError", "RANGE_ERROR");
+  if (src_has_ident(src, "SyntaxError"))
+    bind_builtin(&c, "SyntaxError", "SYNTAX_ERROR");
+  if (src_has_ident(src, "ReferenceError"))
+    bind_builtin(&c, "ReferenceError", "REFERENCE_ERROR");
+  if (src_has_ident(src, "EvalError"))
+    bind_builtin(&c, "EvalError", "EVAL_ERROR");
+  if (src_has_ident(src, "URIError"))
+    bind_builtin(&c, "URIError", "URI_ERROR");
+  if (src_has_ident(src, "DOMException"))
+    bind_builtin(&c, "DOMException", "DOM_EXCEPTION");
   if (src_has_ident(src, "console"))
     bind_builtin(&c, "console", "CONSOLE");
   if (src_has_ident(src, "Math"))
@@ -761,7 +681,51 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
   uint16_t module_local_slot = 0;
   uint16_t exports_local_slot = 0;
 
-  if (is_cjs) {
+  if (is_cjs && is_entry) {
+    uint16_t obj_cls = cf_class(cf, "V6Object");
+    uint16_t obj_ctor = cf_methodref(cf, "V6Object", "<init>", "()V");
+    uint16_t set_idx =
+        cf_methodref(cf, "V6Object", "set", "(Ljava/lang/String;LV6Value;)V");
+    uint16_t exports_key = cf_string(cf, "exports");
+    op_emit2(main_m, op_new, obj_cls);
+    op_emit(main_m, op_dup);
+    op_emit2(main_m, op_invokespecial, obj_ctor);
+    op_emit(main_m, op_dup);
+    op_emit2(main_m, op_ldc_w, exports_key);
+    op_emit2(main_m, op_new, obj_cls);
+    op_emit(main_m, op_dup);
+    op_emit2(main_m, op_invokespecial, obj_ctor);
+    emit_box_object_ref(&c);
+    op_emit2(main_m, op_invokevirtual, set_idx);
+    module_local_slot = c.next_local_slot++;
+    emit_box_object_ref(&c);
+    emit_var_declare(&c, module_local_slot);
+    tok module_tok;
+    module_tok.kind = tok_ident;
+    module_tok.start = "module";
+    module_tok.len = 6;
+    module_tok.line = 0;
+    module_tok.num = 0;
+    add_local(&c, module_tok, module_local_slot, 0, 0);
+
+    var_ref module_vr;
+    module_vr.kind = var_local;
+    module_vr.index = module_local_slot;
+    emit_var_read_ref(&c, module_vr);
+    op_emit2(main_m, op_ldc_w, exports_key);
+    uint16_t getprop_idx_early =
+        cf_methodref(cf, "V6Value", "getProp", "(Ljava/lang/String;)LV6Value;");
+    op_emit2(main_m, op_invokevirtual, getprop_idx_early);
+    exports_local_slot = c.next_local_slot++;
+    emit_var_declare(&c, exports_local_slot);
+    tok exports_tok;
+    exports_tok.kind = tok_ident;
+    exports_tok.start = "exports";
+    exports_tok.len = 7;
+    exports_tok.line = 0;
+    exports_tok.num = 0;
+    add_local(&c, exports_tok, exports_local_slot, 0, 0);
+  } else if (is_cjs) {
     uint16_t cache_field =
         cf_fieldref(cf, this_class_name, "MODULE_CACHE", "LV6Object;");
     uint16_t get_idx =
@@ -901,12 +865,25 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
 
   compile_result r;
   r.ok = p.had_error ? 0 : 1;
-  r.line = p.err_line - prelude_lines;
+  r.line = p.err_line;
   if (r.line < 1)
     r.line = 1;
   memcpy(r.message, p.err_msg, sizeof(r.message));
   free(src);
   return r;
+}
+
+static int entry_is_cjs(const char* src) {
+  lexer lx;
+  lex_init(&lx, src);
+  lx.auto_regex = 1;
+  tok t = lex_next(&lx);
+  while (t.kind != tok_eof) {
+    if (t.kind == tok_kw_export)
+      return 0;
+    t = lex_next(&lx);
+  }
+  return 1;
 }
 
 compile_result compile_program(const char* src, class_file* cf,
@@ -920,5 +897,6 @@ compile_result compile_program(const char* src, class_file* cf,
   g_entry_script_path = entry_path ? entry_path : "";
   if (modctx)
     module_ctx_init(modctx);
-  return compile_module_impl(cf, "Main", src, dir, modctx, 1, 0);
+  return compile_module_impl(cf, "Main", src, dir, modctx, 1,
+                             entry_is_cjs(src));
 }

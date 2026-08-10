@@ -193,6 +193,17 @@ typedef struct cp_dbl_entry {
   uint16_t idx;
 } cp_dbl_entry;
 
+typedef struct cp_hash_bucket {
+  uint32_t hash;
+  int32_t entry_idx;
+} cp_hash_bucket;
+
+typedef struct cp_hash {
+  cp_hash_bucket* buckets;
+  size_t cap;
+  size_t count;
+} cp_hash;
+
 typedef struct class_file {
   buf cp;
   uint16_t cp_count;
@@ -222,6 +233,14 @@ typedef struct class_file {
   size_t int_cache_len, int_cache_cap;
   cp_dbl_entry* dbl_cache;
   size_t dbl_cache_len, dbl_cache_cap;
+  cp_hash utf8_hash;
+  cp_hash class_hash;
+  cp_hash nt_hash;
+  cp_hash methodref_hash;
+  cp_hash fieldref_hash;
+  cp_hash str_hash;
+  cp_hash int_hash;
+  cp_hash dbl_hash;
 } class_file;
 
 void cf_init(class_file* cf, const char* this_name, const char* super_name);
