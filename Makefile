@@ -234,7 +234,7 @@ test: | dirs
 	$(TEST_BIN)
 
 $(PACK_CLASS_BIN): $(OBJ)/tool_pack_class.o | dirs
-	$(CC) $(OBJ)/tool_pack_class.o -o $@
+	$(CC) $(LDFLAGS) $(OBJ)/tool_pack_class.o -o $@
 
 $(OBJ)/tool_pack_class.o: tools/pack_class.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
