@@ -110,7 +110,7 @@ V6 is tested against real npm packages, including `express`, `fast-glob`, `react
 
 ### Benchmarks
 
-V6's persistent warm process is faster than Node on 27 of 40 benchmarks in this project's own suite. A standalone AOT JAR is slower than Node on all 40, since each run pays a full `java -jar` startup cost instead of reusing a warm process. The suite lives in `bench/` and runs with `bench/run.sh`.
+V6's persistent warm process is faster than Node on 30 of 40 benchmarks in this project's own suite. A standalone AOT JAR is slower than Node on all 40, since each run pays a full `java -jar` startup cost instead of reusing a warm process. The suite lives in `bench/` and runs with `bench/run.sh`.
 
 Measured on an Intel Core i7-4800MQ (Haswell, 4 cores, 8 threads) with 8 GB of RAM.
 
