@@ -24,7 +24,7 @@ jobs:
 
       - uses: mlugg/setup-zig@v1
         with:
-          version: 0.17.0-dev.1525+91c6d8a09
+          version: 0.16.0
 
       - name: make target
         run: make target
