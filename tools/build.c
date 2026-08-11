@@ -747,8 +747,9 @@ static int compile_and_link(const target_spec* t, const strlist* sources,
   snprintf(bin_dir, sizeof(bin_dir), "build/target/bin/%s", t->zig_target);
   ensure_dir(bin_dir);
 
-  int link_rc = run_cmd("zig cc -target %s @%s -o \"%s\" %s %s", t->zig_target,
+  int link_rc = run_cmd("zig cc -target %s @%s -o \"%s\" %s %s %s", t->zig_target,
                         rsp_path, bin_path, t->needs_ldl ? "-ldl" : "",
+                        t->is_windows ? "-lws2_32" : "",
                         t->is_windows ? "-Wl,--stack,8388608" : "");
   if (link_rc != 0) {
     fprintf(stderr, "  [%s] error: link failed\n", t->zig_target);
