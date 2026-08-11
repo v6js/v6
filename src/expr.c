@@ -379,6 +379,3 @@ int compile_expr(parser* p, compiler* c) {
   parse_expr(p, c);
   return p->had_error ? -1 : 0;
 }
-
-static void parse_stmt(parser* p, compiler* c);
-static void prescan_decls(compiler* c, const char* src, int hoist_functions);

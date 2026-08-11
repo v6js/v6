@@ -1,3 +1,9 @@
+#ifndef _WIN32
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+#endif
+
 #include "v6/daemon.h"
 #include "v6/buffer.h"
 
@@ -28,6 +34,9 @@ typedef SOCKET v6_sock;
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 #define v6_getcwd getcwd
 typedef int v6_sock;
 #define V6_INVALID_SOCK (-1)
