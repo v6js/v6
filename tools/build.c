@@ -749,7 +749,7 @@ static int compile_and_link(const target_spec* t, const strlist* sources,
 
   int link_rc = run_cmd("zig cc -target %s @%s -o \"%s\" %s %s", t->zig_target,
                         rsp_path, bin_path, t->needs_ldl ? "-ldl" : "",
-                        t->is_windows ? "-Wl,/STACK:8388608" : "");
+                        t->is_windows ? "-Wl,--stack,8388608" : "");
   if (link_rc != 0) {
     fprintf(stderr, "  [%s] error: link failed\n", t->zig_target);
     return -1;
