@@ -11,5 +11,4 @@ public final class V6EventLoopState {
       new ConcurrentLinkedQueue<>();
   final AtomicInteger refCount = new AtomicInteger(0);
   long nextId = 1;
-  volatile boolean started = false;
 }

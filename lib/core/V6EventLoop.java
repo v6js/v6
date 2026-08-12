@@ -5,9 +5,12 @@ public final class V6EventLoop {
   private static final V6Value UNDEF = new V6Value(V6Value.TAG_UNDEF, 0, null);
   private static final InheritableThreadLocal<V6EventLoopState> STATE =
       new InheritableThreadLocal<>();
+  private static volatile boolean globalStarted = false;
+  private static volatile V6EventLoopState activeState = null;
 
   public static void resetForThread() {
     STATE.set(new V6EventLoopState());
+    globalStarted = false;
   }
 
   public static void clearForThread() {
@@ -17,6 +20,9 @@ public final class V6EventLoop {
   private static V6EventLoopState state() {
     V6EventLoopState s = STATE.get();
     if (s == null) {
+      V6EventLoopState active = activeState;
+      if (active != null)
+        return active;
       s = new V6EventLoopState();
       STATE.set(s);
     }
@@ -128,12 +134,13 @@ public final class V6EventLoop {
   }
 
   public static boolean hasStarted() {
-    return state().started;
+    return globalStarted;
   }
 
   public static void run() {
     V6EventLoopState s = state();
-    s.started = true;
+    activeState = s;
+    globalStarted = true;
     V6MicrotaskQueue.drain();
     while (true) {
       Runnable ext;
@@ -179,6 +186,7 @@ public final class V6EventLoop {
       runGuarded(() -> ft.callback.call(UNDEF, ft.args));
       V6MicrotaskQueue.drain();
     }
+    activeState = null;
     V6Process.dispatchExit(0);
   }
 }
