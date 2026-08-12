@@ -770,13 +770,19 @@ static uint16_t ref_field(class_file* cf) {
 }
 
 void emit_ref_push(compiler* c, int is_upvalue, uint16_t index) {
-  if (!is_upvalue) {
-    emit_aload(c->m, index);
+  if (is_upvalue) {
+    emit_aload(c->m, 0);
+    emit_iconst(c->m, (int)index);
+    op_emit(c->m, op_aaload);
     return;
   }
-  emit_aload(c->m, 0);
-  emit_iconst(c->m, (int)index);
-  op_emit(c->m, op_aaload);
+  if (c->use_frame_locals) {
+    emit_aload(c->m, c->frame_slot);
+    emit_iconst(c->m, (int)index);
+    op_emit(c->m, op_aaload);
+    return;
+  }
+  emit_aload(c->m, index);
 }
 
 static void emit_var_read(compiler* c, int is_upvalue, uint16_t index) {
@@ -792,7 +798,7 @@ static void emit_var_write(compiler* c, int is_upvalue, uint16_t index) {
 }
 
 void emit_var_declare(compiler* c, uint16_t slot) {
-  if (!c->box_locals) {
+  if (!c->box_locals && !c->use_frame_locals) {
     emit_astore(c->m, slot);
     return;
   }
@@ -800,11 +806,19 @@ void emit_var_declare(compiler* c, uint16_t slot) {
   op_emit(c->m, op_dup_x1);
   op_emit(c->m, op_swap);
   op_emit2(c->m, op_invokespecial, ref_ctor(c->cf));
+  if (c->use_frame_locals) {
+    emit_aload(c->m, c->frame_slot);
+    op_emit(c->m, op_swap);
+    emit_iconst(c->m, (int)slot);
+    op_emit(c->m, op_swap);
+    op_emit(c->m, op_aastore);
+    return;
+  }
   emit_astore(c->m, slot);
 }
 
 void emit_var_read_ref(compiler* c, var_ref vr) {
-  if (!c->box_locals && vr.kind == var_local) {
+  if (!c->box_locals && !c->use_frame_locals && vr.kind == var_local) {
     emit_aload(c->m, vr.index);
     return;
   }
@@ -812,7 +826,7 @@ void emit_var_read_ref(compiler* c, var_ref vr) {
 }
 
 void emit_var_write_ref(compiler* c, var_ref vr) {
-  if (!c->box_locals && vr.kind == var_local) {
+  if (!c->box_locals && !c->use_frame_locals && vr.kind == var_local) {
     op_emit(c->m, op_dup);
     emit_astore(c->m, vr.index);
     return;

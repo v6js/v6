@@ -265,7 +265,7 @@ static void parse_for_in(parser* p, compiler* c, tok_kind kind, tok name) {
       return;
     }
   } else {
-    var_vr.index = c->next_local_slot++;
+    var_vr.index = next_declared_slot(c);
     add_local(c, name, var_vr.index, 0, kind == tok_kw_const);
   }
 
@@ -327,7 +327,7 @@ static void parse_for_of(parser* p, compiler* c, tok_kind kind, tok name) {
       return;
     }
   } else {
-    var_vr.index = c->next_local_slot++;
+    var_vr.index = next_declared_slot(c);
     add_local(c, name, var_vr.index, 0, kind == tok_kw_const);
   }
 
@@ -399,7 +399,7 @@ static void parse_for_await_of(parser* p, compiler* c, tok_kind kind,
       return;
     }
   } else {
-    var_vr.index = c->next_local_slot++;
+    var_vr.index = next_declared_slot(c);
     add_local(c, name, var_vr.index, 0, kind == tok_kw_const);
   }
 
@@ -787,7 +787,7 @@ static void parse_try(parser* p, compiler* c) {
     uint16_t value_field = cf_fieldref(c->cf, "V6Throw", "value", "LV6Value;");
     op_emit2(c->m, op_getfield, value_field);
     if (has_binding) {
-      uint16_t err_slot = c->next_local_slot++;
+      uint16_t err_slot = next_declared_slot(c);
       emit_var_declare(c, err_slot);
       add_local(c, err_name, err_slot, 0, 0);
     } else {

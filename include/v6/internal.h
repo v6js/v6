@@ -31,6 +31,9 @@ uint16_t value_class(class_file* cf);
 
 void emit_ref_push(compiler* c, int is_upvalue, uint16_t index);
 void emit_var_declare(compiler* c, uint16_t slot);
+uint16_t next_declared_slot(compiler* c);
+void maybe_split_chunk(parser* p, compiler* c);
+void maybe_split_chunk_prescan(compiler* c);
 void emit_box_bool(compiler* c);
 void emit_truthy(compiler* c);
 void emit_box_object_ref(compiler* c);

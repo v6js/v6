@@ -53,7 +53,7 @@ void parse_class_decl(parser* p, compiler* c, int is_expr) {
     }
     if (!simple_ident) {
       parse_unary(p, c);
-      uint16_t base_slot = c->next_local_slot++;
+      uint16_t base_slot = next_declared_slot(c);
       emit_var_declare(c, base_slot);
       char* synth = malloc(24);
       snprintf(synth, 24, "$super%d", (*c->lambda_counter)++);
@@ -333,7 +333,7 @@ void parse_class_decl(parser* p, compiler* c, int is_expr) {
     emit_var_write_ref(c, vr);
     op_emit(c->m, op_pop);
   } else {
-    uint16_t slot = c->next_local_slot++;
+    uint16_t slot = next_declared_slot(c);
     emit_var_declare(c, slot);
     add_local(c, name, slot, 0, 0);
   }

@@ -67,7 +67,7 @@ static uint16_t v6ref_arr_class(class_file* cf) {
 }
 
 static void bind_param(compiler* fc, parser* p, tok name, int idx) {
-  uint16_t slot = fc->next_local_slot++;
+  uint16_t slot = next_declared_slot(fc);
   emit_aload(fc->m, 2);
   emit_iconst(fc->m, idx);
   uint16_t argat_idx =
@@ -102,7 +102,7 @@ static void bind_param(compiler* fc, parser* p, tok name, int idx) {
 }
 
 static void bind_rest_param(compiler* fc, tok name, int idx) {
-  uint16_t slot = fc->next_local_slot++;
+  uint16_t slot = next_declared_slot(fc);
   emit_aload(fc->m, 2);
   emit_iconst(fc->m, idx);
   uint16_t restargs_idx = cf_methodref(fc->cf, "V6Object", "restFromArgs",
@@ -176,6 +176,7 @@ static void parse_function_params(parser* p, compiler* fc) {
           parse_object_pattern(&pp, fc, tok_kw_let, src_slot);
 
         idx++;
+        maybe_split_chunk_prescan(fc);
         if (!match(p, tok_comma))
           break;
         continue;
@@ -189,6 +190,7 @@ static void parse_function_params(parser* p, compiler* fc) {
       tok pname = p->prev;
       bind_param(fc, p, pname, idx);
       idx++;
+      maybe_split_chunk_prescan(fc);
       if (!match(p, tok_comma))
         break;
     }
@@ -197,7 +199,7 @@ static void parse_function_params(parser* p, compiler* fc) {
 }
 
 static void bind_this(compiler* fc) {
-  uint16_t slot = fc->next_local_slot++;
+  uint16_t slot = next_declared_slot(fc);
   emit_aload(fc->m, 1);
   emit_var_declare(fc, slot);
   tok tt;
@@ -210,7 +212,7 @@ static void bind_this(compiler* fc) {
 }
 
 static void bind_arguments(compiler* fc) {
-  uint16_t slot = fc->next_local_slot++;
+  uint16_t slot = next_declared_slot(fc);
   emit_aload(fc->m, 2);
   emit_iconst(fc->m, 0);
   uint16_t restargs_idx = cf_methodref(fc->cf, "V6Object", "restFromArgs",
@@ -305,6 +307,124 @@ static int compile_body_has_closures(parser* p, int parens_params,
   return found;
 }
 
+#define v6_chunk_span_threshold 50000
+#define v6_chunk_bytecode_threshold 30000
+
+static size_t estimate_body_span(parser* p, int parens_params, int is_arrow) {
+  lexer save_lex = p->lex;
+  tok save_cur = p->cur;
+  tok save_prev = p->prev;
+  p->lex.auto_regex = 1;
+
+  tok t = p->cur;
+  if (parens_params) {
+    if (t.kind == tok_lparen) {
+      int pdepth = 1;
+      t = lex_next(&p->lex);
+      while (t.kind != tok_eof && pdepth > 0) {
+        if (t.kind == tok_lparen)
+          pdepth++;
+        else if (t.kind == tok_rparen)
+          pdepth--;
+        if (pdepth > 0)
+          t = lex_next(&p->lex);
+      }
+      t = lex_next(&p->lex);
+    }
+  } else {
+    t = lex_next(&p->lex);
+  }
+
+  if (is_arrow && t.kind == tok_arrow)
+    t = lex_next(&p->lex);
+
+  size_t span = 0;
+  if (t.kind == tok_lbrace) {
+    const char* body_start = t.start;
+    int depth = 0;
+    for (;;) {
+      if (t.kind == tok_lbrace) {
+        depth++;
+      } else if (t.kind == tok_rbrace) {
+        depth--;
+        if (depth == 0) {
+          span = (size_t)(t.start - body_start) + 1;
+          break;
+        }
+      } else if (t.kind == tok_eof) {
+        break;
+      }
+      t = lex_next(&p->lex);
+    }
+  }
+
+  p->lex = save_lex;
+  p->cur = save_cur;
+  p->prev = save_prev;
+  return span;
+}
+
+static void force_split_chunk(compiler* c) {
+  const char* chunk_sig = "([LV6Ref;LV6Value;[LV6Value;[LV6Ref;)LV6Value;";
+  char next_name[40];
+  c->chunk_id++;
+  snprintf(next_name, sizeof(next_name), "%s%d", c->chunk_base, c->chunk_id);
+  method* next_m = cf_method(c->cf, acc_static, next_name, chunk_sig);
+  next_m->max_stack = 64;
+
+  uint16_t next_ref =
+      cf_methodref(c->cf, c->this_class_name, next_name, chunk_sig);
+  emit_aload(c->m, 0);
+  emit_aload(c->m, 1);
+  emit_aload(c->m, 2);
+  emit_aload(c->m, c->frame_slot);
+  op_emit2(c->m, op_invokestatic, next_ref);
+  op_emit(c->m, op_areturn);
+  c->m->max_locals = c->next_local_slot;
+
+  c->m = next_m;
+  c->next_local_slot = 6;
+  c->break_depth = 0;
+  c->continue_depth = 0;
+  c->catch_depth = 0;
+  c->label_count = 0;
+  c->pending_label_count = 0;
+  c->finally_depth = 0;
+}
+
+void maybe_split_chunk_prescan(compiler* c) {
+  if (!c->use_frame_locals)
+    return;
+  if (op_pos(c->m) <= v6_chunk_bytecode_threshold)
+    return;
+  force_split_chunk(c);
+}
+
+void maybe_split_chunk(parser* p, compiler* c) {
+  if (p->had_error)
+    return;
+  if (c->brace_depth != 0)
+    return;
+  if (check(p, tok_rbrace) || check(p, tok_eof))
+    return;
+  maybe_split_chunk_prescan(c);
+}
+
+static void compile_function_body_chunked(parser* p, compiler* fc) {
+  int saved_count = fc->local_count;
+  fc->brace_depth++;
+  while (!check(p, tok_rbrace) && !check(p, tok_eof) && !p->had_error) {
+    parse_stmt(p, fc);
+    maybe_split_chunk(p, fc);
+  }
+  expect(p, tok_rbrace);
+  fc->brace_depth--;
+  for (int i = saved_count; i < fc->local_count; i++) {
+    if (!fc->locals[i].is_var)
+      fc->locals[i].dead = 1;
+  }
+}
+
 void compile_closure_value(parser* p, compiler* c, int is_arrow,
                            int parens_params, char* out_lambda_name) {
   int id = (*c->lambda_counter)++;
@@ -313,13 +433,43 @@ void compile_closure_value(parser* p, compiler* c, int is_arrow,
   if (out_lambda_name)
     strcpy(out_lambda_name, mname);
 
+  int needs_frame =
+      estimate_body_span(p, parens_params, is_arrow) > v6_chunk_span_threshold;
+
   method* m = cf_method(c->cf, acc_static, mname,
                         "([LV6Ref;LV6Value;[LV6Value;)LV6Value;");
   m->max_stack = 64;
 
+  char chunk_base[28];
+  method* body_m = m;
+  if (needs_frame) {
+    snprintf(chunk_base, sizeof(chunk_base), "%s$c", mname);
+    char chunk0_name[32];
+    snprintf(chunk0_name, sizeof(chunk0_name), "%s0", chunk_base);
+    const char* chunk_sig = "([LV6Ref;LV6Value;[LV6Value;[LV6Ref;)LV6Value;";
+    method* chunk0 = cf_method(c->cf, acc_static, chunk0_name, chunk_sig);
+    chunk0->max_stack = 64;
+
+    emit_iconst(m, v6_max_locals);
+    op_emit2(m, op_anewarray, v6ref_arr_class(c->cf));
+    emit_astore(m, 3);
+    m->max_locals = 4;
+
+    emit_aload(m, 0);
+    emit_aload(m, 1);
+    emit_aload(m, 2);
+    emit_aload(m, 3);
+    uint16_t chunk0_ref =
+        cf_methodref(c->cf, c->this_class_name, chunk0_name, chunk_sig);
+    op_emit2(m, op_invokestatic, chunk0_ref);
+    op_emit(m, op_areturn);
+
+    body_m = chunk0;
+  }
+
   compiler fc;
   fc.cf = c->cf;
-  fc.m = m;
+  fc.m = body_m;
   fc.parent = c;
   fc.lambda_counter = c->lambda_counter;
   fc.is_arrow = is_arrow;
@@ -327,8 +477,14 @@ void compile_closure_value(parser* p, compiler* c, int is_arrow,
   fc.locals = malloc(sizeof(local) * v6_initial_locals);
   fc.local_count = 0;
   fc.local_cap = v6_initial_locals;
-  fc.scratch_slot = 3;
-  fc.next_local_slot = 5;
+  fc.use_frame_locals = needs_frame;
+  fc.frame_slot = needs_frame ? 3 : 0;
+  fc.next_frame_slot = 0;
+  fc.chunk_id = 0;
+  if (needs_frame)
+    snprintf(fc.chunk_base, sizeof(fc.chunk_base), "%s", chunk_base);
+  fc.scratch_slot = needs_frame ? 4 : 3;
+  fc.next_local_slot = needs_frame ? 6 : 5;
   fc.upvalues = malloc(sizeof(upvalue) * v6_initial_upvalues);
   fc.upvalue_count = 0;
   fc.upvalue_cap = v6_initial_upvalues;
@@ -341,7 +497,8 @@ void compile_closure_value(parser* p, compiler* c, int is_arrow,
   fc.class_name = c->class_name;
   fc.class_name_len = c->class_name_len;
   fc.pending_field_count = 0;
-  fc.box_locals = compile_body_has_closures(p, parens_params, is_arrow);
+  fc.box_locals =
+      needs_frame ? 1 : compile_body_has_closures(p, parens_params, is_arrow);
   fc.label_count = 0;
   fc.pending_label_count = 0;
   fc.finally_depth = 0;
@@ -395,7 +552,13 @@ void compile_closure_value(parser* p, compiler* c, int is_arrow,
   if (check(p, tok_lbrace)) {
     advance(p);
     prescan_decls(p, &fc, p->cur.start, 1);
-    parse_block(p, &fc);
+    if (needs_frame) {
+      if (op_pos(fc.m) > 0)
+        force_split_chunk(&fc);
+      compile_function_body_chunked(p, &fc);
+    } else {
+      parse_block(p, &fc);
+    }
     emit_undef(fc.cf, fc.m);
     op_emit(fc.m, op_areturn);
   } else {
@@ -481,7 +644,7 @@ void parse_function_decl(parser* p, compiler* c) {
   }
   advance(p);
   tok name = p->prev;
-  uint16_t slot = c->next_local_slot++;
+  uint16_t slot = next_declared_slot(c);
   emit_undef(c->cf, c->m);
   emit_var_declare(c, slot);
   add_local(c, name, slot, 0, 0);

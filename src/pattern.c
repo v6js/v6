@@ -49,7 +49,7 @@ void parse_one_declarator_named(parser* p, compiler* c, tok_kind kind,
   else
     emit_undef(c->cf, c->m);
 
-  uint16_t slot = c->next_local_slot++;
+  uint16_t slot = next_declared_slot(c);
   emit_var_declare(c, slot);
   add_local(c, name, slot, 0, kind == tok_kw_const);
 }
@@ -98,7 +98,7 @@ static void bind_pattern_target(parser* p, compiler* c, tok_kind kind,
     emit_var_write_ref(c, vr);
     op_emit(c->m, op_pop);
   } else {
-    uint16_t slot = c->next_local_slot++;
+    uint16_t slot = next_declared_slot(c);
     emit_var_declare(c, slot);
     add_local(c, name, slot, 0, kind == tok_kw_const);
   }
@@ -172,6 +172,7 @@ void parse_array_pattern(parser* p, compiler* c, tok_kind kind,
         parse_object_pattern(&pp, c, kind, nested_slot);
 
       idx++;
+      maybe_split_chunk_prescan(c);
       if (!match(p, tok_comma))
         break;
       continue;
@@ -191,6 +192,7 @@ void parse_array_pattern(parser* p, compiler* c, tok_kind kind,
     emit_pattern_default(p, c);
     bind_pattern_target(p, c, kind, name);
     idx++;
+    maybe_split_chunk_prescan(c);
     if (!match(p, tok_comma))
       break;
   }
@@ -237,6 +239,7 @@ void parse_object_pattern(parser* p, compiler* c, tok_kind kind,
       else
         parse_object_pattern(&pp, c, kind, nested_slot);
 
+      maybe_split_chunk_prescan(c);
       if (!match(p, tok_comma))
         break;
       continue;
@@ -255,6 +258,7 @@ void parse_object_pattern(parser* p, compiler* c, tok_kind kind,
 
     emit_pattern_default(p, c);
     bind_pattern_target(p, c, kind, target_name);
+    maybe_split_chunk_prescan(c);
     if (!match(p, tok_comma))
       break;
   }
@@ -293,6 +297,9 @@ void parse_one_declarator(parser* p, compiler* c, tok_kind kind) {
 
 void parse_var_decl(parser* p, compiler* c, tok_kind kind) {
   parse_one_declarator(p, c, kind);
-  while (match(p, tok_comma))
+  maybe_split_chunk(p, c);
+  while (match(p, tok_comma)) {
     parse_one_declarator(p, c, kind);
+    maybe_split_chunk(p, c);
+  }
 }

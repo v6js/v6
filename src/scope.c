@@ -91,6 +91,12 @@ int find_slot(compiler* c, const char* name, size_t len, uint16_t* out) {
   return 0;
 }
 
+uint16_t next_declared_slot(compiler* c) {
+  if (c->use_frame_locals)
+    return c->next_frame_slot++;
+  return c->next_local_slot++;
+}
+
 void add_local(compiler* c, tok name, uint16_t slot, int is_var, int is_const) {
   if (c->local_count >= v6_max_locals)
     return;
@@ -160,10 +166,11 @@ var_ref resolve_var(compiler* c, const char* name, size_t len) {
 }
 
 static void prescan_hoist_one(compiler* c, tok name) {
-  uint16_t slot = c->next_local_slot++;
+  uint16_t slot = next_declared_slot(c);
   emit_undef(c->cf, c->m);
   emit_var_declare(c, slot);
   add_local(c, name, slot, 1, 0);
+  maybe_split_chunk_prescan(c);
 }
 
 static int prescan_tok_ends_value(tok_kind k) {
@@ -323,10 +330,11 @@ void prescan_decls(parser* p, compiler* c, const char* src,
           t = name;
           break;
         }
-        uint16_t slot = c->next_local_slot++;
+        uint16_t slot = next_declared_slot(c);
         emit_undef(c->cf, c->m);
         emit_var_declare(c, slot);
         add_local(c, name, slot, 1, 0);
+        maybe_split_chunk_prescan(c);
 
         t = lex_next(&lx);
         if (t.kind == tok_assign) {
@@ -354,10 +362,11 @@ void prescan_decls(parser* p, compiler* c, const char* src,
           t = name;
           break;
         }
-        uint16_t slot = c->next_local_slot++;
+        uint16_t slot = next_declared_slot(c);
         emit_undef(c->cf, c->m);
         emit_var_declare(c, slot);
         add_local(c, name, slot, 0, is_const_decl);
+        maybe_split_chunk_prescan(c);
 
         t = lex_next(&lx);
         if (t.kind == tok_assign) {
@@ -605,5 +614,6 @@ void prescan_decls(parser* p, compiler* c, const char* src,
       emit_var_write_ref(c, vr);
       op_emit(c->m, op_pop);
     }
+    maybe_split_chunk_prescan(c);
   }
 }

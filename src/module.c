@@ -12,6 +12,10 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 void module_ctx_init(module_ctx* mc) {
   mc->count = 0;
 }
@@ -91,6 +95,30 @@ void path_normalize(const char* path, char* out, size_t out_size) {
   }
   if (out[0] == '\0')
     strncat(out, ".", out_size - 1);
+}
+
+static void canonicalize_path(char* path, size_t size) {
+#ifdef _WIN32
+  HANDLE h = CreateFileA(path, GENERIC_READ,
+                         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                         NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+  if (h == INVALID_HANDLE_VALUE)
+    return;
+  char resolved[v6_max_path];
+  DWORD n = GetFinalPathNameByHandleA(h, resolved, (DWORD)sizeof(resolved),
+                                      FILE_NAME_NORMALIZED);
+  CloseHandle(h);
+  if (n == 0 || n >= sizeof(resolved))
+    return;
+  const char* start = resolved;
+  if (strncmp(start, "\\\\?\\", 4) == 0)
+    start += 4;
+  path_normalize(start, path, size);
+#else
+  char resolved[v6_max_path];
+  if (realpath(path, resolved))
+    path_normalize(resolved, path, size);
+#endif
 }
 
 void path_dirname(const char* path, char* out, size_t out_size) {
@@ -222,11 +250,15 @@ int resolve_module_specifier(const char* importer_dir, const char* specifier,
   if (is_relative) {
     char joined[v6_max_path];
     path_join(importer_dir, specifier, joined, sizeof(joined));
-    if (try_as_file(joined, out_path, out_size))
+    if (try_as_file(joined, out_path, out_size)) {
+      canonicalize_path(out_path, out_size);
       return 0;
+    }
     if (path_is_directory(joined) &&
-        try_as_directory(joined, out_path, out_size))
+        try_as_directory(joined, out_path, out_size)) {
+      canonicalize_path(out_path, out_size);
       return 0;
+    }
     snprintf(err, err_size, "Cannot find module '%s'", specifier);
     return -1;
   }
@@ -239,11 +271,15 @@ int resolve_module_specifier(const char* importer_dir, const char* specifier,
              specifier);
     char normalized[v6_max_path];
     path_normalize(candidate, normalized, sizeof(normalized));
-    if (try_as_file(normalized, out_path, out_size))
+    if (try_as_file(normalized, out_path, out_size)) {
+      canonicalize_path(out_path, out_size);
       return 0;
+    }
     if (path_is_directory(normalized) &&
-        try_as_directory(normalized, out_path, out_size))
+        try_as_directory(normalized, out_path, out_size)) {
+      canonicalize_path(out_path, out_size);
       return 0;
+    }
 
     char parent[v6_max_path];
     path_dirname(dir, parent, sizeof(parent));

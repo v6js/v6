@@ -459,6 +459,9 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
   c.module_dir = module_dir;
 
   c.box_locals = 1;
+  c.use_frame_locals = 0;
+  c.frame_slot = 0;
+  c.next_frame_slot = 0;
 
   if (src_has_ident(src, "Error"))
     bind_builtin(&c, "Error", "ERROR");

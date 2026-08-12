@@ -298,7 +298,7 @@ static void declare_or_assign_module_binding(compiler* c, tok name) {
       return;
     }
   }
-  uint16_t slot = c->next_local_slot++;
+  uint16_t slot = next_declared_slot(c);
   emit_var_declare(c, slot);
   add_local(c, name, slot, 0, 0);
 }

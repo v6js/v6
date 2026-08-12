@@ -318,6 +318,10 @@ int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
   jmethodID main_m =
       (*env)->GetStaticMethodID(env, cls, "main", "([Ljava/lang/String;)V");
   if (!main_m) {
+    if ((*env)->ExceptionCheck(env)) {
+      (*env)->ExceptionDescribe(env);
+      (*env)->ExceptionClear(env);
+    }
     fprintf(stderr, "error: compiled program has no entry point\n");
     return -1;
   }

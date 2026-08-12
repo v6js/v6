@@ -84,6 +84,11 @@ typedef struct compiler {
   field_init pending_fields[v6_max_fields];
   int pending_field_count;
   int box_locals;
+  int use_frame_locals;
+  uint16_t frame_slot;
+  uint16_t next_frame_slot;
+  char chunk_base[28];
+  int chunk_id;
   const char* label_names[v6_max_labels];
   size_t label_lens[v6_max_labels];
   int label_break_depth[v6_max_labels];
