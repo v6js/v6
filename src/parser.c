@@ -161,6 +161,8 @@ int match_property_name(parser* p) {
 }
 
 void skip_balanced(parser* p, tok_kind open, tok_kind close) {
+  int save_auto_regex = p->lex.auto_regex;
+  p->lex.auto_regex = 1;
   int depth = 1;
   while (depth > 0 && !check(p, tok_eof)) {
     if (check(p, open))
@@ -169,6 +171,7 @@ void skip_balanced(parser* p, tok_kind open, tok_kind close) {
       depth--;
     advance(p);
   }
+  p->lex.auto_regex = save_auto_regex;
 }
 
 #define v6_max_exports 128
@@ -822,10 +825,11 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
     add_local(&c, dirname_tok, dirname_slot, 0, 0);
   }
 
-  prescan_decls(&c, src, 1);
-
   parser p;
   parser_init(&p, src);
+
+  prescan_decls(&p, &c, src, 1);
+
   parse_program(&p, &c);
 
   if (is_entry) {

@@ -6,7 +6,7 @@
 struct module_ctx;
 
 #define v6_max_params 64
-#define v6_max_locals 512
+#define v6_max_locals 4096
 #define v6_initial_locals 24
 #define v6_max_loops 32
 #define v6_max_breaks 32

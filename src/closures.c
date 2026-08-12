@@ -232,6 +232,7 @@ static int compile_body_has_closures(parser* p, int parens_params,
   lexer save_lex = p->lex;
   tok save_cur = p->cur;
   tok save_prev = p->prev;
+  p->lex.auto_regex = 1;
 
   tok t = p->cur;
   if (parens_params) {
@@ -393,7 +394,7 @@ void compile_closure_value(parser* p, compiler* c, int is_arrow,
 
   if (check(p, tok_lbrace)) {
     advance(p);
-    prescan_decls(&fc, p->cur.start, 1);
+    prescan_decls(p, &fc, p->cur.start, 1);
     parse_block(p, &fc);
     emit_undef(fc.cf, fc.m);
     op_emit(fc.m, op_areturn);
@@ -430,14 +431,20 @@ void compile_closure_value(parser* p, compiler* c, int is_arrow,
 }
 
 static void skip_function_tokens(parser* p) {
+  int save_auto_regex = p->lex.auto_regex;
+  p->lex.auto_regex = 1;
+
   match(p, tok_star);
   if (!is_contextual_ident(p->cur.kind)) {
     error_at(p, "expected identifier");
+    p->lex.auto_regex = save_auto_regex;
     return;
   }
   advance(p);
-  if (!expect(p, tok_lparen))
+  if (!expect(p, tok_lparen)) {
+    p->lex.auto_regex = save_auto_regex;
     return;
+  }
   int depth = 1;
   while (depth > 0 && !check(p, tok_eof)) {
     if (check(p, tok_lparen))
@@ -446,8 +453,10 @@ static void skip_function_tokens(parser* p) {
       depth--;
     advance(p);
   }
-  if (!expect(p, tok_lbrace))
+  if (!expect(p, tok_lbrace)) {
+    p->lex.auto_regex = save_auto_regex;
     return;
+  }
   depth = 1;
   while (depth > 0 && !check(p, tok_eof)) {
     if (check(p, tok_lbrace))
@@ -456,6 +465,7 @@ static void skip_function_tokens(parser* p) {
       depth--;
     advance(p);
   }
+  p->lex.auto_regex = save_auto_regex;
 }
 
 void parse_function_decl(parser* p, compiler* c) {

@@ -55,6 +55,8 @@ void parse_one_declarator_named(parser* p, compiler* c, tok_kind kind,
 }
 
 void skip_field_init(parser* p) {
+  int save_auto_regex = p->lex.auto_regex;
+  p->lex.auto_regex = 1;
   int depth = 0;
   while (!check(p, tok_eof)) {
     if (check(p, tok_lparen) || check(p, tok_lbracket) ||
@@ -63,15 +65,19 @@ void skip_field_init(parser* p) {
     } else if (check(p, tok_rparen) || check(p, tok_rbracket)) {
       depth--;
     } else if (check(p, tok_rbrace)) {
-      if (depth == 0)
+      if (depth == 0) {
+        p->lex.auto_regex = save_auto_regex;
         return;
+      }
       depth--;
     } else if (check(p, tok_semi) && depth == 0) {
       advance(p);
+      p->lex.auto_regex = save_auto_regex;
       return;
     }
     advance(p);
   }
+  p->lex.auto_regex = save_auto_regex;
 }
 
 static void bind_pattern_target(parser* p, compiler* c, tok_kind kind,

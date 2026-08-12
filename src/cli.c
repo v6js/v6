@@ -236,11 +236,16 @@ int v6_cli_run_source(const char* src, const char* in_path,
     }
 
     if (cacheable) {
-      int tracked_count = 1 + modctx.count;
+      char exe_path[1024];
+      int have_exe_path = v6_get_own_exe_path(exe_path, sizeof(exe_path)) == 0;
+
+      int tracked_count = 1 + modctx.count + (have_exe_path ? 1 : 0);
       const char** tracked_paths = malloc(sizeof(char*) * tracked_count);
       tracked_paths[0] = in_path;
       for (int i = 0; i < modctx.count; i++)
         tracked_paths[i + 1] = modctx.modules[i].abs_path;
+      if (have_exe_path)
+        tracked_paths[1 + modctx.count] = exe_path;
 
       int entry_count = 1 + modctx.count;
       const char** entry_names = malloc(sizeof(char*) * entry_count);

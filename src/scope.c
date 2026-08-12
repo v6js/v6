@@ -212,7 +212,9 @@ static tok prescan_skip_initializer(lexer* lx, tok t) {
       edepth--;
     } else if (edepth == 0 && (t.kind == tok_comma || t.kind == tok_semi)) {
       break;
-    } else if (edepth == 0 && t.line > prev_line) {
+    } else if (edepth == 0 && t.line > prev_line &&
+               prescan_tok_ends_value(prev_kind) && t.kind != tok_question &&
+               t.kind != tok_colon) {
       break;
     }
     prev_kind = t.kind;
@@ -287,7 +289,8 @@ static tok prescan_pattern_hoist(compiler* c, lexer* lx, int is_array) {
 
 #define v6_max_pending_fns 1024
 
-void prescan_decls(compiler* c, const char* src, int hoist_functions) {
+void prescan_decls(parser* p, compiler* c, const char* src,
+                   int hoist_functions) {
   const char* pending_fns[v6_max_pending_fns];
   int pending_fns_async[v6_max_pending_fns];
   int pending_count = 0;
@@ -574,6 +577,12 @@ void prescan_decls(compiler* c, const char* src, int hoist_functions) {
     }
     c->pending_async_gen = is_gen && is_async;
     compile_closure_value(&fp, c, 0, 1, lambda_name);
+    if (fp.had_error) {
+      p->had_error = 1;
+      p->err_line = fp.err_line;
+      snprintf(p->err_msg, sizeof(p->err_msg), "%s", fp.err_msg);
+      return;
+    }
     if (direct_le) {
       char* shadow_name = malloc(24);
       int shadow_arity = 0;

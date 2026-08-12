@@ -114,23 +114,44 @@ static void skip_do_while_body(parser* p) {
     skip_balanced(p, tok_lbrace, tok_rbrace);
     return;
   }
+  int save_auto_regex = p->lex.auto_regex;
+  p->lex.auto_regex = 1;
   int depth = 0;
   for (;;) {
-    if (check(p, tok_eof))
+    if (check(p, tok_eof)) {
+      p->lex.auto_regex = save_auto_regex;
       return;
+    }
     if (check(p, tok_lparen) || check(p, tok_lbracket) ||
         check(p, tok_lbrace)) {
       depth++;
-    } else if (check(p, tok_rparen) || check(p, tok_rbracket) ||
-               check(p, tok_rbrace)) {
-      if (depth == 0)
+      advance(p);
+    } else if (check(p, tok_rparen) || check(p, tok_rbracket)) {
+      if (depth == 0) {
+        p->lex.auto_regex = save_auto_regex;
         return;
+      }
       depth--;
+      advance(p);
+    } else if (check(p, tok_rbrace)) {
+      if (depth == 0) {
+        p->lex.auto_regex = save_auto_regex;
+        return;
+      }
+      depth--;
+      advance(p);
+      if (depth == 0 && !check(p, tok_kw_else) && !check(p, tok_kw_catch) &&
+          !check(p, tok_kw_finally)) {
+        p->lex.auto_regex = save_auto_regex;
+        return;
+      }
     } else if (depth == 0 && check(p, tok_semi)) {
       advance(p);
+      p->lex.auto_regex = save_auto_regex;
       return;
+    } else {
+      advance(p);
     }
-    advance(p);
   }
 }
 
@@ -1059,7 +1080,7 @@ void parse_stmt(parser* p, compiler* c) {
         p->cur.line > p->prev.line)
       emit_undef(c->cf, c->m);
     else
-      parse_expr(p, c);
+      parse_seq_expr(p, c);
     expect_semi(p);
     emit_all_pending_finally(c);
     op_emit(c->m, op_areturn);

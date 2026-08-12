@@ -30,6 +30,7 @@ static int peek_arrow_after_parens(parser* p) {
   lexer save_lex = p->lex;
   tok save_cur = p->cur;
   tok save_prev = p->prev;
+  p->lex.auto_regex = 1;
 
   int depth = 0;
   tok t = p->cur;
@@ -63,25 +64,28 @@ static void parse_new(parser* p, compiler* c) {
       return;
     }
     emit_var_read_ref(c, this_vr);
+  } else if (match(p, tok_lparen)) {
+    parse_seq_expr(p, c);
+    if (!expect(p, tok_rparen))
+      return;
   } else {
     if (!expect(p, tok_ident))
       return;
     tok name = p->prev;
     var_ref vr = resolve_var(c, name.start, name.len);
     if (vr.kind == var_not_found) {
-      error_at(p, "undeclared variable");
-      return;
-    }
-
-    if (!check(p, tok_dot) && !check(p, tok_lbracket)) {
-      const char* lambda_name = find_direct_fn(c, name.start, name.len);
-      if (lambda_name) {
-        compile_direct_new(p, c, vr, lambda_name);
-        return;
+      emit_throw_reference_error(c, name.start, name.len);
+    } else {
+      if (!check(p, tok_dot) && !check(p, tok_lbracket)) {
+        const char* lambda_name = find_direct_fn(c, name.start, name.len);
+        if (lambda_name) {
+          compile_direct_new(p, c, vr, lambda_name);
+          return;
+        }
       }
-    }
 
-    emit_var_read_ref(c, vr);
+      emit_var_read_ref(c, vr);
+    }
   }
 
   while (check(p, tok_dot) || check(p, tok_lbracket)) {
@@ -183,7 +187,9 @@ static void parse_ident_primary(parser* p, compiler* c, tok name) {
 
     var_ref vr = resolve_var(c, name.start, name.len);
     if (vr.kind == var_not_found) {
-      error_at(p, "undeclared variable");
+      emit_throw_reference_error(c, name.start, name.len);
+      parse_expr(p, c);
+      op_emit(c->m, op_pop);
       return;
     }
     local* le = find_local_entry(c, name.start, name.len);
@@ -204,6 +210,12 @@ static void parse_ident_primary(parser* p, compiler* c, tok name) {
     advance(p);
 
     var_ref vr = resolve_var(c, name.start, name.len);
+    if (vr.kind == var_not_found && op != tok_assign) {
+      emit_throw_reference_error(c, name.start, name.len);
+      parse_expr(p, c);
+      op_emit(c->m, op_pop);
+      return;
+    }
     if (vr.kind == var_not_found) {
       error_at(p, "undeclared variable");
       return;
@@ -258,7 +270,7 @@ static void parse_ident_primary(parser* p, compiler* c, tok name) {
     advance(p);
     var_ref vr = resolve_var(c, name.start, name.len);
     if (vr.kind == var_not_found) {
-      error_at(p, "undeclared variable");
+      emit_throw_reference_error(c, name.start, name.len);
       return;
     }
     local* le = find_local_entry(c, name.start, name.len);
@@ -444,10 +456,10 @@ void parse_primary(parser* p, compiler* c) {
     if (check(p, tok_dot) || check(p, tok_lbracket)) {
       var_ref vr = resolve_var(c, name.start, name.len);
       if (vr.kind == var_not_found) {
-        error_at(p, "undeclared variable");
-        return;
+        emit_throw_reference_error(c, name.start, name.len);
+      } else {
+        emit_var_read_ref(c, vr);
       }
-      emit_var_read_ref(c, vr);
       if (match(p, tok_dot)) {
         if (!match_property_name(p)) {
           error_at(p, "expected property name");
@@ -483,7 +495,7 @@ void parse_primary(parser* p, compiler* c) {
 
     var_ref vr = resolve_var(c, name.start, name.len);
     if (vr.kind == var_not_found) {
-      error_at(p, "undeclared variable");
+      emit_throw_reference_error(c, name.start, name.len);
       return;
     }
     local* le = find_local_entry(c, name.start, name.len);

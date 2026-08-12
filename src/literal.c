@@ -289,10 +289,10 @@ static void parse_object_entry(parser* p, compiler* c) {
   } else if (shorthand_ok && !computed) {
     var_ref vr = resolve_var(c, ident_tok.start, ident_tok.len);
     if (vr.kind == var_not_found) {
-      error_at(p, "undeclared variable");
-      return;
+      emit_throw_reference_error(c, ident_tok.start, ident_tok.len);
+    } else {
+      emit_var_read_ref(c, vr);
     }
-    emit_var_read_ref(c, vr);
   } else {
     error_at(p, "expected ':'");
     return;
