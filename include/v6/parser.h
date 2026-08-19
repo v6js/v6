@@ -21,7 +21,6 @@ struct module_ctx;
 typedef struct field_init {
   const char* name;
   size_t name_len;
-  const char* init_src;
   void* init_ast;
 } field_init;
 
@@ -38,10 +37,6 @@ typedef struct local {
   int is_var;
   int is_const;
   int dead;
-  int direct_fn;
-  const char* fn_method_name;
-  const char* num_shadow_name;
-  int num_arity;
 } local;
 
 typedef struct upvalue {
@@ -88,8 +83,6 @@ typedef struct compiler {
   int use_frame_locals;
   uint16_t frame_slot;
   uint16_t next_frame_slot;
-  char chunk_base[28];
-  int chunk_id;
   const char* label_names[v6_max_labels];
   size_t label_lens[v6_max_labels];
   int label_break_depth[v6_max_labels];
@@ -98,13 +91,11 @@ typedef struct compiler {
   const char* pending_label_names[v6_max_pending_labels];
   size_t pending_label_lens[v6_max_pending_labels];
   int pending_label_count;
-  const char* finally_src[v6_max_pending_finally];
   void* finally_ast[v6_max_pending_finally];
   int finally_break_depth[v6_max_pending_finally];
   int finally_continue_depth[v6_max_pending_finally];
   int finally_depth;
   int is_async_gen;
-  int pending_async_gen;
   int is_module;
   uint16_t exports_slot;
   const char* this_class_name;

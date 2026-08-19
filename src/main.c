@@ -1,15 +1,8 @@
-#include "v6/ast_codegen.h"
 #include "v6/cli.h"
 #include "v6/color.h"
 #include "v6/repl.h"
 
-#include <stdlib.h>
-
 int main(int argc, char** argv) {
-  const char* ast_env = getenv("V6_AST");
-  if (ast_env && ast_env[0] == '1')
-    g_v6_use_ast_compiler = 1;
-
   v6_cli_options opts;
   v6_cli_action action = v6_cli_parse(argc, argv, &opts);
 

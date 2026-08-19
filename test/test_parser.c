@@ -158,7 +158,7 @@ int test_compile_program(void) {
       "function add(a, b) { return a + b; } console.log(add(2, 3));", &cf4,
       NULL, NULL);
   v6_check(&fails, rc4.ok);
-  v6_check(&fails, cf4.method_len == prelude_method_len + 2);
+  v6_check(&fails, cf4.method_len == prelude_method_len + 1);
   cf_free(&cf4);
 
   class_file cf5;

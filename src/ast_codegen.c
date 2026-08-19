@@ -19,8 +19,6 @@ typedef struct {
 
 static ast_cg_err g_cgerr;
 
-int g_v6_use_ast_compiler = 0;
-
 void ast_cg_reset_error(void) {
   g_cgerr.had_error = 0;
   g_cgerr.err_msg[0] = '\0';
@@ -47,6 +45,22 @@ static void cg_error(const char* msg, int line) {
     n = sizeof(g_cgerr.err_msg) - 1;
   memcpy(g_cgerr.err_msg, msg, n);
   g_cgerr.err_msg[n] = '\0';
+}
+
+static int cg_try_require(compiler* c, ast_node* call_node) {
+  if (!call_node->raw_src || call_node->a->kind != ast_ident ||
+      call_node->a->str_len != 7 ||
+      memcmp(call_node->a->str, "require", 7) != 0)
+    return 0;
+  var_ref existing = resolve_var(c, call_node->a->str, call_node->a->str_len);
+  if (existing.kind != var_not_found)
+    return 0;
+  parser subp;
+  parser_init(&subp, call_node->raw_src);
+  emit_require_expr(&subp, c);
+  if (subp.had_error)
+    cg_error(subp.err_msg, subp.err_line);
+  return 1;
 }
 
 static tok mktok_from_ident(ast_node* n) {
@@ -215,6 +229,9 @@ static void cg_chain_impl(compiler* c, ast_node* node, size_t* jumps,
       cg_invoke_with_this_fn_on_stack(c, &node->list);
       return;
     }
+
+    if (cg_try_require(c, node))
+      return;
 
     cg_expr(c, callee);
     emit_undef(c->cf, c->m);
@@ -808,14 +825,16 @@ static void cg_expr(compiler* c, ast_node* e) {
         op_emit2(c->m, op_invokevirtual, def_idx);
         continue;
       }
-      cg_expr(c, pr->value);
       if (pr->is_method) {
+        ast_codegen_function_value(c, pr->value, NULL);
         if (pr->is_generator && pr->is_async)
           emit_wrap_async_generator(c);
         else if (pr->is_generator)
           emit_wrap_generator(c);
         else if (pr->is_async)
           emit_wrap_async(c);
+      } else {
+        cg_expr(c, pr->value);
       }
       uint16_t set_idx = cf_methodref(c->cf, "V6Object", "set",
                                       "(Ljava/lang/String;LV6Value;)V");
@@ -1059,18 +1078,8 @@ static void cg_expr(compiler* c, ast_node* e) {
     break;
   }
   case ast_call: {
-    if (e->raw_src && e->a->kind == ast_ident && e->a->str_len == 7 &&
-        memcmp(e->a->str, "require", 7) == 0) {
-      var_ref existing = resolve_var(c, e->a->str, e->a->str_len);
-      if (existing.kind == var_not_found) {
-        parser subp;
-        parser_init(&subp, e->raw_src);
-        emit_require_expr(&subp, c);
-        if (subp.had_error)
-          cg_error(subp.err_msg, subp.err_line);
-        break;
-      }
-    }
+    if (cg_try_require(c, e))
+      break;
     cg_chain_value(c, e);
     break;
   }
@@ -1182,7 +1191,6 @@ static void cg_expr(compiler* c, ast_node* e) {
     uint16_t src_slot = c->next_local_slot++;
     emit_astore(c->m, src_slot);
     cg_bind_pattern_from_slot(c, e->a, tok_kw_var, src_slot);
-    emit_aload(c->m, src_slot);
     break;
   }
   default:
@@ -1445,7 +1453,6 @@ void ast_codegen_function_value(compiler* c, ast_node* fn,
   fc.use_frame_locals = 0;
   fc.frame_slot = 0;
   fc.next_frame_slot = 0;
-  fc.chunk_id = 0;
   fc.scratch_slot = 3;
   fc.next_local_slot = 5;
   fc.upvalues = malloc(sizeof(upvalue) * v6_initial_upvalues);
@@ -1464,9 +1471,7 @@ void ast_codegen_function_value(compiler* c, ast_node* fn,
   fc.label_count = 0;
   fc.pending_label_count = 0;
   fc.finally_depth = 0;
-  fc.is_async_gen = c->pending_async_gen;
-  fc.pending_async_gen = 0;
-  c->pending_async_gen = 0;
+  fc.is_async_gen = fn->flag_b && fn->flag_c;
   fc.is_module = c->is_module;
   fc.this_class_name = c->this_class_name;
   fc.modctx = c->modctx;
@@ -1760,7 +1765,6 @@ static void cg_class_expr(compiler* c, ast_node* n, int is_stmt) {
             member->key->str;
         pending_instance_fields[pending_instance_field_count].name_len =
             member->key->str_len;
-        pending_instance_fields[pending_instance_field_count].init_src = NULL;
         pending_instance_fields[pending_instance_field_count].init_ast =
             member->value;
         pending_instance_field_count++;
@@ -2191,8 +2195,12 @@ static void cg_stmt(compiler* c, ast_node* s) {
       add_local(c, t, slot, 0, 0);
       char lambda_name[24];
       ast_codegen_function_value(c, s, lambda_name);
-      if (s->flag_c)
+      if (s->flag_c && s->flag_b)
+        emit_wrap_async_generator(c);
+      else if (s->flag_c)
         emit_wrap_generator(c);
+      else if (s->flag_b)
+        emit_wrap_async(c);
       var_ref vr = resolve_var(c, s->str, s->str_len);
       emit_var_write_ref(c, vr);
       op_emit(c->m, op_pop);

@@ -10,7 +10,6 @@
 
 #include "v6/literal.h"
 #include "v6/scope.h"
-#include "v6/stmt.h"
 
 #include "v6/ast.h"
 #include "v6/ast_codegen.h"
@@ -20,6 +19,24 @@
 void advance(parser* p) {
   p->prev = p->cur;
   p->cur = lex_next(&p->lex);
+}
+
+int compile_expr(parser* p, compiler* c) {
+  ast_cg_reset_error();
+  ast_arena arena;
+  ast_arena_init(&arena);
+  ast_node* e = ast_parse_expr_from(&arena, p);
+  if (!p->had_error)
+    ast_codegen_expr(c, e);
+  char cg_msg[1024];
+  int cg_line = 0;
+  if (ast_cg_had_error(cg_msg, sizeof(cg_msg), &cg_line)) {
+    p->had_error = 1;
+    p->err_line = cg_line;
+    snprintf(p->err_msg, sizeof(p->err_msg), "%s", cg_msg);
+  }
+  ast_arena_free(&arena);
+  return p->had_error ? -1 : 0;
 }
 
 void parser_init(parser* p, const char* src) {
@@ -457,7 +474,6 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
   c.pending_label_count = 0;
   c.finally_depth = 0;
   c.is_async_gen = 0;
-  c.pending_async_gen = 0;
   c.is_module = !is_entry;
   c.this_class_name = this_class_name;
   c.modctx = modctx;
@@ -836,27 +852,22 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
   parser p;
   parser_init(&p, src);
 
-  if (g_v6_use_ast_compiler) {
-    ast_cg_reset_error();
-    ast_arena arena;
-    ast_arena_init(&arena);
-    ast_node* prog = ast_parse_program_from(&arena, &p);
-    if (!p.had_error) {
-      ast_hoist_scope(&c, &prog->list);
-      ast_codegen_stmt_list(&c, &prog->list);
-    }
-    char cg_msg[1024];
-    int cg_line = 0;
-    if (ast_cg_had_error(cg_msg, sizeof(cg_msg), &cg_line)) {
-      p.had_error = 1;
-      p.err_line = cg_line;
-      snprintf(p.err_msg, sizeof(p.err_msg), "%s", cg_msg);
-    }
-    ast_arena_free(&arena);
-  } else {
-    prescan_decls(&p, &c, src, 1);
-    parse_program(&p, &c);
+  ast_cg_reset_error();
+  ast_arena arena;
+  ast_arena_init(&arena);
+  ast_node* prog = ast_parse_program_from(&arena, &p);
+  if (!p.had_error) {
+    ast_hoist_scope(&c, &prog->list);
+    ast_codegen_stmt_list(&c, &prog->list);
   }
+  char cg_msg[1024];
+  int cg_line = 0;
+  if (ast_cg_had_error(cg_msg, sizeof(cg_msg), &cg_line)) {
+    p.had_error = 1;
+    p.err_line = cg_line;
+    snprintf(p.err_msg, sizeof(p.err_msg), "%s", cg_msg);
+  }
+  ast_arena_free(&arena);
 
   if (is_entry) {
     uint16_t run_idx = cf_methodref(cf, "V6EventLoop", "run", "()V");

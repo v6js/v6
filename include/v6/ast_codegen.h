@@ -11,5 +11,3 @@ void ast_codegen_function_value(compiler* c, ast_node* fn,
 
 void ast_cg_reset_error(void);
 int ast_cg_had_error(char* out_msg, size_t out_msg_cap, int* out_line);
-
-extern int g_v6_use_ast_compiler;

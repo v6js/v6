@@ -524,21 +524,7 @@ static ast_node* ast_parse_array_literal(parser* p) {
 
 static ast_node* ast_parse_ident_or_arrow(parser* p) {
   if (check(p, tok_ident) && peek_is_arrow(p)) {
-    advance(p);
-    tok pname = p->prev;
-    ast_node* fn = ast_parse_function_like(p, 1, 0, 0, 0, 0);
-    ast_param param;
-    param.pattern = ast_new_node(g_arena, ast_pat_ident, pname.line);
-    param.pattern->str = pname.start;
-    param.pattern->str_len = pname.len;
-    param.is_rest = 0;
-    ast_param_list new_list;
-    memset(&new_list, 0, sizeof(new_list));
-    ast_param_list_push(g_arena, &new_list, param);
-    for (int i = 0; i < fn->params.len; i++)
-      ast_param_list_push(g_arena, &new_list, fn->params.items[i]);
-    fn->params = new_list;
-    return fn;
+    return ast_parse_function_like(p, 1, 0, 0, 0, 0);
   }
   advance(p);
   tok name = p->prev;
@@ -570,8 +556,12 @@ static ast_node* ast_parse_primary(parser* p) {
     tok t = p->prev;
     if (t.is_bigint) {
       ast_node* n = mk(ast_bigint, p);
-      n->str = t.start;
-      n->str_len = t.len - 1;
+      size_t digits_len = t.len - 1;
+      char* digits = malloc(digits_len + 1);
+      memcpy(digits, t.start, digits_len);
+      digits[digits_len] = '\0';
+      n->str = digits;
+      n->str_len = digits_len;
       return n;
     }
     ast_node* n = mk(ast_num, p);
@@ -656,21 +646,7 @@ static ast_node* ast_parse_primary(parser* p) {
       return fn;
     }
     if (check(p, tok_ident) && peek_is_arrow(p)) {
-      advance(p);
-      tok pname = p->prev;
-      ast_node* fn = ast_parse_function_like(p, 1, 0, 1, 0, 0);
-      ast_param param;
-      param.pattern = ast_new_node(g_arena, ast_pat_ident, pname.line);
-      param.pattern->str = pname.start;
-      param.pattern->str_len = pname.len;
-      param.is_rest = 0;
-      ast_param_list new_list;
-      memset(&new_list, 0, sizeof(new_list));
-      ast_param_list_push(g_arena, &new_list, param);
-      for (int i = 0; i < fn->params.len; i++)
-        ast_param_list_push(g_arena, &new_list, fn->params.items[i]);
-      fn->params = new_list;
-      return fn;
+      return ast_parse_function_like(p, 1, 0, 1, 0, 0);
     }
     if (check(p, tok_lparen) && peek_arrow_after_parens(p)) {
       return ast_parse_function_like(p, 1, 1, 1, 0, 0);
@@ -723,7 +699,7 @@ static ast_node* ast_parse_primary(parser* p) {
       lexer sl = p->lex;
       tok sc = p->cur, sp = p->prev;
       advance(p);
-      const char* pattern_start = p->cur.start;
+      const char* pattern_start = p->prev.start;
       skip_balanced(p, tok_lbrace, tok_rbrace);
       if (check(p, tok_assign)) {
         advance(p);
@@ -1879,7 +1855,7 @@ static ast_node* ast_parse_stmt(parser* p) {
     lexer sl = p->lex;
     tok sc = p->cur, sp = p->prev;
     advance(p);
-    const char* pattern_start = p->cur.start;
+    const char* pattern_start = p->prev.start;
     skip_balanced(p, tok_lbracket, tok_rbracket);
     if (check(p, tok_assign)) {
       advance(p);
@@ -1910,4 +1886,9 @@ ast_node* ast_parse_program_from(ast_arena* arena, parser* p) {
   while (!check(p, tok_eof) && !p->had_error)
     ast_list_push(arena, &n->list, ast_parse_stmt(p));
   return n;
+}
+
+ast_node* ast_parse_expr_from(ast_arena* arena, parser* p) {
+  g_arena = arena;
+  return ast_parse_seq_expr(p);
 }

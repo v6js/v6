@@ -4,3 +4,4 @@
 #include "v6/parser.h"
 
 ast_node* ast_parse_program_from(ast_arena* arena, parser* p);
+ast_node* ast_parse_expr_from(ast_arena* arena, parser* p);

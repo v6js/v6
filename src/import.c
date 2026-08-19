@@ -9,7 +9,6 @@
 #include <string.h>
 
 #include "v6/import.h"
-#include "v6/expr.h"
 #include "v6/literal.h"
 #include "v6/scope.h"
 
@@ -228,10 +227,7 @@ static compiled_module* get_or_compile_module(module_ctx* modctx,
 void emit_require_expr(parser* p, compiler* c) {
   advance(p);
   if (!check(p, tok_str)) {
-    parse_seq_expr(p, c);
-    op_emit(c->m, op_pop);
-    if (!expect(p, tok_rparen))
-      return;
+    skip_balanced(p, tok_lparen, tok_rparen);
     char msg[] = "Error: dynamic require() arguments are not supported";
     emit_string_value(c, msg);
     uint16_t throw_cls = cf_class(c->cf, "V6Throw");
