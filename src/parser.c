@@ -12,6 +12,11 @@
 #include "v6/scope.h"
 #include "v6/stmt.h"
 
+#include "v6/ast.h"
+#include "v6/ast_codegen.h"
+#include "v6/ast_hoist.h"
+#include "v6/ast_parse.h"
+
 void advance(parser* p) {
   p->prev = p->cur;
   p->cur = lex_next(&p->lex);
@@ -831,9 +836,27 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
   parser p;
   parser_init(&p, src);
 
-  prescan_decls(&p, &c, src, 1);
-
-  parse_program(&p, &c);
+  if (g_v6_use_ast_compiler) {
+    ast_cg_reset_error();
+    ast_arena arena;
+    ast_arena_init(&arena);
+    ast_node* prog = ast_parse_program_from(&arena, &p);
+    if (!p.had_error) {
+      ast_hoist_scope(&c, &prog->list);
+      ast_codegen_stmt_list(&c, &prog->list);
+    }
+    char cg_msg[1024];
+    int cg_line = 0;
+    if (ast_cg_had_error(cg_msg, sizeof(cg_msg), &cg_line)) {
+      p.had_error = 1;
+      p.err_line = cg_line;
+      snprintf(p.err_msg, sizeof(p.err_msg), "%s", cg_msg);
+    }
+    ast_arena_free(&arena);
+  } else {
+    prescan_decls(&p, &c, src, 1);
+    parse_program(&p, &c);
+  }
 
   if (is_entry) {
     uint16_t run_idx = cf_methodref(cf, "V6EventLoop", "run", "()V");

@@ -22,6 +22,7 @@ typedef struct field_init {
   const char* name;
   size_t name_len;
   const char* init_src;
+  void* init_ast;
 } field_init;
 
 typedef struct param {
@@ -98,6 +99,7 @@ typedef struct compiler {
   size_t pending_label_lens[v6_max_pending_labels];
   int pending_label_count;
   const char* finally_src[v6_max_pending_finally];
+  void* finally_ast[v6_max_pending_finally];
   int finally_break_depth[v6_max_pending_finally];
   int finally_continue_depth[v6_max_pending_finally];
   int finally_depth;
