@@ -1,0 +1,21 @@
+{
+  "site_name": "V6",
+  "github_url": "https://github.com/v6js/v6",
+  "hero": {
+    "title": "V6",
+    "tagline": "A JavaScript runtime built on the JVM. V6 compiles JavaScript directly to JVM bytecode and runs it with a persistent warm process, so repeated runs start fast, and it can call into any Java library already on the classpath through a built-in java: import scheme.",
+    "cta": [
+      { "label": "Read the docs", "href": "docs/index.html", "style": "primary" },
+      { "label": "Read the blog", "href": "blog/index.html", "style": "secondary" },
+      { "label": "View on GitHub", "href": "https://github.com/v6js/v6", "style": "secondary" }
+    ]
+  },
+  "pages": {
+    "home": { "title": "V6", "description": "A JavaScript runtime built on the JVM." },
+    "docs": { "title": "Docs - V6", "description": "V6 documentation: installation, CLI, modules, Java interop and compatibility." },
+    "blog": { "title": "Blog - V6", "description": "Posts about V6's design and internals." }
+  },
+  "posts": {
+    "intro": { "date": "2026-08-11" }
+  }
+}

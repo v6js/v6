@@ -3,6 +3,7 @@ ifeq ($(origin CC),default)
 endif
 
 JAVAC ?= javac
+PYTHON ?= python3
 
 STD := -std=c11
 WARN := -Wall -Wextra
@@ -203,7 +204,7 @@ FMT_FILES := $(wildcard src/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c)
 
 BUILD_TOOL_BIN := build/tools/build_tool$(EXE)
 
-.PHONY: all test fmt clean dirs release bench javaclasses target
+.PHONY: all test fmt clean dirs release bench javaclasses target docs
 
 .DEFAULT_GOAL := all
 
@@ -221,6 +222,9 @@ release:
 
 bench: release
 	bash bench/run.sh
+
+docs:
+	$(PYTHON) docs/build.py
 
 $(V6_BIN): $(RT_OBJS) $(OBJ)/main.o $(RT_CLASS_OBJS) $(OBJ)/runtime_classes.o | dirs
 	$(CC) $(LDFLAGS) $(RT_OBJS) $(OBJ)/main.o $(RT_CLASS_OBJS) $(OBJ)/runtime_classes.o -o $@ $(LDLIBS)
