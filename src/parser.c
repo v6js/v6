@@ -707,6 +707,7 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
 
   uint16_t module_local_slot = 0;
   uint16_t exports_local_slot = 0;
+  uint16_t hidden_module_slot = 0;
 
   if (is_cjs && is_entry) {
     uint16_t obj_cls = cf_class(cf, "V6Object");
@@ -738,6 +739,11 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
     var_ref module_vr;
     module_vr.kind = var_local;
     module_vr.index = module_local_slot;
+
+    hidden_module_slot = c.next_local_slot++;
+    emit_var_read_ref(&c, module_vr);
+    emit_astore(main_m, hidden_module_slot);
+
     emit_var_read_ref(&c, module_vr);
     op_emit2(main_m, op_ldc_w, exports_key);
     uint16_t getprop_idx_early =
@@ -799,6 +805,11 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
     var_ref module_vr;
     module_vr.kind = var_local;
     module_vr.index = module_local_slot;
+
+    hidden_module_slot = c.next_local_slot++;
+    emit_var_read_ref(&c, module_vr);
+    emit_astore(main_m, hidden_module_slot);
+
     emit_var_read_ref(&c, module_vr);
     op_emit2(main_m, op_ldc_w, exports_key);
     uint16_t getprop_idx_early =
@@ -874,10 +885,7 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
     op_emit2(main_m, op_invokestatic, run_idx);
     op_emit(main_m, op_return);
   } else if (is_cjs) {
-    var_ref module_vr;
-    module_vr.kind = var_local;
-    module_vr.index = module_local_slot;
-    emit_var_read_ref(&c, module_vr);
+    emit_aload(main_m, hidden_module_slot);
     uint16_t exports_key = cf_string(cf, "exports");
     op_emit2(main_m, op_ldc_w, exports_key);
     uint16_t getprop_idx =
