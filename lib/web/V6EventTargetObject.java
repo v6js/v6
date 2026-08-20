@@ -1,14 +1,12 @@
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class V6EventTargetObject extends V6Object {
   final V6EventEmitterObject store = new V6EventEmitterObject();
-  final Set<V6Value> onceListeners =
-      Collections.newSetFromMap(new IdentityHashMap<>());
+  final Set<V6Value> onceListeners = new HashSet<>();
   final Map<String, V6Value> handlerRaw = new HashMap<>();
 
   private static V6Value objValue(V6Object o) {
