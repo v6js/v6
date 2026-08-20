@@ -323,6 +323,67 @@ static uint16_t sm(wasm_func_ctx* fc, const char* name, const char* desc) {
   return cf_methodref(fc->cf, "V6Wasm", name, desc);
 }
 
+static void emit_mem_load(wasm_func_ctx* fc, uint32_t offset,
+                          const char* method_name, const char* desc,
+                          uint8_t result_type) {
+  method* m = fc->m;
+  uint16_t addr_scratch = fc->next_slot;
+  ts_pop(fc);
+  emit_istore(m, addr_scratch);
+  op_emit2(m, op_getstatic, wasm_memory_field(fc));
+  emit_iload_slot(m, addr_scratch);
+  emit_iconst(m, (int)offset);
+  op_emit(m, op_iadd);
+  op_emit2(m, op_invokevirtual,
+           cf_methodref(fc->cf, "V6WasmMemory", method_name, desc));
+  ts_push(fc, result_type);
+}
+
+static void emit_mem_store(wasm_func_ctx* fc, uint32_t offset,
+                           const char* method_name, const char* desc,
+                           uint8_t value_type) {
+  method* m = fc->m;
+  uint16_t addr_scratch = fc->next_slot;
+  uint16_t value_scratch = fc->next_slot + 1;
+  ts_pop(fc);
+  switch (value_type) {
+  case wasm_type_i32:
+    emit_istore(m, value_scratch);
+    break;
+  case wasm_type_i64:
+    emit_lstore(m, value_scratch);
+    break;
+  case wasm_type_f32:
+    emit_fstore(m, value_scratch);
+    break;
+  case wasm_type_f64:
+    emit_dstore(m, value_scratch);
+    break;
+  }
+  ts_pop(fc);
+  emit_istore(m, addr_scratch);
+  op_emit2(m, op_getstatic, wasm_memory_field(fc));
+  emit_iload_slot(m, addr_scratch);
+  emit_iconst(m, (int)offset);
+  op_emit(m, op_iadd);
+  switch (value_type) {
+  case wasm_type_i32:
+    emit_iload_slot(m, value_scratch);
+    break;
+  case wasm_type_i64:
+    emit_lload(m, value_scratch);
+    break;
+  case wasm_type_f32:
+    emit_fload(m, value_scratch);
+    break;
+  case wasm_type_f64:
+    emit_dload(m, value_scratch);
+    break;
+  }
+  op_emit2(m, op_invokevirtual,
+           cf_methodref(fc->cf, "V6WasmMemory", method_name, desc));
+}
+
 static void codegen_instr(wasm_func_ctx* fc, wasm_reader2* r);
 static void codegen_numeric(wasm_func_ctx* fc, uint8_t op);
 
@@ -1122,6 +1183,144 @@ static void codegen_instr(wasm_func_ctx* fc, wasm_reader2* r) {
     op_emit2(m, op_putstatic, fref);
     break;
   }
+  case 0x28: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI32", "(I)I", wasm_type_i32);
+    break;
+  }
+  case 0x29: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI64", "(I)J", wasm_type_i64);
+    break;
+  }
+  case 0x2A: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadF32", "(I)F", wasm_type_f32);
+    break;
+  }
+  case 0x2B: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadF64", "(I)D", wasm_type_f64);
+    break;
+  }
+  case 0x2C: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI32_8s", "(I)I", wasm_type_i32);
+    break;
+  }
+  case 0x2D: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI32_8u", "(I)I", wasm_type_i32);
+    break;
+  }
+  case 0x2E: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI32_16s", "(I)I", wasm_type_i32);
+    break;
+  }
+  case 0x2F: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI32_16u", "(I)I", wasm_type_i32);
+    break;
+  }
+  case 0x30: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI64_8s", "(I)J", wasm_type_i64);
+    break;
+  }
+  case 0x31: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI64_8u", "(I)J", wasm_type_i64);
+    break;
+  }
+  case 0x32: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI64_16s", "(I)J", wasm_type_i64);
+    break;
+  }
+  case 0x33: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI64_16u", "(I)J", wasm_type_i64);
+    break;
+  }
+  case 0x34: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI64_32s", "(I)J", wasm_type_i64);
+    break;
+  }
+  case 0x35: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_load(fc, off, "loadI64_32u", "(I)J", wasm_type_i64);
+    break;
+  }
+  case 0x36: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_store(fc, off, "storeI32", "(II)V", wasm_type_i32);
+    break;
+  }
+  case 0x37: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_store(fc, off, "storeI64", "(IJ)V", wasm_type_i64);
+    break;
+  }
+  case 0x38: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_store(fc, off, "storeF32", "(IF)V", wasm_type_f32);
+    break;
+  }
+  case 0x39: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_store(fc, off, "storeF64", "(ID)V", wasm_type_f64);
+    break;
+  }
+  case 0x3A: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_store(fc, off, "storeI32_8", "(II)V", wasm_type_i32);
+    break;
+  }
+  case 0x3B: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_store(fc, off, "storeI32_16", "(II)V", wasm_type_i32);
+    break;
+  }
+  case 0x3C: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_store(fc, off, "storeI64_8", "(IJ)V", wasm_type_i64);
+    break;
+  }
+  case 0x3D: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_store(fc, off, "storeI64_16", "(IJ)V", wasm_type_i64);
+    break;
+  }
+  case 0x3E: {
+    w2_u32(r);
+    uint32_t off = w2_u32(r);
+    emit_mem_store(fc, off, "storeI64_32", "(IJ)V", wasm_type_i64);
+    break;
+  }
   case 0x3F:
     w2_u8(r);
     op_emit2(m, op_getstatic, wasm_memory_field(fc));
@@ -1245,9 +1444,22 @@ static void compile_one_function(wasm_module* mod, class_file* cf,
   }
 }
 
-static void compile_global_inits(wasm_module* mod, class_file* cf,
-                                 const char* class_name, method* clinit,
-                                 compile_result* out_err) {
+static void compile_clinit(wasm_module* mod, class_file* cf,
+                           const char* class_name, method* clinit,
+                           compile_result* out_err) {
+  if (mod->memory_count > 0) {
+    wasm_limits* lim = &mod->memories[0];
+    uint16_t mem_cls = cf_class(cf, "V6WasmMemory");
+    op_emit2(clinit, op_new, mem_cls);
+    op_emit(clinit, op_dup);
+    emit_iconst(clinit, (int)lim->min);
+    emit_iconst(clinit, lim->has_max ? (int)lim->max : -1);
+    op_emit2(clinit, op_invokespecial,
+             cf_methodref(cf, "V6WasmMemory", "<init>", "(II)V"));
+    op_emit2(clinit, op_putstatic,
+             cf_fieldref(cf, class_name, "wasmMemory0", "LV6WasmMemory;"));
+  }
+
   for (uint32_t i = 0; i < mod->global_count; i++) {
     wasm_global_decl* g = &mod->globals[i];
 
@@ -1283,8 +1495,8 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
                                    const char* class_name) {
   if (mod->import_count > 0)
     return wasm_err("wasm imports not yet supported in this build");
-  if (mod->memory_count > 0)
-    return wasm_err("wasm linear memory not yet supported in this build");
+  if (mod->memory_count > 1)
+    return wasm_err("wasm multi-memory not supported (max one memory)");
   if (mod->table_count > 0)
     return wasm_err("wasm tables not yet supported in this build");
   if (mod->element_count > 0)
@@ -1298,6 +1510,9 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
   result.ok = 1;
   result.line = 0;
   result.message[0] = '\0';
+
+  if (mod->memory_count > 0)
+    cf_field(cf, acc_static, "wasmMemory0", "LV6WasmMemory;");
 
   for (uint32_t i = 0; i < mod->global_count; i++) {
     uint32_t combined_idx = mod->imported_global_count + i;
@@ -1317,9 +1532,9 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
     compile_one_function(mod, cf, class_name, combined_idx, m, &result);
   }
 
-  if (mod->global_count > 0) {
+  if (mod->global_count > 0 || mod->memory_count > 0) {
     method* clinit = cf_method(cf, acc_static, "<clinit>", "()V");
-    compile_global_inits(mod, cf, class_name, clinit, &result);
+    compile_clinit(mod, cf, class_name, clinit, &result);
   }
 
   return result;
