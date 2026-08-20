@@ -18,6 +18,7 @@ def destDir = project.findProperty('destDir')
 tasks.named('compileJava') {
   options.incremental = true
   options.release = 21
+  options.compilerArgs << '--add-modules' << 'jdk.incubator.vector'
   if (destDir) {
     destinationDirectory = file(destDir)
   }

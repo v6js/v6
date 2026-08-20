@@ -115,6 +115,8 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Shape.ja
                 lib/core/V6WasmCompiler.java \
                 lib/core/V6WasmMemory.java \
                 lib/core/V6WasmTable.java \
+                lib/core/V6WasmV128.java \
+                lib/core/V6WasmSimd.java \
                 lib/node/V6Path.java \
                 lib/node/V6EventEmitterObject.java lib/node/V6EventEmitterConstructor.java \
                 lib/node/V6NativeFunctionObject.java \
