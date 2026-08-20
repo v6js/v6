@@ -16,4 +16,8 @@ port2.postMessage("reply");
 const me = new MessageEvent("message", { data: "manual" });
 console.log("manual event data:", me.data, me.type);
 
-setTimeout(() => console.log("done"), 20);
+setTimeout(() => {
+  console.log("done");
+  port1.close();
+  port2.close();
+}, 20);

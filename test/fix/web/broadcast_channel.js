@@ -18,5 +18,8 @@ setTimeout(() => {
   a.postMessage("second");
   setTimeout(() => {
     console.log("after close, c saw:", cGot2, "b saw:", bGot);
+    a.close();
+    b.close();
+    other.close();
   }, 20);
 }, 20);
