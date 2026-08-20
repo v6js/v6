@@ -1,4 +1,3 @@
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
@@ -99,24 +98,26 @@ public class V6WasiObject extends V6Object {
     int nwrittenPtr = (int)a[3].toNumber();
     if (fd != 1 && fd != 2)
       return num(EBADF);
-    ByteArrayOutputStream out = new ByteArrayOutputStream();
     int total = 0;
+    for (int i = 0; i < iovsLen; i++) {
+      int base = iovsPtr + i * 8;
+      int len = memory.loadI32(base + 4);
+      total += len;
+    }
+    byte[] buf = new byte[total];
+    int pos = 0;
     for (int i = 0; i < iovsLen; i++) {
       int base = iovsPtr + i * 8;
       int ptr = memory.loadI32(base);
       int len = memory.loadI32(base + 4);
-      for (int j = 0; j < len; j++)
-        out.write(memory.loadI32_8u(ptr + j));
-      total += len;
+      memory.copyOut(ptr, buf, pos, len);
+      pos += len;
     }
     try {
-      byte[] data = out.toByteArray();
       if (fd == 1) {
-        System.out.write(data);
-        System.out.flush();
+        System.out.write(buf);
       } else {
-        System.err.write(data);
-        System.err.flush();
+        System.err.write(buf);
       }
     } catch (IOException e) {
       throw new RuntimeException(e);

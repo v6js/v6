@@ -33,6 +33,10 @@ public final class V6WasmMemory {
     System.arraycopy(src, srcOffset, data, dstOffset, len);
   }
 
+  public void copyOut(int addr, byte[] dst, int dstOff, int len) {
+    System.arraycopy(data, addr, dst, dstOff, len);
+  }
+
   public void copyWithin(int dst, int src, int len) {
     System.arraycopy(data, src, data, dst, len);
   }
