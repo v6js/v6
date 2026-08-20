@@ -680,6 +680,8 @@ compile_result compile_module_impl(class_file* cf, const char* this_class_name,
     bind_builtin_cls(&c, "performance", "V6WebGlobals", "PERFORMANCE");
   if (src_has_ident(src, "navigator"))
     bind_builtin_cls(&c, "navigator", "V6WebGlobals", "NAVIGATOR");
+  if (src_has_ident(src, "WebAssembly"))
+    bind_builtin_cls(&c, "WebAssembly", "V6WebGlobals", "WEBASSEMBLY");
 
   if (is_entry) {
     uint16_t setargv_idx =

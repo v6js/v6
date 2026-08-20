@@ -74,4 +74,5 @@ public final class V6WebGlobals {
   public static final V6Value PERFORMANCE = V6PerfHooks.performance();
   public static final V6Value NAVIGATOR = objValue(V6Navigator.build());
   public static final V6Value WORKER_SELF = V6WorkerThreads.selfScope();
+  public static final V6Value WEBASSEMBLY = objValue(V6WasmGlobal.build());
 }

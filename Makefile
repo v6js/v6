@@ -190,6 +190,8 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Shape.ja
                 lib/web/V6BroadcastChannelObject.java lib/web/V6BroadcastChannelConstructor.java \
                 lib/web/V6WebWorkerObject.java lib/web/V6WebWorkerConstructor.java \
                 lib/web/V6Navigator.java \
+                lib/web/V6WasmModuleObject.java \
+                lib/web/V6WasmGlobal.java \
                 lib/web/V6WebGlobals.java \
                 lib/interop/V6JavaInterop.java lib/interop/V6JavaMarshal.java \
                 lib/interop/V6JavaMatch.java \
