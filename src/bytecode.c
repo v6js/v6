@@ -11,6 +11,8 @@
 enum {
   cp_utf8 = 1,
   cp_integer = 3,
+  cp_float = 4,
+  cp_long = 5,
   cp_double = 6,
   cp_class = 7,
   cp_string = 8,
@@ -354,6 +356,26 @@ uint16_t cf_double(class_file* cf, double v) {
   return idx;
 }
 
+uint16_t cf_long(class_file* cf, int64_t v) {
+  cf->cp_count++;
+  uint16_t idx = cf->cp_count;
+  buf_u8(&cf->cp, cp_long);
+  buf_u32(&cf->cp, (uint32_t)((uint64_t)v >> 32));
+  buf_u32(&cf->cp, (uint32_t)(uint64_t)v);
+  cf->cp_count++;
+  return idx;
+}
+
+uint16_t cf_float(class_file* cf, float v) {
+  uint32_t bits;
+  memcpy(&bits, &v, sizeof(bits));
+  cf->cp_count++;
+  uint16_t idx = cf->cp_count;
+  buf_u8(&cf->cp, cp_float);
+  buf_u32(&cf->cp, bits);
+  return idx;
+}
+
 void cf_init(class_file* cf, const char* this_name, const char* super_name) {
   buf_init(&cf->cp);
   cf->cp_count = 0;
@@ -631,6 +653,126 @@ void emit_dload(method* m, uint16_t slot) {
     return;
   default:
     emit_wide_slot_op(m, op_dload, slot);
+    return;
+  }
+}
+
+void emit_istore(method* m, uint16_t slot) {
+  switch (slot) {
+  case 0:
+    op_emit(m, op_istore_0);
+    return;
+  case 1:
+    op_emit(m, op_istore_1);
+    return;
+  case 2:
+    op_emit(m, op_istore_2);
+    return;
+  case 3:
+    op_emit(m, op_istore_3);
+    return;
+  default:
+    emit_wide_slot_op(m, op_istore, slot);
+    return;
+  }
+}
+
+void emit_iload_slot(method* m, uint16_t slot) {
+  switch (slot) {
+  case 0:
+    op_emit(m, op_iload_0);
+    return;
+  case 1:
+    op_emit(m, op_iload_1);
+    return;
+  case 2:
+    op_emit(m, op_iload_2);
+    return;
+  case 3:
+    op_emit(m, op_iload_3);
+    return;
+  default:
+    emit_wide_slot_op(m, op_iload, slot);
+    return;
+  }
+}
+
+void emit_lload(method* m, uint16_t slot) {
+  switch (slot) {
+  case 0:
+    op_emit(m, op_lload_0);
+    return;
+  case 1:
+    op_emit(m, op_lload_1);
+    return;
+  case 2:
+    op_emit(m, op_lload_2);
+    return;
+  case 3:
+    op_emit(m, op_lload_3);
+    return;
+  default:
+    emit_wide_slot_op(m, op_lload, slot);
+    return;
+  }
+}
+
+void emit_lstore(method* m, uint16_t slot) {
+  switch (slot) {
+  case 0:
+    op_emit(m, op_lstore_0);
+    return;
+  case 1:
+    op_emit(m, op_lstore_1);
+    return;
+  case 2:
+    op_emit(m, op_lstore_2);
+    return;
+  case 3:
+    op_emit(m, op_lstore_3);
+    return;
+  default:
+    emit_wide_slot_op(m, op_lstore, slot);
+    return;
+  }
+}
+
+void emit_fload(method* m, uint16_t slot) {
+  switch (slot) {
+  case 0:
+    op_emit(m, op_fload_0);
+    return;
+  case 1:
+    op_emit(m, op_fload_1);
+    return;
+  case 2:
+    op_emit(m, op_fload_2);
+    return;
+  case 3:
+    op_emit(m, op_fload_3);
+    return;
+  default:
+    emit_wide_slot_op(m, op_fload, slot);
+    return;
+  }
+}
+
+void emit_fstore(method* m, uint16_t slot) {
+  switch (slot) {
+  case 0:
+    op_emit(m, op_fstore_0);
+    return;
+  case 1:
+    op_emit(m, op_fstore_1);
+    return;
+  case 2:
+    op_emit(m, op_fstore_2);
+    return;
+  case 3:
+    op_emit(m, op_fstore_3);
+    return;
+  default:
+    emit_wide_slot_op(m, op_fstore, slot);
     return;
   }
 }
