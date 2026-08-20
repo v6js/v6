@@ -411,6 +411,7 @@ static void codegen_body(wasm_func_ctx* fc, const uint8_t* start, size_t len) {
   r.buf = start;
   r.len = len;
   r.pos = 0;
+  r.failed = 0;
   while (r.pos < r.len && !r.failed && !fc->had_error)
     codegen_instr(fc, &r);
 }
