@@ -5,6 +5,7 @@
 #include "v6/color.h"
 #include "v6/jvm.h"
 #include "v6/runtime.h"
+#include "v6/wasm.h"
 
 #ifdef V6_HAVE_JNI
 
@@ -251,9 +252,59 @@ v6_jvm* v6_jvm_create(const char* classpath, int is_daemon) {
   return jvm;
 }
 
+static jbyteArray JNICALL v6_wasm_compile_native(JNIEnv* env, jclass cls,
+                                                 jbyteArray wasm_bytes,
+                                                 jstring class_name) {
+  (void)cls;
+  jsize len = (*env)->GetArrayLength(env, wasm_bytes);
+  jbyte* bytes = (*env)->GetByteArrayElements(env, wasm_bytes, NULL);
+
+  wasm_module m;
+  int rc = wasm_parse_module((const uint8_t*)bytes, (size_t)len, &m);
+  if (rc != 0) {
+    char msg[300];
+    snprintf(msg, sizeof(msg), "%s", m.err_msg);
+    (*env)->ReleaseByteArrayElements(env, wasm_bytes, bytes, JNI_ABORT);
+    (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/RuntimeException"),
+                     msg);
+    return NULL;
+  }
+
+  const char* cname = (*env)->GetStringUTFChars(env, class_name, NULL);
+  class_file cf;
+  cf_init(&cf, cname, "java/lang/Object");
+  compile_result cr = wasm_compile_module(&m, &cf, cname);
+  (*env)->ReleaseStringUTFChars(env, class_name, cname);
+  (*env)->ReleaseByteArrayElements(env, wasm_bytes, bytes, JNI_ABORT);
+
+  if (!cr.ok) {
+    char msg[1024];
+    snprintf(msg, sizeof(msg), "%s", cr.message);
+    wasm_module_free(&m);
+    cf_free(&cf);
+    (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/RuntimeException"),
+                     msg);
+    return NULL;
+  }
+
+  buf out;
+  buf_init(&out);
+  cf_emit(&cf, &out);
+
+  jbyteArray result = (*env)->NewByteArray(env, (jsize)out.len);
+  (*env)->SetByteArrayRegion(env, result, 0, (jsize)out.len,
+                             (const jbyte*)out.data);
+
+  buf_free(&out);
+  cf_free(&cf);
+  wasm_module_free(&m);
+  return result;
+}
+
 int v6_jvm_load_runtime(v6_jvm* jvm) {
   JNIEnv* env = jvm->env;
   jclass value_cls = NULL;
+  jclass wasm_compiler_cls = NULL;
 
   for (size_t i = 0; i < v6_runtime_class_count; i++) {
     jclass cls =
@@ -264,10 +315,23 @@ int v6_jvm_load_runtime(v6_jvm* jvm) {
       return -1;
     if (strcmp(v6_runtime_classes[i].name, "V6Value") == 0)
       value_cls = cls;
+    if (strcmp(v6_runtime_classes[i].name, "V6WasmCompiler") == 0)
+      wasm_compiler_cls = cls;
   }
 
   if (!value_cls)
     return -1;
+
+  if (wasm_compiler_cls) {
+    JNINativeMethod methods[1];
+    methods[0].name = "compile";
+    methods[0].signature = "([B"
+                           "Ljava/lang/String;"
+                           ")[B";
+    methods[0].fnPtr = (void*)v6_wasm_compile_native;
+    if ((*env)->RegisterNatives(env, wasm_compiler_cls, methods, 1) != 0)
+      return -1;
+  }
 
   jmethodID ctor =
       (*env)->GetMethodID(env, value_cls, "<init>", "(IDLjava/lang/Object;)V");
@@ -390,6 +454,54 @@ int v6_jvm_call_static_i_iii(v6_jvm* jvm, const char* class_name,
     return -1;
   }
   *out = (int)result;
+  return 0;
+}
+
+int v6_jvm_wasm_compile(v6_jvm* jvm, const unsigned char* wasm_bytes,
+                        size_t wasm_len, const char* class_name,
+                        unsigned char** out_bytes, size_t* out_len) {
+  JNIEnv* env = jvm->env;
+  jclass cls = (*env)->FindClass(env, "V6WasmCompiler");
+  if (!cls) {
+    if ((*env)->ExceptionCheck(env)) {
+      (*env)->ExceptionDescribe(env);
+      (*env)->ExceptionClear(env);
+    }
+    return -1;
+  }
+  jmethodID m = (*env)->GetStaticMethodID(env, cls, "compile",
+                                          "([BLjava/lang/String;)[B");
+  if (!m) {
+    if ((*env)->ExceptionCheck(env)) {
+      (*env)->ExceptionDescribe(env);
+      (*env)->ExceptionClear(env);
+    }
+    return -1;
+  }
+
+  jbyteArray jbytes = (*env)->NewByteArray(env, (jsize)wasm_len);
+  (*env)->SetByteArrayRegion(env, jbytes, 0, (jsize)wasm_len,
+                             (const jbyte*)wasm_bytes);
+  jstring jname = (*env)->NewStringUTF(env, class_name);
+
+  jbyteArray result =
+      (jbyteArray)(*env)->CallStaticObjectMethod(env, cls, m, jbytes, jname);
+  if ((*env)->ExceptionCheck(env)) {
+    (*env)->ExceptionDescribe(env);
+    (*env)->ExceptionClear(env);
+    return -1;
+  }
+  if (!result)
+    return -1;
+
+  jsize rlen = (*env)->GetArrayLength(env, result);
+  jbyte* rbytes = (*env)->GetByteArrayElements(env, result, NULL);
+  unsigned char* copy = malloc((size_t)rlen);
+  memcpy(copy, rbytes, (size_t)rlen);
+  (*env)->ReleaseByteArrayElements(env, result, rbytes, JNI_ABORT);
+
+  *out_bytes = copy;
+  *out_len = (size_t)rlen;
   return 0;
 }
 
@@ -621,6 +733,18 @@ int v6_jvm_call_static_i_iii(v6_jvm* jvm, const char* class_name,
   (void)b;
   (void)c;
   (void)out;
+  return -1;
+}
+
+int v6_jvm_wasm_compile(v6_jvm* jvm, const unsigned char* wasm_bytes,
+                        size_t wasm_len, const char* class_name,
+                        unsigned char** out_bytes, size_t* out_len) {
+  (void)jvm;
+  (void)wasm_bytes;
+  (void)wasm_len;
+  (void)class_name;
+  (void)out_bytes;
+  (void)out_len;
   return -1;
 }
 
