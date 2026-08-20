@@ -15,10 +15,21 @@ sourceSets {
 
 def destDir = project.findProperty('destDir')
 
+def targetJdk = System.getenv('V6_TARGET_JDK')
+if (!targetJdk) {
+  throw new GradleException(
+      'V6_TARGET_JDK must point at a Project Valhalla JDK (JEP 401 value ' +
+      'classes) build -- V6Value is a value record and requires it. ' +
+      'The Makefile sets this from JAVA_HOME automatically.')
+}
+
 tasks.named('compileJava') {
   options.incremental = true
-  options.release = 21
+  options.release = 27
   options.compilerArgs << '--add-modules' << 'jdk.incubator.vector'
+  options.compilerArgs << '--enable-preview'
+  options.fork = true
+  options.forkOptions.javaHome = file(targetJdk)
   if (destDir) {
     destinationDirectory = file(destDir)
   }
