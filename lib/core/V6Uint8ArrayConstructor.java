@@ -18,7 +18,7 @@ public final class V6Uint8ArrayConstructor
                     int len = self.data.length;
                     int start = clampIndex(V6Value.argAt(args, 1), 0, len);
                     int end = clampIndex(V6Value.argAt(args, 2), len, len);
-                    V6TypedArraySimd.fill(self.data, start, end, value);
+                    java.util.Arrays.fill(self.data, start, end, value);
                     return thisArg;
                   }));
     PROTOTYPE.set("copyWithin", fn((thisArg, args) -> {

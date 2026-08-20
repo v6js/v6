@@ -11,7 +11,6 @@ enum {
   wasm_type_i64 = 0x7E,
   wasm_type_f32 = 0x7D,
   wasm_type_f64 = 0x7C,
-  wasm_type_v128 = 0x7B,
   wasm_type_funcref = 0x70,
   wasm_type_externref = 0x6F,
 };

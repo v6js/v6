@@ -169,50 +169,6 @@ int v6_jvm_available(void) {
   return 1;
 }
 
-#ifdef _WIN32
-#include <fcntl.h>
-#include <io.h>
-#define v6_dup _dup
-#define v6_dup2 _dup2
-#define v6_close _close
-
-static int v6_open_null(void) {
-  return _open("NUL", _O_WRONLY);
-}
-#else
-#include <fcntl.h>
-#define v6_dup dup
-#define v6_dup2 dup2
-#define v6_close close
-
-static int v6_open_null(void) {
-  return open("/dev/null", O_WRONLY);
-}
-#endif
-
-static int v6_suppress_stderr_begin(void) {
-  fflush(stderr);
-  int saved = v6_dup(2);
-  if (saved < 0)
-    return -1;
-  int null_fd = v6_open_null();
-  if (null_fd < 0) {
-    v6_close(saved);
-    return -1;
-  }
-  v6_dup2(null_fd, 2);
-  v6_close(null_fd);
-  return saved;
-}
-
-static void v6_suppress_stderr_end(int saved) {
-  if (saved < 0)
-    return;
-  fflush(stderr);
-  v6_dup2(saved, 2);
-  v6_close(saved);
-}
-
 v6_jvm* v6_jvm_create(const char* classpath, int is_daemon) {
   v6_lib lib = v6_open_jvm_lib();
   if (!lib)
@@ -270,15 +226,10 @@ v6_jvm* v6_jvm_create(const char* classpath, int is_daemon) {
   opts[nopts].optionString = "-Xshare:auto";
   opts[nopts].extraInfo = NULL;
   nopts++;
-  opts[nopts].optionString = "--add-modules=jdk.incubator.vector";
-  opts[nopts].extraInfo = NULL;
-  nopts++;
   args.nOptions = nopts;
   args.options = opts;
 
-  int saved_stderr = v6_suppress_stderr_begin();
   jint rc = sym.fn(&jvm->vm, (void**)&jvm->env, &args);
-  v6_suppress_stderr_end(saved_stderr);
   free(cp_opt);
   if (rc != JNI_OK) {
     free(jvm);
