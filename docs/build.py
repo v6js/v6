@@ -119,7 +119,16 @@ def build_sidebar_layout(html):
       f'<li><a href="#{m.group(1)}">{strip_tags(m.group(2))}</a></li>'
       for m in matches[1:]
   )
-  sidebar = f'<aside class="sidebar"><p>Contents</p><ul>{items}</ul></aside>'
+  sidebar = (
+      '<aside class="sidebar">'
+      '<button type="button" id="toc-toggle" aria-expanded="false" aria-controls="toc-list">'
+      "Contents"
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+      'stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
+      "</button>"
+      f'<ul id="toc-list">{items}</ul>'
+      "</aside>"
+  )
   return f'<div class="docs-layout">{sidebar}<div class="docs-content">{html}</div></div>'
 
 
@@ -229,6 +238,20 @@ def build_blog_index(posts):
   write_page(SITE / "blog" / "index.html", content, meta["title"], meta["description"], "NAV_BLOG")
 
 
+def build_404():
+  content = (
+      '<div class="hero">'
+      "<h1>404</h1>"
+      '<p class="tagline">There is nothing at this address.</p>'
+      '<div class="cta">'
+      '<a class="btn" href="index.html">Home</a>'
+      '<a class="btn secondary" href="docs/index.html">Docs</a>'
+      '<a class="btn secondary" href="blog/index.html">Blog</a>'
+      "</div></div>"
+  )
+  write_page(SITE / "404.html", content, f"404 - {CONFIG['site_name']}", "Page not found.", "")
+
+
 def copy_public():
   shutil.copytree(PUBLIC, SITE, dirs_exist_ok=True)
 
@@ -241,6 +264,7 @@ def main():
 
   build_home()
   build_docs()
+  build_404()
   built_posts = []
   for slug, date, src_dir, index_md in discover_posts():
     title = build_post(slug, date, src_dir, index_md)

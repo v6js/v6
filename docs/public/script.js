@@ -36,4 +36,20 @@
   mql.addEventListener("change", function () {
     if (!localStorage.getItem(STORAGE_KEY)) applyTheme(currentTheme());
   });
+
+  var tocToggle = document.getElementById("toc-toggle");
+  var tocList = document.getElementById("toc-list");
+  if (tocToggle && tocList) {
+    tocToggle.addEventListener("click", function () {
+      var open = tocToggle.getAttribute("aria-expanded") === "true";
+      tocToggle.setAttribute("aria-expanded", open ? "false" : "true");
+      tocList.classList.toggle("open", !open);
+    });
+    tocList.querySelectorAll("a").forEach(function (a) {
+      a.addEventListener("click", function () {
+        tocToggle.setAttribute("aria-expanded", "false");
+        tocList.classList.remove("open");
+      });
+    });
+  }
 })();
