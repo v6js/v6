@@ -238,7 +238,7 @@ v6_jvm* v6_jvm_create(const char* classpath, int is_daemon) {
   args.version = JNI_VERSION_1_8;
   args.ignoreUnrecognized = JNI_TRUE;
 
-  JavaVMOption opts[10];
+  JavaVMOption opts[9];
   int nopts = 0;
   char* cp_opt = NULL;
   if (classpath && classpath[0] != '\0') {
@@ -271,9 +271,6 @@ v6_jvm* v6_jvm_create(const char* classpath, int is_daemon) {
   opts[nopts].extraInfo = NULL;
   nopts++;
   opts[nopts].optionString = "--add-modules=jdk.incubator.vector";
-  opts[nopts].extraInfo = NULL;
-  nopts++;
-  opts[nopts].optionString = "--enable-preview";
   opts[nopts].extraInfo = NULL;
   nopts++;
   args.nOptions = nopts;

@@ -4,7 +4,6 @@ endif
 
 JAVAC ?= javac
 PYTHON ?= python3
-GRADLE_JAVA_HOME ?= $(JAVA_HOME)
 
 STD := -std=c11
 WARN := -Wall -Wextra
@@ -257,7 +256,7 @@ $(OBJ)/tool_pack_class.o: tools/pack_class.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
 javaclasses: $(PACK_CLASS_BIN) | dirs
-	set "V6_TARGET_JDK=$(JAVA_HOME)" && set "JAVA_HOME=$(GRADLE_JAVA_HOME)" && $(GRADLE) -p lib compileJava -PdestDir=$(GEN_ABS) -q --console=plain
+	$(GRADLE) -p lib compileJava -PdestDir=$(GEN_ABS) -q --console=plain
 	$(PACK_CLASS_BIN) $(GEN)/rt $(RT_TABLE_C) $(RT_CLASS_FILES)
 
 $(OBJ)/rt/%.o: $(GEN)/rt/%.c | dirs

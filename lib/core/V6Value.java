@@ -1,4 +1,4 @@
-public value record V6Value(int tag, double num, Object ref) {
+public record V6Value(int tag, double num, Object ref) {
   public static final int TAG_NUM = 0;
   public static final int TAG_BOOL = 1;
   public static final int TAG_NULL = 2;
