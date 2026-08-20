@@ -99,11 +99,3 @@ daemon-accelerated invocation as `bench/report.md`). hyperfine, 6 warmups,
 | `nodejs v26.5.0` | 77.9 ± 3.3 | 71.6 | 85.9 | 1.00 |
 | `v6 v0.1.0` | 267.5 ± 11.1 | 248.0 | 281.4 | 3.44 ± 0.20 |
 
-`dotproduct_simd` is the SIMD-instructed variant of `dotproduct`, correctness-verified
-against Node's real WebAssembly SIMD (`test/fix/wasm/simd.js`) but not yet
-perf-tuned: v128 is currently a `byte[16]`-backed wrapper object, so every
-Vector API op round-trips through a fresh array allocation. This is the
-allocation-bound pattern the Project Valhalla milestone (value classes,
-next up) is expected to fix; both wasm benchmark suites get rerun after
-that lands.
-
