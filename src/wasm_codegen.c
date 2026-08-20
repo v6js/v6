@@ -404,7 +404,7 @@ static void emit_mem_store(wasm_func_ctx* fc, uint32_t offset,
 }
 
 static void codegen_instr(wasm_func_ctx* fc, wasm_reader2* r);
-static void codegen_numeric(wasm_func_ctx* fc, uint8_t op);
+static void codegen_numeric(wasm_func_ctx* fc, wasm_reader2* r, uint8_t op);
 
 static void codegen_body(wasm_func_ctx* fc, const uint8_t* start, size_t len) {
   wasm_reader2 r;
@@ -501,7 +501,7 @@ static void f64_cmp(wasm_func_ctx* fc, uint8_t cmp_op, uint8_t if_vs_zero_op) {
   ts_push(fc, wasm_type_i32);
 }
 
-static void codegen_numeric(wasm_func_ctx* fc, uint8_t op) {
+static void codegen_numeric(wasm_func_ctx* fc, wasm_reader2* r, uint8_t op) {
   method* m = fc->m;
   class_file* cf = fc->cf;
 
@@ -1031,9 +1031,108 @@ static void codegen_numeric(wasm_func_ctx* fc, uint8_t op) {
     ts_push(fc, wasm_type_i64);
     break;
 
-  default:
-    wf_error(fc, "unsupported wasm numeric opcode in this build");
+  case 0xFC: {
+    uint32_t sub = w2_u32(r);
+    switch (sub) {
+    case 0x00:
+      ts_pop(fc);
+      op_emit(m, op_f2i);
+      ts_push(fc, wasm_type_i32);
+      break;
+    case 0x01:
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6Wasm", "i32TruncF32U", "(F)I"));
+      ts_push(fc, wasm_type_i32);
+      break;
+    case 0x02:
+      ts_pop(fc);
+      op_emit(m, op_d2i);
+      ts_push(fc, wasm_type_i32);
+      break;
+    case 0x03:
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6Wasm", "i32TruncF64U", "(D)I"));
+      ts_push(fc, wasm_type_i32);
+      break;
+    case 0x04:
+      ts_pop(fc);
+      op_emit(m, op_f2l);
+      ts_push(fc, wasm_type_i64);
+      break;
+    case 0x05:
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6Wasm", "i64TruncF32U", "(F)J"));
+      ts_push(fc, wasm_type_i64);
+      break;
+    case 0x06:
+      ts_pop(fc);
+      op_emit(m, op_d2l);
+      ts_push(fc, wasm_type_i64);
+      break;
+    case 0x07:
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6Wasm", "i64TruncF64U", "(D)J"));
+      ts_push(fc, wasm_type_i64);
+      break;
+    case 0x0A: {
+      w2_u32(r);
+      w2_u32(r);
+      uint16_t s0 = fc->next_slot, s1 = (uint16_t)(fc->next_slot + 1),
+               s2 = (uint16_t)(fc->next_slot + 2);
+      ts_pop(fc);
+      emit_istore(m, s2);
+      ts_pop(fc);
+      emit_istore(m, s1);
+      ts_pop(fc);
+      emit_istore(m, s0);
+      op_emit2(m, op_getstatic, wasm_memory_field(fc));
+      emit_iload_slot(m, s0);
+      emit_iload_slot(m, s1);
+      emit_iload_slot(m, s2);
+      op_emit2(m, op_invokevirtual,
+               cf_methodref(cf, "V6WasmMemory", "copyWithin", "(III)V"));
+      break;
+    }
+    case 0x0B: {
+      w2_u32(r);
+      uint16_t s0 = fc->next_slot, s1 = (uint16_t)(fc->next_slot + 1),
+               s2 = (uint16_t)(fc->next_slot + 2);
+      ts_pop(fc);
+      emit_istore(m, s2);
+      ts_pop(fc);
+      emit_istore(m, s1);
+      ts_pop(fc);
+      emit_istore(m, s0);
+      op_emit2(m, op_getstatic, wasm_memory_field(fc));
+      emit_iload_slot(m, s0);
+      emit_iload_slot(m, s1);
+      emit_iload_slot(m, s2);
+      op_emit2(m, op_invokevirtual,
+               cf_methodref(cf, "V6WasmMemory", "fill", "(III)V"));
+      break;
+    }
+    default: {
+      char dbgmsg[64];
+      snprintf(dbgmsg, sizeof(dbgmsg),
+               "unsupported wasm bulk-memory/misc opcode 0x%02X", sub);
+      wf_error(fc, dbgmsg);
+      break;
+    }
+    }
     break;
+  }
+
+  default: {
+    char dbgmsg[64];
+    snprintf(dbgmsg, sizeof(dbgmsg),
+             "unsupported wasm numeric opcode 0x%02X in this build", op);
+    wf_error(fc, dbgmsg);
+    break;
+  }
   }
 }
 
@@ -1429,7 +1528,7 @@ static void codegen_instr(wasm_func_ctx* fc, wasm_reader2* r) {
   }
 
   default:
-    codegen_numeric(fc, op);
+    codegen_numeric(fc, r, op);
     break;
   }
 }

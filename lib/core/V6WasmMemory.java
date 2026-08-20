@@ -19,6 +19,21 @@ public final class V6WasmMemory {
     System.arraycopy(src, 0, data, offset, src.length);
   }
 
+  public void initData(int dstOffset, byte[] src, int srcOffset, int len) {
+    System.arraycopy(src, srcOffset, data, dstOffset, len);
+  }
+
+  public void copyWithin(int dst, int src, int len) {
+    check(dst, len);
+    check(src, len);
+    System.arraycopy(data, src, data, dst, len);
+  }
+
+  public void fill(int dst, int val, int len) {
+    check(dst, len);
+    Arrays.fill(data, dst, dst + len, (byte)val);
+  }
+
   public int grow(int deltaPages) {
     int oldPages = size();
     if (deltaPages < 0)
