@@ -112,6 +112,7 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Shape.ja
                 lib/core/V6DateObject.java lib/core/V6DateConstructor.java \
                 lib/core/V6Json.java \
                 lib/core/V6Wasm.java \
+                lib/core/V6WasmCompiler.java \
                 lib/core/V6WasmMemory.java \
                 lib/core/V6WasmTable.java \
                 lib/node/V6Path.java \
