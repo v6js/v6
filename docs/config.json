@@ -16,6 +16,7 @@
     "blog": { "title": "Blog - V6", "description": "Posts about V6's design and internals." }
   },
   "posts": {
-    "intro": { "date": "2026-08-11" }
+    "intro": { "date": "2026-08-11" },
+    "v0-2-0": { "date": "2026-08-21" }
   }
 }

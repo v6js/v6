@@ -2,7 +2,7 @@
 
 V6 is a JavaScript runtime built on the JVM. It compiles JavaScript directly to JVM bytecode, runs it with a persistent warm process so repeated invocations start fast, and can call into any Java library already on the classpath through a built-in `java:` import scheme.
 
-V6 is experimental. Test262 conformance testing is not yet part of the release process, so treat spec conformance beyond what the fixture and compatibility test suites happen to exercise as unverified.
+V6 is experimental. The full [test262](https://github.com/tc39/test262) conformance suite runs against V6 on every push, with results tracked in [test/coverage.md](https://github.com/v6js/v6/blob/main/test/coverage.md). Current coverage across the `language`, `built-ins` and `annexB` categories is 21.10%, so treat spec conformance beyond that measured baseline as unverified.
 
 ### Installation
 
@@ -62,6 +62,10 @@ Press Ctrl+C once inside the REPL to abort the expression being typed and again 
 - `--no-color` disable colored output
 - `-v, --version` print the version and exit
 - `-h, --help` print help and exit
+- `--no-wasi-args` don't pass CLI args through as WASI argv, when running a `.wasm` file
+- `--no-wasi-env` don't pass host environment variables through to WASI
+- `--no-wasi-random` deny the WASI `random_get` syscall
+- `--no-wasi-clock` deny the WASI `clock_time_get` syscall
 
 #### REPL commands
 
@@ -93,6 +97,29 @@ java -jar app.jar
 That JAR runs with a plain `java -jar app.jar` and has no dependency on V6 being installed on the machine that runs it. The tradeoff is startup cost. Every invocation of the JAR pays a full JVM boot, since there is no persistent process to reuse.
 
 Reach for this when a standalone artifact matters more than repeated-invocation latency, such as shipping a CLI tool to a machine that only has a JDK on it and nothing else.
+
+### WebAssembly
+
+A `.wasm` file runs directly from the CLI, compiled to a JVM class the same way a `.js` entry script is and executed through the same persistent process.
+
+```
+v6 app.wasm
+```
+
+WASI Preview 1 is supported for the syscalls a typical compiled-to-WASM program needs: `fd_write`, `proc_exit`, `args_get` / `args_sizes_get`, `environ_get` / `environ_sizes_get`, `random_get` and `clock_time_get`. Argv and the host environment are passed through by default; `--no-wasi-args`, `--no-wasi-env`, `--no-wasi-random` and `--no-wasi-clock` deny each of those individually for a sandboxed run.
+
+The same `.wasm` module also loads from JavaScript through the standard `WebAssembly` API, so code written against a browser's WebAssembly support runs unmodified.
+
+```js
+const fs = require("fs");
+const bytes = fs.readFileSync("app.wasm");
+
+WebAssembly.instantiate(bytes).then((result) => {
+  console.log(result.instance.exports.run());
+});
+```
+
+WebAssembly SIMD (the `v128` type and its instructions) is not implemented. A module compiled with SIMD enabled fails to load. See [Current limitations](#current-limitations).
 
 ### Compile caching
 
@@ -222,108 +249,380 @@ When that happens, the call is posted onto V6's event loop and the calling Java 
 
 V6 is tested against real npm packages, not only synthetic fixtures, including `express`, `fast-glob`, `react` and `react-dom`, with output diffed against the same code running under real Node.
 
-#### Global APIs
+#### Other globals
 
-- [x] `console`
-- [x] `globalThis` / `global`
-- [x] `Math`
-- [x] `JSON`
-- [x] `Object`
-- [x] `Array`
-- [x] `String`
-- [x] `Number`
-- [x] `Boolean`
-- [x] `Date`
-- [x] `RegExp`
-- [x] `Function`
-- [x] `Symbol`
-- [x] `Map` / `Set`
-- [x] `WeakMap` / `WeakSet`
-- [x] `Promise`
-- [x] `Error` and its subclasses
-- [x] `BigInt`
-- [x] `Buffer`
-- [x] `Uint8Array`
-- [x] `URL` / `URLSearchParams`
-- [x] `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask`
-- [x] `atob` / `btoa`
-- [x] `encodeURIComponent` / `decodeURIComponent` / `encodeURI` / `decodeURI`
-- [ ] `eval`
-- [ ] `Proxy`
-- [ ] `Reflect`
-- [ ] `WeakRef` / `FinalizationRegistry`
-- [ ] `AggregateError`
-- [ ] other typed array types
+`console`, `globalThis` / `global`, `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask`, `atob` / `btoa` and `encodeURIComponent` / `decodeURIComponent` / `encodeURI` / `decodeURI` are all present as plain functions and behave like their Node/browser counterparts; there is no further API surface on any of them worth breaking down.
 
-#### Isomorphic Web APIs
+#### Global APIs (methods)
 
-- [x] `fetch`
-- [x] `Headers` / `Request` / `Response`
-- [x] `Blob` / `File` / `FormData`
-- [x] `ReadableStream` / `WritableStream` / `TransformStream`
-- [x] `TextEncoder` / `TextDecoder`
-- [x] `TextEncoderStream` / `TextDecoderStream`
-- [x] `CompressionStream` / `DecompressionStream`
-- [x] `ArrayBuffer`
-- [x] `crypto` / `CryptoKey`
-- [x] `structuredClone`
-- [x] `Event` / `CustomEvent` / `EventTarget`
-- [x] `AbortController` / `AbortSignal`
-- [x] `WebSocket`
-- [x] `EventSource`
-- [x] `MessageChannel` / `MessagePort` / `MessageEvent`
-- [x] `BroadcastChannel`
-- [x] `Worker` / `self`
-- [x] `performance`
-- [x] `navigator`
-- [ ] `WebAssembly`
+#### Array
 
-#### Node.js compatibility
+Static: [isArray](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/isArray), [from](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/from), [of](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/of)
 
-- [x] `path`
-- [x] `buffer`
-- [x] `util`
-- [x] `os`
-- [x] `tty`
-- [x] `fs`
-- [x] `events`
-- [x] `assert`
-- [x] `querystring`
-- [x] `perf_hooks`
-- [x] `dns`
-- [x] `string_decoder`
-- [x] `url`
-- [x] `zlib`
-- [x] `crypto`
-- [x] `stream`
-- [x] `child_process`
-- [x] `net`
-- [x] `http` / `https`
-- [x] `tls`
-- [x] `readline`
-- [x] `worker_threads`
-- [x] `cluster`
-- [x] `repl`
-- [x] `timers`
-- [x] `dgram`
-- [x] `http2`
-- [x] `v8`
-- [x] `module`
-- [x] `diagnostics_channel`
-- [x] `async_hooks`
-- [x] `inspector`
-- [x] `trace_events`
-- [ ] `vm`
+Instance: [push](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/push), [pop](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/pop), [shift](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/shift), [unshift](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/unshift), [slice](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice), [splice](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/splice), [indexOf](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/indexOf), [includes](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/includes), [join](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/join), [map](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map), [filter](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter), [forEach](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/forEach), [some](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/some), [every](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/every), [find](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/find), [findIndex](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/findIndex), [reduce](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce), [concat](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/concat), [reverse](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reverse), [sort](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort), [flat](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/flat), [flatMap](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/flatMap)
+
+#### Object
+
+Static: [keys](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys), [values](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/values), [entries](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/entries), [assign](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/assign), [freeze](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze), [isFrozen](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/isFrozen), [getOwnPropertyDescriptor](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/getOwnPropertyDescriptor), [getOwnPropertyNames](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/getOwnPropertyNames), [hasOwn](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/hasOwn), [seal](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/seal), [isSealed](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/isSealed), [create](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/create), [getPrototypeOf](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/getPrototypeOf), [setPrototypeOf](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/setPrototypeOf), [fromEntries](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/fromEntries), [is](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/is), [defineProperty](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/defineProperty), [defineProperties](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/defineProperties)
+
+Instance: [hasOwnProperty](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/hasOwnProperty), [isPrototypeOf](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/isPrototypeOf), [propertyIsEnumerable](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/propertyIsEnumerable), [toString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString), [valueOf](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/valueOf)
+
+#### Math
+
+Methods: [abs](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/abs), [floor](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/floor), [ceil](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/ceil), [round](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/round), [trunc](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/trunc), [sqrt](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/sqrt), [cbrt](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/cbrt), [sign](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/sign), [max](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/max), [min](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/min), [pow](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/pow), [random](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/random), [log](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/log), [log2](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/log2), [log10](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/log10), [exp](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/exp), [sin](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/sin), [cos](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/cos), [tan](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/tan), [asin](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/asin), [acos](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/acos), [atan](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/atan), [atan2](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/atan2), [clz32](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/clz32)
+
+Constants: [PI](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/PI), [E](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/E), [LN2](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/LN2), [LN10](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/LN10), [LOG2E](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/LOG2E), [LOG10E](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/LOG10E), [SQRT2](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/SQRT2), [SQRT1_2](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/SQRT1_2)
+
+#### String
+
+Static: [fromCharCode](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/fromCharCode), [fromCodePoint](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/fromCodePoint)
+
+Instance: [charAt](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/charAt), [charCodeAt](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/charCodeAt), [codePointAt](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/codePointAt), [at](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/at), [indexOf](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/indexOf), [lastIndexOf](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/lastIndexOf), [includes](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/includes), [startsWith](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/startsWith), [endsWith](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/endsWith), [slice](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/slice), [substring](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/substring), [toUpperCase](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toUpperCase), [toLowerCase](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toLowerCase), [trim](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/trim), [trimStart](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/trimStart), [trimEnd](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/trimEnd), [split](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/split), [replace](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replace), [replaceAll](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replaceAll), [match](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/match), [matchAll](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/matchAll), [search](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/search), [repeat](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/repeat), [padStart](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/padStart), [padEnd](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/padEnd), [concat](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/concat), [toString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toString), [valueOf](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/valueOf)
+
+#### Number
+
+Static: [isInteger](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/isInteger), [isFinite](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/isFinite), [isNaN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/isNaN), [isSafeInteger](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/isSafeInteger), [parseFloat](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/parseFloat), [parseInt](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/parseInt), [EPSILON](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/EPSILON), [MAX_SAFE_INTEGER](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER), [MIN_SAFE_INTEGER](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MIN_SAFE_INTEGER), [MAX_VALUE](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_VALUE), [MIN_VALUE](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MIN_VALUE), [POSITIVE_INFINITY](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/POSITIVE_INFINITY), [NEGATIVE_INFINITY](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/NEGATIVE_INFINITY), [NaN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/NaN)
+
+Instance: [toFixed](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/toFixed), [toPrecision](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/toPrecision), [toString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/toString), [valueOf](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/valueOf)
+
+#### Boolean
+
+No instance methods beyond the [inherited defaults](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString).
+
+#### RegExp
+
+Instance: [test](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/test), [exec](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/exec), [toString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/toString), plus [source](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/source), [flags](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/flags), [global](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/global), [ignoreCase](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/ignoreCase), [multiline](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/multiline), [sticky](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/sticky), [unicode](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/unicode), [lastIndex](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp/lastIndex)
+
+#### Map
+
+Instance: [get](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/get), [set](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/set), [has](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/has), [delete](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/delete), [clear](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/clear), [forEach](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/forEach), [keys](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/keys), [values](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/values), [entries](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/entries), [size](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/size)
+
+#### Set
+
+Instance: [add](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/add), [has](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/has), [delete](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/delete), [clear](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/clear), [forEach](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/forEach), [values](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/values), [keys](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/keys), [entries](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/entries), [size](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/size)
+
+#### WeakMap
+
+Instance: same surface as [Map](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/) above -- note this is not spec-accurate weak-reference behavior, see [Current limitations](#current-limitations).
+
+#### WeakSet
+
+Instance: same surface as [Set](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/) above -- same caveat as `WeakMap`.
+
+#### Promise
+
+Static: [resolve](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/resolve), [reject](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/reject), [all](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/all), [race](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/race), [allSettled](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled), [any](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/any)
+
+Instance: [then](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/then), [catch](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/catch), [finally](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/finally)
+
+#### Date
+
+Static: [now](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/now), [parse](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/parse), [UTC](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/UTC)
+
+Instance: [getTime](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getTime), [valueOf](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/valueOf), [setTime](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setTime), [getFullYear](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getFullYear), [getMonth](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getMonth), [getDate](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getDate), [getDay](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getDay), [getHours](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getHours), [getMinutes](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getMinutes), [getSeconds](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getSeconds), [getMilliseconds](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getMilliseconds), [getUTCFullYear](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getUTCFullYear), [getUTCMonth](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getUTCMonth), [getUTCDate](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getUTCDate), [getUTCDay](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getUTCDay), [getUTCHours](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getUTCHours), [getUTCMinutes](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getUTCMinutes), [getUTCSeconds](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getUTCSeconds), [getUTCMilliseconds](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getUTCMilliseconds), [getYear](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getYear), [getTimezoneOffset](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getTimezoneOffset), [setFullYear](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setFullYear), [setMonth](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setMonth), [setDate](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setDate), [setHours](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setHours), [setMinutes](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setMinutes), [setSeconds](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setSeconds), [setMilliseconds](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setMilliseconds), [setUTCFullYear](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setUTCFullYear), [setUTCMonth](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setUTCMonth), [setUTCDate](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setUTCDate), [setUTCHours](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setUTCHours), [setUTCMinutes](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setUTCMinutes), [setUTCSeconds](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setUTCSeconds), [setUTCMilliseconds](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setUTCMilliseconds), [toISOString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toISOString), [toJSON](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toJSON), [toString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toString), [toDateString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toDateString), [toTimeString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toTimeString), [toUTCString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toUTCString), [toGMTString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toGMTString), [toLocaleDateString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toLocaleDateString), [toLocaleTimeString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toLocaleTimeString), [toLocaleString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toLocaleString)
+
+#### JSON
+
+Methods: [parse](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse), [stringify](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify)
+
+#### Symbol
+
+Callable as `Symbol(desc)`. Static: [iterator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/iterator), [for](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/for)
+
+#### Error and its subclasses
+
+`TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError` and `URIError` all chain to `Error.prototype`. Static: [captureStackTrace](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/captureStackTrace), `stackTraceLimit`, `prepareStackTrace`. Instance: [toString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/toString), `name`, `message`.
+
+#### BigInt
+
+Callable as `BigInt(value)`. Instance: [toString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt/toString), [toLocaleString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt/toLocaleString), [valueOf](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt/valueOf)
+
+#### Function
+
+Instance: [call](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/call), [apply](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/apply), [bind](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/bind), [toString](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/toString). `new Function(...)` is not supported.
+
+#### Uint8Array
+
+Static: [Uint8Array.from](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray/from), [Uint8Array.of](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray/of). Instance: [fill](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray/fill), [copyWithin](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray/copyWithin), [set](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray/set), [slice](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray/slice). No other typed array types are implemented, see [Current limitations](#current-limitations).
+
+### Isomorphic Web APIs (methods)
+
+#### fetch
+
+Global function: [fetch](https://developer.mozilla.org/en-US/docs/Web/API/Window/fetch).
+
+#### Headers
+
+Instance: [append](https://developer.mozilla.org/en-US/docs/Web/API/Headers/append), [set](https://developer.mozilla.org/en-US/docs/Web/API/Headers/set), [get](https://developer.mozilla.org/en-US/docs/Web/API/Headers/get), [has](https://developer.mozilla.org/en-US/docs/Web/API/Headers/has), [delete](https://developer.mozilla.org/en-US/docs/Web/API/Headers/delete), [forEach](https://developer.mozilla.org/en-US/docs/Web/API/Headers/forEach), [keys](https://developer.mozilla.org/en-US/docs/Web/API/Headers/keys), [values](https://developer.mozilla.org/en-US/docs/Web/API/Headers/values), [entries](https://developer.mozilla.org/en-US/docs/Web/API/Headers/entries)
+
+#### Request
+
+Getters: [url](https://developer.mozilla.org/en-US/docs/Web/API/Request/url), [method](https://developer.mozilla.org/en-US/docs/Web/API/Request/method), [headers](https://developer.mozilla.org/en-US/docs/Web/API/Request/headers), [signal](https://developer.mozilla.org/en-US/docs/Web/API/Request/signal), [bodyUsed](https://developer.mozilla.org/en-US/docs/Web/API/Request/bodyUsed). Methods: [text](https://developer.mozilla.org/en-US/docs/Web/API/Request/text), [json](https://developer.mozilla.org/en-US/docs/Web/API/Request/json), [arrayBuffer](https://developer.mozilla.org/en-US/docs/Web/API/Request/arrayBuffer), [blob](https://developer.mozilla.org/en-US/docs/Web/API/Request/blob), [clone](https://developer.mozilla.org/en-US/docs/Web/API/Request/clone)
+
+#### Response
+
+Static: [error](https://developer.mozilla.org/en-US/docs/Web/API/Response/error), [redirect](https://developer.mozilla.org/en-US/docs/Web/API/Response/redirect), [json](https://developer.mozilla.org/en-US/docs/Web/API/Response/json). Getters: [status](https://developer.mozilla.org/en-US/docs/Web/API/Response/status), [statusText](https://developer.mozilla.org/en-US/docs/Web/API/Response/statusText), [ok](https://developer.mozilla.org/en-US/docs/Web/API/Response/ok), [headers](https://developer.mozilla.org/en-US/docs/Web/API/Response/headers), [url](https://developer.mozilla.org/en-US/docs/Web/API/Response/url), [redirected](https://developer.mozilla.org/en-US/docs/Web/API/Response/redirected), [type](https://developer.mozilla.org/en-US/docs/Web/API/Response/type), [bodyUsed](https://developer.mozilla.org/en-US/docs/Web/API/Response/bodyUsed). Methods: [text](https://developer.mozilla.org/en-US/docs/Web/API/Response/text), [json](https://developer.mozilla.org/en-US/docs/Web/API/Response/json), [arrayBuffer](https://developer.mozilla.org/en-US/docs/Web/API/Response/arrayBuffer), [bytes](https://developer.mozilla.org/en-US/docs/Web/API/Response/bytes), [blob](https://developer.mozilla.org/en-US/docs/Web/API/Response/blob), [clone](https://developer.mozilla.org/en-US/docs/Web/API/Response/clone)
+
+#### Blob
+
+Getters: [size](https://developer.mozilla.org/en-US/docs/Web/API/Blob/size), [type](https://developer.mozilla.org/en-US/docs/Web/API/Blob/type). Methods: [slice](https://developer.mozilla.org/en-US/docs/Web/API/Blob/slice), [arrayBuffer](https://developer.mozilla.org/en-US/docs/Web/API/Blob/arrayBuffer), [bytes](https://developer.mozilla.org/en-US/docs/Web/API/Blob/bytes), [text](https://developer.mozilla.org/en-US/docs/Web/API/Blob/text), [stream](https://developer.mozilla.org/en-US/docs/Web/API/Blob/stream)
+
+#### File
+
+Extends `Blob`. Getters: [name](https://developer.mozilla.org/en-US/docs/Web/API/File/name), [lastModified](https://developer.mozilla.org/en-US/docs/Web/API/File/lastModified)
+
+#### FormData
+
+Instance: [append](https://developer.mozilla.org/en-US/docs/Web/API/FormData/append), [set](https://developer.mozilla.org/en-US/docs/Web/API/FormData/set), [get](https://developer.mozilla.org/en-US/docs/Web/API/FormData/get), [getAll](https://developer.mozilla.org/en-US/docs/Web/API/FormData/getAll), [has](https://developer.mozilla.org/en-US/docs/Web/API/FormData/has), [delete](https://developer.mozilla.org/en-US/docs/Web/API/FormData/delete), [forEach](https://developer.mozilla.org/en-US/docs/Web/API/FormData/forEach), [keys](https://developer.mozilla.org/en-US/docs/Web/API/FormData/keys), [values](https://developer.mozilla.org/en-US/docs/Web/API/FormData/values), [entries](https://developer.mozilla.org/en-US/docs/Web/API/FormData/entries)
+
+#### ReadableStream
+
+Getter: [locked](https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream/locked). Methods: [getReader](https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream/getReader), [cancel](https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream/cancel), [pipeTo](https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream/pipeTo), [pipeThrough](https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream/pipeThrough), [tee](https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream/tee)
+
+#### WritableStream
+
+Getter: [locked](https://developer.mozilla.org/en-US/docs/Web/API/WritableStream/locked). Methods: [getWriter](https://developer.mozilla.org/en-US/docs/Web/API/WritableStream/getWriter), [close](https://developer.mozilla.org/en-US/docs/Web/API/WritableStream/close), [abort](https://developer.mozilla.org/en-US/docs/Web/API/WritableStream/abort), [write](https://developer.mozilla.org/en-US/docs/Web/API/WritableStream/write)
+
+#### TransformStream
+
+Constructs a `{readable, writable}` pair; see [TransformStream](https://developer.mozilla.org/en-US/docs/Web/API/TransformStream/TransformStream).
+
+#### TextEncoder
+
+Getter: [encoding](https://developer.mozilla.org/en-US/docs/Web/API/TextEncoder/encoding). Methods: [encode](https://developer.mozilla.org/en-US/docs/Web/API/TextEncoder/encode), [encodeInto](https://developer.mozilla.org/en-US/docs/Web/API/TextEncoder/encodeInto)
+
+#### TextDecoder
+
+Getters: [encoding](https://developer.mozilla.org/en-US/docs/Web/API/TextDecoder/encoding), [fatal](https://developer.mozilla.org/en-US/docs/Web/API/TextDecoder/fatal), [ignoreBOM](https://developer.mozilla.org/en-US/docs/Web/API/TextDecoder/ignoreBOM). Method: [decode](https://developer.mozilla.org/en-US/docs/Web/API/TextDecoder/decode)
+
+#### TextEncoderStream / TextDecoderStream
+
+Built as `TransformStream` instances with an `encoding` getter, see [TextEncoderStream](https://developer.mozilla.org/en-US/docs/Web/API/TextEncoderStream/TextEncoderStream) and [TextDecoderStream](https://developer.mozilla.org/en-US/docs/Web/API/TextDecoderStream/TextDecoderStream).
+
+#### CompressionStream / DecompressionStream
+
+Built as `TransformStream` instances (formats: `gzip`, `deflate`, `deflate-raw`), see [CompressionStream](https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream/CompressionStream) and [DecompressionStream](https://developer.mozilla.org/en-US/docs/Web/API/DecompressionStream/DecompressionStream).
+
+#### ArrayBuffer
+
+Static: [isView](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer/isView). Getter: [byteLength](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer/byteLength). Method: [slice](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer/slice)
+
+#### crypto / CryptoKey
+
+`crypto`: [getRandomValues](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues), [randomUUID](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/randomUUID), `subtle`. `crypto.subtle`: [digest](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest), [generateKey](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/generateKey), [importKey](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey), [exportKey](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/exportKey), [encrypt](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/encrypt), [decrypt](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/decrypt), [sign](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/sign), [verify](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/verify). `CryptoKey` getters: [type](https://developer.mozilla.org/en-US/docs/Web/API/CryptoKey/type), [extractable](https://developer.mozilla.org/en-US/docs/Web/API/CryptoKey/extractable), [algorithm](https://developer.mozilla.org/en-US/docs/Web/API/CryptoKey/algorithm), [usages](https://developer.mozilla.org/en-US/docs/Web/API/CryptoKey/usages)
+
+#### structuredClone
+
+Global function, see [structuredClone](https://developer.mozilla.org/en-US/docs/Web/API/Window/structuredClone).
+
+#### Event
+
+Getters: [type](https://developer.mozilla.org/en-US/docs/Web/API/Event/type), [target](https://developer.mozilla.org/en-US/docs/Web/API/Event/target), [currentTarget](https://developer.mozilla.org/en-US/docs/Web/API/Event/currentTarget), [bubbles](https://developer.mozilla.org/en-US/docs/Web/API/Event/bubbles), [cancelable](https://developer.mozilla.org/en-US/docs/Web/API/Event/cancelable), [composed](https://developer.mozilla.org/en-US/docs/Web/API/Event/composed), [defaultPrevented](https://developer.mozilla.org/en-US/docs/Web/API/Event/defaultPrevented), [timeStamp](https://developer.mozilla.org/en-US/docs/Web/API/Event/timeStamp), [isTrusted](https://developer.mozilla.org/en-US/docs/Web/API/Event/isTrusted), [eventPhase](https://developer.mozilla.org/en-US/docs/Web/API/Event/eventPhase). Methods: [preventDefault](https://developer.mozilla.org/en-US/docs/Web/API/Event/preventDefault), [stopPropagation](https://developer.mozilla.org/en-US/docs/Web/API/Event/stopPropagation), [stopImmediatePropagation](https://developer.mozilla.org/en-US/docs/Web/API/Event/stopImmediatePropagation), [composedPath](https://developer.mozilla.org/en-US/docs/Web/API/Event/composedPath)
+
+#### CustomEvent
+
+Extends `Event`. Getter: [detail](https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent/detail)
+
+#### EventTarget
+
+Methods: [addEventListener](https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener), [removeEventListener](https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/removeEventListener), [dispatchEvent](https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/dispatchEvent)
+
+#### AbortController
+
+Instance: [signal](https://developer.mozilla.org/en-US/docs/Web/API/AbortController/signal), [abort](https://developer.mozilla.org/en-US/docs/Web/API/AbortController/abort)
+
+#### AbortSignal
+
+Extends `EventTarget`. Static: [abort](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/abort), [timeout](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout), [any](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/any). Getters: [aborted](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/aborted), [reason](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/reason). Method: [throwIfAborted](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/throwIfAborted)
+
+#### WebSocket
+
+Extends `EventTarget`. Getters: [readyState](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState), [url](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/url), [bufferedAmount](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/bufferedAmount), [protocol](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/protocol), [binaryType](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/binaryType). Methods: [send](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/send), [close](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close)
+
+#### EventSource
+
+Extends `EventTarget`. Getters: [readyState](https://developer.mozilla.org/en-US/docs/Web/API/EventSource/readyState), [url](https://developer.mozilla.org/en-US/docs/Web/API/EventSource/url), [withCredentials](https://developer.mozilla.org/en-US/docs/Web/API/EventSource/withCredentials). Method: [close](https://developer.mozilla.org/en-US/docs/Web/API/EventSource/close)
+
+#### MessageChannel
+
+Constructs a `{port1, port2}` pair, see [MessageChannel](https://developer.mozilla.org/en-US/docs/Web/API/MessageChannel/MessageChannel).
+
+#### MessagePort
+
+Extends `EventTarget`. Methods: [postMessage](https://developer.mozilla.org/en-US/docs/Web/API/MessagePort/postMessage), [start](https://developer.mozilla.org/en-US/docs/Web/API/MessagePort/start), [close](https://developer.mozilla.org/en-US/docs/Web/API/MessagePort/close)
+
+#### MessageEvent
+
+Extends `Event`. Getter: [data](https://developer.mozilla.org/en-US/docs/Web/API/MessageEvent/data)
+
+#### BroadcastChannel
+
+Extends `EventTarget`. Getter: [name](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel/name). Methods: [postMessage](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel/postMessage), [close](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel/close)
+
+#### Worker / self
+
+Extends `EventTarget`. Instance: [postMessage](https://developer.mozilla.org/en-US/docs/Web/API/Worker/postMessage), [terminate](https://developer.mozilla.org/en-US/docs/Web/API/Worker/terminate). Worker-scope `self`: [postMessage](https://developer.mozilla.org/en-US/docs/Web/API/DedicatedWorkerGlobalScope/postMessage), [close](https://developer.mozilla.org/en-US/docs/Web/API/DedicatedWorkerGlobalScope/close)
+
+#### performance
+
+Methods: [now](https://developer.mozilla.org/en-US/docs/Web/API/Performance/now), [mark](https://developer.mozilla.org/en-US/docs/Web/API/Performance/mark), [measure](https://developer.mozilla.org/en-US/docs/Web/API/Performance/measure), [getEntries](https://developer.mozilla.org/en-US/docs/Web/API/Performance/getEntries), [getEntriesByName](https://developer.mozilla.org/en-US/docs/Web/API/Performance/getEntriesByName), [getEntriesByType](https://developer.mozilla.org/en-US/docs/Web/API/Performance/getEntriesByType), [clearMarks](https://developer.mozilla.org/en-US/docs/Web/API/Performance/clearMarks), [clearMeasures](https://developer.mozilla.org/en-US/docs/Web/API/Performance/clearMeasures)
+
+#### navigator
+
+Data properties: [hardwareConcurrency](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/hardwareConcurrency), [userAgent](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/userAgent), [language](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/language), [languages](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/languages), [platform](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/platform)
+
+#### URL / URLSearchParams
+
+`URL`: [href](https://developer.mozilla.org/en-US/docs/Web/API/URL/href), [protocol](https://developer.mozilla.org/en-US/docs/Web/API/URL/protocol), [username](https://developer.mozilla.org/en-US/docs/Web/API/URL/username), [password](https://developer.mozilla.org/en-US/docs/Web/API/URL/password), [hostname](https://developer.mozilla.org/en-US/docs/Web/API/URL/hostname), [port](https://developer.mozilla.org/en-US/docs/Web/API/URL/port), [host](https://developer.mozilla.org/en-US/docs/Web/API/URL/host), [pathname](https://developer.mozilla.org/en-US/docs/Web/API/URL/pathname), [search](https://developer.mozilla.org/en-US/docs/Web/API/URL/search), [hash](https://developer.mozilla.org/en-US/docs/Web/API/URL/hash), [origin](https://developer.mozilla.org/en-US/docs/Web/API/URL/origin), [searchParams](https://developer.mozilla.org/en-US/docs/Web/API/URL/searchParams), [toString](https://developer.mozilla.org/en-US/docs/Web/API/URL/toString), [toJSON](https://developer.mozilla.org/en-US/docs/Web/API/URL/toJSON). `URLSearchParams`: [append](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/append), [delete](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/delete), [get](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/get), [getAll](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/getAll), [has](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/has), [set](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/set), [sort](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/sort), [forEach](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/forEach), [keys](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/keys), [values](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/values), [entries](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/entries), [toString](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/toString)
+
+#### WebAssembly
+
+Namespace functions: [compile](https://developer.mozilla.org/en-US/docs/Web/API/WebAssembly/compile), [instantiate](https://developer.mozilla.org/en-US/docs/Web/API/WebAssembly/instantiate), [validate](https://developer.mozilla.org/en-US/docs/Web/API/WebAssembly/validate). `WebAssembly.Memory` / `Table` / `Global` / `Module` / `Instance` are not exposed as separate constructible classes.
+
+### Node.js modules (methods)
+
+#### `tty`
+
+[Node.js docs](https://nodejs.org/api/tty.html): `isatty`
+
+#### `path`
+
+[Node.js docs](https://nodejs.org/api/path.html): `sep`, `delimiter`, `join`, `resolve`, `normalize`, `isAbsolute`, `dirname`, `basename`, `extname`, `relative`, `parse`, `format`, `win32`, `posix`
+
+#### `buffer`
+
+[Node.js docs](https://nodejs.org/api/buffer.html): `Buffer.from`, `Buffer.alloc`, `Buffer.allocUnsafe`, `Buffer.isBuffer`, `Buffer.byteLength`, `Buffer.concat`, `toString`, `write`, `slice`, `equals`, `toJSON`
+
+#### `util`
+
+[Node.js docs](https://nodejs.org/api/util.html): `format`, `inspect`, `promisify`, `inherits`, `types`, `deprecate`, `callbackify`
+
+#### `os`
+
+[Node.js docs](https://nodejs.org/api/os.html): `platform`, `arch`, `type`, `release`, `homedir`, `tmpdir`, `hostname`, `cpus`, `totalmem`, `freemem`, `EOL`, `endianness`
+
+#### `events`
+
+[Node.js docs](https://nodejs.org/api/events.html): `on`, `addListener`, `prependListener`, `once`, `prependOnceListener`, `off`, `removeListener`, `emit`, `removeAllListeners`, `listenerCount`, `listeners`, `eventNames`, `setMaxListeners`
+
+#### `assert`
+
+[Node.js docs](https://nodejs.org/api/assert.html): `ok`, `equal`, `notEqual`, `strictEqual`, `notStrictEqual`, `deepEqual`, `deepStrictEqual`, `notDeepEqual`, `notDeepStrictEqual`, `throws`, `doesNotThrow`, `fail`, `match`, `doesNotMatch`, `rejects`, `doesNotReject`, `CallTracker`
+
+#### `querystring`
+
+[Node.js docs](https://nodejs.org/api/querystring.html): `escape`, `unescape`, `parse`, `stringify`, `decode`, `encode`
+
+#### `perf_hooks`
+
+[Node.js docs](https://nodejs.org/api/perf_hooks.html): `performance`
+
+#### `dns`
+
+[Node.js docs](https://nodejs.org/api/dns.html): `lookup`, `resolve4`, `resolve6`, `resolveMx`, `resolveTxt`, `resolveCname`, `resolveNs`, `reverse`, `Resolver`, `promises`
+
+#### `string_decoder`
+
+[Node.js docs](https://nodejs.org/api/string_decoder.html): `StringDecoder`
+
+#### `url`
+
+[Node.js docs](https://nodejs.org/api/url.html): `URL`, `URLSearchParams`, `parse`, `format`, `resolve`
+
+#### `zlib`
+
+[Node.js docs](https://nodejs.org/api/zlib.html): `gzipSync`, `gunzipSync`, `deflateSync`, `inflateSync`, `deflateRawSync`, `inflateRawSync`, `gzip`, `gunzip`, `deflate`, `inflate`, `deflateRaw`, `inflateRaw`
+
+#### `crypto`
+
+[Node.js docs](https://nodejs.org/api/crypto.html): `createHash`, `createHmac`, `createCipheriv`, `createDecipheriv`, `createSign`, `createVerify`, `randomBytes`, `randomUUID`, `randomInt`, `timingSafeEqual`, `pbkdf2Sync`, `pbkdf2`, `generateKeyPairSync`, `generateKeyPair`
+
+#### `stream`
+
+[Node.js docs](https://nodejs.org/api/stream.html): `Readable`, `Writable`, `Duplex`, `Transform`, `PassThrough`, `pipeline`, `finished`
+
+#### `child_process`
+
+[Node.js docs](https://nodejs.org/api/child_process.html): `spawn`, `exec`, `execSync`, `spawnSync`, `execFile`, `fork`
+
+#### `net`
+
+[Node.js docs](https://nodejs.org/api/net.html): `createServer`, `connect`, `createConnection`
+
+#### `http`
+
+[Node.js docs](https://nodejs.org/api/http.html): `createServer`, `request`, `get`, `Agent`, `globalAgent`, `METHODS`, `STATUS_CODES`
+
+#### `https`
+
+[Node.js docs](https://nodejs.org/api/https.html): `createServer`, `request`, `get`, `Agent`, `globalAgent`
+
+#### `tls`
+
+[Node.js docs](https://nodejs.org/api/tls.html): `createServer`, `connect`
+
+#### `readline`
+
+[Node.js docs](https://nodejs.org/api/readline.html): `createInterface`
+
+#### `worker_threads`
+
+[Node.js docs](https://nodejs.org/api/worker_threads.html): `MessageChannel`, `Worker`, `isMainThread`, `threadId`, `workerData`, `parentPort`
+
+#### `cluster`
+
+[Node.js docs](https://nodejs.org/api/cluster.html): `isPrimary`, `isMaster`, `isWorker`, `workers`, `fork`
+
+#### `repl`
+
+[Node.js docs](https://nodejs.org/api/repl.html): `start`
+
+#### `timers`
+
+[Node.js docs](https://nodejs.org/api/timers.html): `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, `setImmediate`, `clearImmediate`, `promises`
+
+#### `dgram`
+
+[Node.js docs](https://nodejs.org/api/dgram.html): `createSocket`
+
+#### `http2`
+
+[Node.js docs](https://nodejs.org/api/http2.html): `connect`, `request`, `createServer`, `createSecureServer`, `constants`
+
+#### `v8`
+
+[Node.js docs](https://nodejs.org/api/v8.html): `getHeapStatistics`, `getHeapSpaceStatistics`, `setFlagsFromString`, `serialize`, `deserialize`, `writeHeapSnapshot`
+
+#### `module`
+
+[Node.js docs](https://nodejs.org/api/module.html): `builtinModules`, `isBuiltin`, `createRequire`
+
+#### `diagnostics_channel`
+
+[Node.js docs](https://nodejs.org/api/diagnostics_channel.html): `publish`, `subscribe`, `unsubscribe`, `channel`
+
+#### `async_hooks`
+
+[Node.js docs](https://nodejs.org/api/async_hooks.html): `createHook`, `enable`, `disable`, `executionAsyncId`, `triggerAsyncId`, `executionAsyncResource`, `AsyncLocalStorage`
+
+#### `inspector`
+
+[Node.js docs](https://nodejs.org/api/inspector.html): `open`, `close`, `url`, `waitForDebugger`, `Session`
+
+#### `trace_events`
+
+[Node.js docs](https://nodejs.org/api/trace_events.html): `createTracing`, `getEnabledCategories`
+
 
 ### Benchmarks
 
 The `bench/` suite in the V6 repository runs 40 fixtures, each covering a different language or standard library feature, under `node` and under `v6` in its default persistent-process mode.
 
-V6's persistent process is faster than Node on 30 of these 40 fixtures. A standalone AOT JAR is slower than Node on all 40, since each run pays a full `java -jar` startup cost instead of reusing a warm process, so that mode is left out of the comparison entirely rather than mixed into a same-scale benchmark against two already-warm processes.
+V6's persistent process is faster than Node on 25 of these 40 fixtures. A standalone AOT JAR is slower than Node on all 40, since each run pays a full `java -jar` startup cost instead of reusing a warm process, so that mode is left out of the comparison entirely rather than mixed into a same-scale benchmark against two already-warm processes.
 
-Measured with `hyperfine`, using 6 warmup runs followed by a minimum of 5 timed runs per command, on an Intel Core i7-4800MQ (Haswell, 4 cores, 8 threads) with 8 GB of RAM, against `node v26.5.0` and `v6 v0.1.0`.
+Measured with `hyperfine`, using 6 warmup runs followed by a minimum of 5 timed runs per command, on an Intel Core i7-4800MQ (Haswell, 4 cores, 8 threads) with 8 GB of RAM, against `node v26.5.0` and `v6 v0.2.0`.
 
-See the [introductory blog post](../blog/intro/index.html) for the full breakdown by category, with charts.
+See the [introductory blog post](../blog/intro/index.html) for the full breakdown by category, with charts, and the [v0.2.0 release notes](../blog/v0-2-0/index.html) for the WebAssembly benchmark suite against `wasmtime`.
 
 ### FAQ
 
@@ -345,4 +644,4 @@ Open an issue on [GitHub](https://github.com/v6js/v6).
 
 ### Current limitations
 
-`WebAssembly`, `Proxy`, `Reflect`, `eval` and the `vm` module are not implemented.
+`Proxy`, `Reflect`, `eval`, the `vm` module, the dynamic `import()` expression and typed array types other than `Uint8Array` are not implemented. WebAssembly SIMD is not implemented; a module that uses it fails to load.

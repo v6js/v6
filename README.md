@@ -2,7 +2,7 @@
 
 V6 is a JavaScript runtime built on the JVM. It compiles JavaScript directly to JVM bytecode and runs it with a persistent warm process so repeated runs start fast. V6 also runs Java code from JavaScript through a built-in `java:` import scheme and can compile a script into a standalone executable JAR.
 
-V6 is experimental. Test262 conformance testing is not yet part of the release process and many other features are not yet implemented.
+V6 is experimental. The full [test262](https://github.com/tc39/test262) conformance suite runs against V6 on every push, with results tracked in [test/coverage.md](test/coverage.md). Current coverage across the `language`, `built-ins` and `annexB` categories is 21.10%, so treat spec conformance beyond that measured baseline as unverified.
 
 ### Installation
 
@@ -60,6 +60,10 @@ v6
 - `--no-color` disable colored output
 - `-v, --version` print the version
 - `-h, --help` print help
+- `--no-wasi-args` don't pass CLI args through as WASI argv
+- `--no-wasi-env` don't pass host environment variables through to WASI
+- `--no-wasi-random` deny the WASI `random_get` syscall
+- `--no-wasi-clock` deny the WASI `clock_time_get` syscall
 
 #### REPL commands
 
@@ -96,6 +100,27 @@ java -jar app.jar
 
 An AOT JAR runs on a plain `java -jar` process rather than V6's persistent warm process, so it starts up slower than running the script directly through `v6`.
 
+### WebAssembly
+
+Run a `.wasm` file directly, compiled to a JVM class the same way a `.js` script is.
+
+```
+v6 app.wasm
+```
+
+WASI Preview 1 covers `fd_write`, `proc_exit`, `args_get` / `args_sizes_get`, `environ_get` / `environ_sizes_get`, `random_get` and `clock_time_get`. Argv and the environment pass through by default.
+
+The same module also loads from JavaScript through the standard `WebAssembly` API.
+
+```js
+const bytes = require("fs").readFileSync("app.wasm");
+WebAssembly.instantiate(bytes).then((result) => {
+  console.log(result.instance.exports.run());
+});
+```
+
+WebAssembly SIMD is not implemented; a module that uses it fails to load.
+
 ### Module resolution
 
 - `require` (CommonJS) and `import` (ES modules) both work, including in the same workspace
@@ -110,7 +135,7 @@ V6 is tested against real npm packages, including `express`, `fast-glob`, `react
 
 ### Benchmarks
 
-V6's persistent warm process is faster than Node on 30 of 40 benchmarks in this project's own suite. A standalone AOT JAR is slower than Node on all 40, since each run pays a full `java -jar` startup cost instead of reusing a warm process. The suite lives in `bench/` and runs with `bench/run.sh`.
+V6's persistent warm process is faster than Node on 25 of 40 benchmarks in this project's own suite. A standalone AOT JAR is slower than Node on all 40, since each run pays a full `java -jar` startup cost instead of reusing a warm process. The suite lives in `bench/` and runs with `bench/run.sh`. A separate suite in `bench/wasm/`, run with `bench/run-wasm.sh`, compares WebAssembly execution against `wasmtime` and against Node's own `WebAssembly` API.
 
 Measured on an Intel Core i7-4800MQ (Haswell, 4 cores, 8 threads) with 8 GB of RAM.
 
@@ -168,7 +193,7 @@ Measured on an Intel Core i7-4800MQ (Haswell, 4 cores, 8 threads) with 8 GB of R
 - [x] `Worker` / `self`
 - [x] `performance`
 - [x] `navigator`
-- [ ] `WebAssembly`
+- [x] `WebAssembly`
 
 ### Node.js compatibility
 
