@@ -1625,6 +1625,44 @@ static void compile_clinit(wasm_module* mod, class_file* cf,
     }
   }
 
+  for (uint32_t i = 0; i < mod->data_count; i++) {
+    wasm_data_seg* d = &mod->datas[i];
+    if (!d->offset_start)
+      continue;
+
+    wasm_func_ctx fc;
+    memset(&fc, 0, sizeof(fc));
+    fc.cf = cf;
+    fc.m = clinit;
+    fc.mod = mod;
+    fc.class_name = class_name;
+
+    op_emit2(clinit, op_getstatic,
+             cf_fieldref(cf, class_name, "wasmMemory0", "LV6WasmMemory;"));
+
+    codegen_body(&fc, d->offset_start, d->offset_len);
+
+    if (fc.had_error) {
+      if (out_err->ok) {
+        out_err->ok = 0;
+        snprintf(out_err->message, sizeof(out_err->message), "%s", fc.err_msg);
+      }
+      return;
+    }
+
+    emit_iconst(clinit, (int)d->data_len);
+    op_emit1(clinit, op_newarray, wasm_jvm_array_byte);
+    for (uint32_t j = 0; j < d->data_len; j++) {
+      op_emit(clinit, op_dup);
+      emit_iconst(clinit, (int)j);
+      emit_iconst(clinit, (int8_t)d->data[j]);
+      op_emit(clinit, op_bastore);
+    }
+
+    op_emit2(clinit, op_invokevirtual,
+             cf_methodref(cf, "V6WasmMemory", "initData", "(I[B)V"));
+  }
+
   for (uint32_t i = 0; i < mod->global_count; i++) {
     wasm_global_decl* g = &mod->globals[i];
 
@@ -1664,8 +1702,6 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
     return wasm_err("wasm multi-memory not supported (max one memory)");
   if (mod->table_count > 1)
     return wasm_err("wasm multi-table not supported (max one table)");
-  if (mod->data_count > 0)
-    return wasm_err("wasm data segments not yet supported in this build");
   if (mod->func_count != mod->code_count)
     return wasm_err("wasm function/code section count mismatch");
 
