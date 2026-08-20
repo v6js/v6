@@ -32,6 +32,7 @@ void v6_cli_print_version(void);
 
 int v6_cli_run_source(const char* src, const char* in_path,
                       v6_cli_options* opts);
+int v6_cli_run_wasm(v6_cli_options* opts);
 int v6_cli_run_script(v6_cli_options* opts);
 int v6_cli_eval(v6_cli_options* opts);
 int v6_cli_serve_daemon(const char* lock_path);

@@ -155,3 +155,5 @@ int wasm_func_is_import(const wasm_module* m, uint32_t func_index);
 
 compile_result wasm_compile_module(wasm_module* m, class_file* cf,
                                    const char* class_name);
+
+int wasm_find_entry(const wasm_module* m, uint32_t* out_func_idx);

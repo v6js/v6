@@ -9,6 +9,7 @@
 #include "v6/parser.h"
 #include "v6/runtime.h"
 #include "v6/version.h"
+#include "v6/wasm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -398,7 +399,111 @@ int v6_cli_run_source(const char* src, const char* in_path,
   return run_rc < 0 ? 1 : run_rc;
 }
 
+static int has_suffix(const char* s, const char* suffix) {
+  size_t ls = strlen(s), lsuf = strlen(suffix);
+  if (lsuf > ls)
+    return 0;
+  return strcmp(s + ls - lsuf, suffix) == 0;
+}
+
+static unsigned char* read_file_bytes(const char* path, size_t* out_len) {
+  FILE* f = fopen(path, "rb");
+  if (!f)
+    return NULL;
+
+  fseek(f, 0, SEEK_END);
+  long n = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  unsigned char* data = malloc((size_t)n);
+  if (!data) {
+    fclose(f);
+    return NULL;
+  }
+
+  fread(data, 1, (size_t)n, f);
+  fclose(f);
+  *out_len = (size_t)n;
+  return data;
+}
+
+int v6_cli_run_wasm(v6_cli_options* opts) {
+  size_t len = 0;
+  unsigned char* bytes = read_file_bytes(opts->script_path, &len);
+  if (!bytes) {
+    fprintf(stderr, "error: cannot read %s\n", opts->script_path);
+    return 1;
+  }
+
+  wasm_module m;
+  int prc = wasm_parse_module(bytes, len, &m);
+  if (prc != 0) {
+    fprintf(stderr, "error: %s: %s\n", opts->script_path, m.err_msg);
+    free(bytes);
+    return 1;
+  }
+
+  uint32_t entry_idx;
+  if (wasm_find_entry(&m, &entry_idx) != 0) {
+    fprintf(stderr,
+            "error: %s: no entry point found (no start section and no "
+            "single zero-argument exported function)\n",
+            opts->script_path);
+    wasm_module_free(&m);
+    free(bytes);
+    return 1;
+  }
+
+  class_file cf;
+  cf_init(&cf, "Main", "java/lang/Object");
+  compile_result cr = wasm_compile_module(&m, &cf, "Main");
+  if (!cr.ok) {
+    fprintf(stderr, "error: %s: %s\n", opts->script_path, cr.message);
+    wasm_module_free(&m);
+    cf_free(&cf);
+    free(bytes);
+    return 1;
+  }
+
+  buf out;
+  buf_init(&out);
+  cf_emit(&cf, &out);
+  wasm_module_free(&m);
+  cf_free(&cf);
+  free(bytes);
+
+  if (!v6_jvm_available()) {
+    fprintf(stderr, "error: no JVM available (built without JAVA_HOME?)\n");
+    buf_free(&out);
+    return 1;
+  }
+
+  v6_jvm* jvm = v6_jvm_create(opts->classpath, 0);
+  if (!jvm) {
+    fprintf(stderr, "error: failed to create JVM\n");
+    buf_free(&out);
+    return 1;
+  }
+
+  if (v6_jvm_load_runtime(jvm) != 0) {
+    fprintf(stderr, "error: failed to load runtime\n");
+    v6_jvm_destroy(jvm);
+    buf_free(&out);
+    return 1;
+  }
+
+  int run_rc =
+      v6_jvm_run(jvm, out.data, out.len, opts->script_args, opts->script_argc);
+  buf_free(&out);
+  v6_jvm_destroy(jvm);
+
+  return run_rc < 0 ? 1 : run_rc;
+}
+
 int v6_cli_run_script(v6_cli_options* opts) {
+  if (has_suffix(opts->script_path, ".wasm"))
+    return v6_cli_run_wasm(opts);
+
   char* src = read_file(opts->script_path);
   if (!src) {
     fprintf(stderr, "error: cannot read %s\n", opts->script_path);

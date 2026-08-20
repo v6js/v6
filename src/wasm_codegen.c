@@ -1830,6 +1830,103 @@ static void compile_clinit(wasm_module* mod, class_file* cf,
   clinit->max_locals = 1;
 }
 
+int wasm_find_entry(const wasm_module* m, uint32_t* out_func_idx) {
+  if (m->has_start) {
+    *out_func_idx = m->start_func_index;
+    return 0;
+  }
+
+  for (uint32_t i = 0; i < m->export_count; i++) {
+    if (m->exports[i].kind != wasm_import_func)
+      continue;
+    if (strcmp(m->exports[i].name, "_start") != 0)
+      continue;
+    uint32_t fidx = m->exports[i].index;
+    const wasm_functype* ft = wasm_func_type(m, fidx);
+    if (ft && ft->param_count == 0) {
+      *out_func_idx = fidx;
+      return 0;
+    }
+  }
+
+  uint32_t candidate = 0;
+  int candidates = 0;
+  for (uint32_t i = 0; i < m->export_count; i++) {
+    if (m->exports[i].kind != wasm_import_func)
+      continue;
+    uint32_t fidx = m->exports[i].index;
+    const wasm_functype* ft = wasm_func_type(m, fidx);
+    if (!ft || ft->param_count != 0)
+      continue;
+    candidates++;
+    candidate = fidx;
+  }
+  if (candidates == 1) {
+    *out_func_idx = candidate;
+    return 0;
+  }
+  return -1;
+}
+
+static void compile_cli_main(wasm_module* mod, class_file* cf,
+                             const char* class_name, uint32_t entry_idx) {
+  const wasm_functype* ft = wasm_func_type(mod, entry_idx);
+  char desc[512];
+  build_func_desc(ft, desc, sizeof(desc));
+  char fname[32];
+  snprintf(fname, sizeof(fname), "wasmFunc%u", entry_idx);
+  uint16_t entry_ref = cf_methodref(cf, class_name, fname, desc);
+
+  method* main_m =
+      cf_method(cf, acc_public | acc_static, "main", "([Ljava/lang/String;)V");
+  op_emit2(main_m, op_invokestatic, entry_ref);
+
+  if (ft->result_count > 0) {
+    switch (ft->results[0]) {
+    case wasm_type_i32:
+      emit_istore(main_m, 1);
+      op_emit2(
+          main_m, op_getstatic,
+          cf_fieldref(cf, "java/lang/System", "out", "Ljava/io/PrintStream;"));
+      emit_iload_slot(main_m, 1);
+      op_emit2(main_m, op_invokevirtual,
+               cf_methodref(cf, "java/io/PrintStream", "println", "(I)V"));
+      break;
+    case wasm_type_i64:
+      emit_lstore(main_m, 1);
+      op_emit2(
+          main_m, op_getstatic,
+          cf_fieldref(cf, "java/lang/System", "out", "Ljava/io/PrintStream;"));
+      emit_lload(main_m, 1);
+      op_emit2(main_m, op_invokevirtual,
+               cf_methodref(cf, "java/io/PrintStream", "println", "(J)V"));
+      break;
+    case wasm_type_f32:
+      emit_fstore(main_m, 1);
+      op_emit2(
+          main_m, op_getstatic,
+          cf_fieldref(cf, "java/lang/System", "out", "Ljava/io/PrintStream;"));
+      emit_fload(main_m, 1);
+      op_emit2(main_m, op_invokevirtual,
+               cf_methodref(cf, "java/io/PrintStream", "println", "(F)V"));
+      break;
+    case wasm_type_f64:
+      emit_dstore(main_m, 1);
+      op_emit2(
+          main_m, op_getstatic,
+          cf_fieldref(cf, "java/lang/System", "out", "Ljava/io/PrintStream;"));
+      emit_dload(main_m, 1);
+      op_emit2(main_m, op_invokevirtual,
+               cf_methodref(cf, "java/io/PrintStream", "println", "(D)V"));
+      break;
+    }
+  }
+
+  op_emit(main_m, op_return);
+  main_m->max_stack = 8;
+  main_m->max_locals = 3;
+}
+
 compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
                                    const char* class_name) {
   for (uint32_t i = 0; i < mod->import_count; i++) {
@@ -1913,6 +2010,12 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
   if (mod->global_count > 0 || mod->memory_count > 0 || mod->table_count > 0) {
     method* clinit = cf_method(cf, acc_static, "<clinit>", "()V");
     compile_clinit(mod, cf, class_name, clinit, &result);
+  }
+
+  if (result.ok) {
+    uint32_t entry_idx;
+    if (wasm_find_entry(mod, &entry_idx) == 0)
+      compile_cli_main(mod, cf, class_name, entry_idx);
   }
 
   return result;
