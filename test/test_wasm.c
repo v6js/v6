@@ -2,6 +2,7 @@
 #include "v6/jvm.h"
 #include "v6/wasm.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 static const uint8_t add_module[] = {
@@ -47,6 +48,23 @@ static const uint8_t import_module[] = {
     0x65, 0x6E, 0x76, 0x03, 0x64, 0x62, 0x6C, 0x00, 0x00, 0x07,
     0x07, 0x01, 0x03, 0x64, 0x62, 0x6C, 0x00, 0x00,
 };
+
+static v6_jvm* g_wasm_jvm = NULL;
+static int g_wasm_jvm_tried = 0;
+
+static v6_jvm* get_wasm_jvm(void) {
+  if (g_wasm_jvm_tried)
+    return g_wasm_jvm;
+  g_wasm_jvm_tried = 1;
+  if (!v6_jvm_available())
+    return NULL;
+  g_wasm_jvm = v6_jvm_create(NULL, 0);
+  if (g_wasm_jvm && v6_jvm_load_runtime(g_wasm_jvm) != 0) {
+    v6_jvm_destroy(g_wasm_jvm);
+    g_wasm_jvm = NULL;
+  }
+  return g_wasm_jvm;
+}
 
 static const uint8_t table_module[] = {
     0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0A, 0x02, 0x60,
@@ -131,25 +149,22 @@ int test_wasm_codegen(void) {
                        out.data[2] == 0xBA && out.data[3] == 0xBE);
   v6_check(&fails, out.data[6] == 0 && out.data[7] == 49);
 
-  if (v6_jvm_available()) {
-    v6_jvm* jvm = v6_jvm_create(NULL, 0);
-    if (jvm) {
-      int def_rc = v6_jvm_define_extra(jvm, "WasmAddTest", out.data, out.len);
-      v6_check(&fails, def_rc == 0);
-      if (def_rc == 0) {
-        int result = 0;
-        int call_rc = v6_jvm_call_static_i_ii(jvm, "WasmAddTest", "wasmFunc0",
-                                              2, 3, &result);
-        v6_check(&fails, call_rc == 0);
-        v6_check(&fails, result == 5);
+  v6_jvm* jvm = get_wasm_jvm();
+  if (jvm) {
+    int def_rc = v6_jvm_define_extra(jvm, "WasmAddTest", out.data, out.len);
+    v6_check(&fails, def_rc == 0);
+    if (def_rc == 0) {
+      int result = 0;
+      int call_rc = v6_jvm_call_static_i_ii(jvm, "WasmAddTest", "wasmFunc0", 2,
+                                            3, &result);
+      v6_check(&fails, call_rc == 0);
+      v6_check(&fails, result == 5);
 
-        int result2 = 0;
-        int call_rc2 = v6_jvm_call_static_i_ii(jvm, "WasmAddTest", "wasmFunc0",
-                                               -7, 10, &result2);
-        v6_check(&fails, call_rc2 == 0);
-        v6_check(&fails, result2 == 3);
-      }
-      v6_jvm_destroy(jvm);
+      int result2 = 0;
+      int call_rc2 = v6_jvm_call_static_i_ii(jvm, "WasmAddTest", "wasmFunc0",
+                                             -7, 10, &result2);
+      v6_check(&fails, call_rc2 == 0);
+      v6_check(&fails, result2 == 3);
     }
   }
 
@@ -182,21 +197,16 @@ int test_wasm_memory(void) {
   buf_init(&out);
   cf_emit(&cf, &out);
 
-  if (v6_jvm_available()) {
-    v6_jvm* jvm = v6_jvm_create(NULL, 0);
-    if (jvm) {
-      v6_check(&fails, v6_jvm_load_runtime(jvm) == 0);
-      int def_rc =
-          v6_jvm_define_extra(jvm, "WasmMemoryTest", out.data, out.len);
-      v6_check(&fails, def_rc == 0);
-      if (def_rc == 0) {
-        int result = 0;
-        int call_rc =
-            v6_jvm_call_static_i(jvm, "WasmMemoryTest", "wasmFunc0", &result);
-        v6_check(&fails, call_rc == 0);
-        v6_check(&fails, result == 123);
-      }
-      v6_jvm_destroy(jvm);
+  v6_jvm* jvm = get_wasm_jvm();
+  if (jvm) {
+    int def_rc = v6_jvm_define_extra(jvm, "WasmMemoryTest", out.data, out.len);
+    v6_check(&fails, def_rc == 0);
+    if (def_rc == 0) {
+      int result = 0;
+      int call_rc =
+          v6_jvm_call_static_i(jvm, "WasmMemoryTest", "wasmFunc0", &result);
+      v6_check(&fails, call_rc == 0);
+      v6_check(&fails, result == 123);
     }
   }
 
@@ -228,20 +238,16 @@ int test_wasm_data(void) {
   buf_init(&out);
   cf_emit(&cf, &out);
 
-  if (v6_jvm_available()) {
-    v6_jvm* jvm = v6_jvm_create(NULL, 0);
-    if (jvm) {
-      v6_check(&fails, v6_jvm_load_runtime(jvm) == 0);
-      int def_rc = v6_jvm_define_extra(jvm, "WasmDataTest", out.data, out.len);
-      v6_check(&fails, def_rc == 0);
-      if (def_rc == 0) {
-        int result = 0;
-        int call_rc =
-            v6_jvm_call_static_i(jvm, "WasmDataTest", "wasmFunc0", &result);
-        v6_check(&fails, call_rc == 0);
-        v6_check(&fails, result == 42);
-      }
-      v6_jvm_destroy(jvm);
+  v6_jvm* jvm = get_wasm_jvm();
+  if (jvm) {
+    int def_rc = v6_jvm_define_extra(jvm, "WasmDataTest", out.data, out.len);
+    v6_check(&fails, def_rc == 0);
+    if (def_rc == 0) {
+      int result = 0;
+      int call_rc =
+          v6_jvm_call_static_i(jvm, "WasmDataTest", "wasmFunc0", &result);
+      v6_check(&fails, call_rc == 0);
+      v6_check(&fails, result == 42);
     }
   }
 
@@ -270,33 +276,58 @@ int test_wasm_select(void) {
   buf_init(&out);
   cf_emit(&cf, &out);
 
-  if (v6_jvm_available()) {
-    v6_jvm* jvm = v6_jvm_create(NULL, 0);
-    if (jvm) {
-      v6_check(&fails, v6_jvm_load_runtime(jvm) == 0);
-      int def_rc =
-          v6_jvm_define_extra(jvm, "WasmSelectTest", out.data, out.len);
-      v6_check(&fails, def_rc == 0);
-      if (def_rc == 0) {
-        int result = 0;
-        int call_rc = v6_jvm_call_static_i_iii(jvm, "WasmSelectTest",
-                                               "wasmFunc0", 11, 22, 1, &result);
-        v6_check(&fails, call_rc == 0);
-        v6_check(&fails, result == 11);
+  v6_jvm* jvm = get_wasm_jvm();
+  if (jvm) {
+    int def_rc = v6_jvm_define_extra(jvm, "WasmSelectTest", out.data, out.len);
+    v6_check(&fails, def_rc == 0);
+    if (def_rc == 0) {
+      int result = 0;
+      int call_rc = v6_jvm_call_static_i_iii(jvm, "WasmSelectTest", "wasmFunc0",
+                                             11, 22, 1, &result);
+      v6_check(&fails, call_rc == 0);
+      v6_check(&fails, result == 11);
 
-        int result2 = 0;
-        int call_rc2 = v6_jvm_call_static_i_iii(
-            jvm, "WasmSelectTest", "wasmFunc0", 11, 22, 0, &result2);
-        v6_check(&fails, call_rc2 == 0);
-        v6_check(&fails, result2 == 22);
-      }
-      v6_jvm_destroy(jvm);
+      int result2 = 0;
+      int call_rc2 = v6_jvm_call_static_i_iii(jvm, "WasmSelectTest",
+                                              "wasmFunc0", 11, 22, 0, &result2);
+      v6_check(&fails, call_rc2 == 0);
+      v6_check(&fails, result2 == 22);
     }
   }
 
   buf_free(&out);
   cf_free(&cf);
   wasm_module_free(&m);
+
+  return fails;
+}
+
+int test_wasm_jni_bridge(void) {
+  int fails = 0;
+
+  v6_jvm* jvm = get_wasm_jvm();
+  if (!jvm)
+    return fails;
+
+  unsigned char* compiled = NULL;
+  size_t compiled_len = 0;
+  int rc = v6_jvm_wasm_compile(jvm, add_module, sizeof(add_module),
+                               "WasmBridgeTest", &compiled, &compiled_len);
+  v6_check(&fails, rc == 0);
+
+  if (rc == 0) {
+    int def_rc =
+        v6_jvm_define_extra(jvm, "WasmBridgeTest", compiled, compiled_len);
+    v6_check(&fails, def_rc == 0);
+    if (def_rc == 0) {
+      int result = 0;
+      int call_rc = v6_jvm_call_static_i_ii(jvm, "WasmBridgeTest", "wasmFunc0",
+                                            4, 9, &result);
+      v6_check(&fails, call_rc == 0);
+      v6_check(&fails, result == 13);
+    }
+    free(compiled);
+  }
 
   return fails;
 }
@@ -362,20 +393,16 @@ int test_wasm_table(void) {
   buf_init(&out);
   cf_emit(&cf, &out);
 
-  if (v6_jvm_available()) {
-    v6_jvm* jvm = v6_jvm_create(NULL, 0);
-    if (jvm) {
-      v6_check(&fails, v6_jvm_load_runtime(jvm) == 0);
-      int def_rc = v6_jvm_define_extra(jvm, "WasmTableTest", out.data, out.len);
-      v6_check(&fails, def_rc == 0);
-      if (def_rc == 0) {
-        int result = 0;
-        int call_rc =
-            v6_jvm_call_static_i(jvm, "WasmTableTest", "wasmFunc2", &result);
-        v6_check(&fails, call_rc == 0);
-        v6_check(&fails, result == 6);
-      }
-      v6_jvm_destroy(jvm);
+  v6_jvm* jvm = get_wasm_jvm();
+  if (jvm) {
+    int def_rc = v6_jvm_define_extra(jvm, "WasmTableTest", out.data, out.len);
+    v6_check(&fails, def_rc == 0);
+    if (def_rc == 0) {
+      int result = 0;
+      int call_rc =
+          v6_jvm_call_static_i(jvm, "WasmTableTest", "wasmFunc2", &result);
+      v6_check(&fails, call_rc == 0);
+      v6_check(&fails, result == 6);
     }
   }
 
@@ -408,20 +435,16 @@ int test_wasm_globals(void) {
   buf_init(&out);
   cf_emit(&cf, &out);
 
-  if (v6_jvm_available()) {
-    v6_jvm* jvm = v6_jvm_create(NULL, 0);
-    if (jvm) {
-      int def_rc =
-          v6_jvm_define_extra(jvm, "WasmGlobalTest", out.data, out.len);
-      v6_check(&fails, def_rc == 0);
-      if (def_rc == 0) {
-        int result = 0;
-        int call_rc =
-            v6_jvm_call_static_i(jvm, "WasmGlobalTest", "wasmFunc0", &result);
-        v6_check(&fails, call_rc == 0);
-        v6_check(&fails, result == 42);
-      }
-      v6_jvm_destroy(jvm);
+  v6_jvm* jvm = get_wasm_jvm();
+  if (jvm) {
+    int def_rc = v6_jvm_define_extra(jvm, "WasmGlobalTest", out.data, out.len);
+    v6_check(&fails, def_rc == 0);
+    if (def_rc == 0) {
+      int result = 0;
+      int call_rc =
+          v6_jvm_call_static_i(jvm, "WasmGlobalTest", "wasmFunc0", &result);
+      v6_check(&fails, call_rc == 0);
+      v6_check(&fails, result == 42);
     }
   }
 
