@@ -49,7 +49,7 @@ daemon-accelerated invocation as \`bench/report.md\`). hyperfine, 6 warmups,
 EOF
 
 echo "==> CLI WASI benchmarks: wasmtime vs v6 (v6 file.wasm)"
-for name in fib primes wasi_io memcpy_bulk table_dispatch dotproduct; do
+for name in fib primes wasi_io memcpy_bulk table_dispatch dotproduct dotproduct_simd; do
   wasm="$WASM_DIR/$name.wasm"
   md="$TMP_DIR/cli-$name.md"
 
@@ -72,7 +72,7 @@ for name in fib primes wasi_io memcpy_bulk table_dispatch dotproduct; do
 done
 
 echo "==> JS WebAssembly-API benchmarks: node vs v6"
-for name in fib primes memcpy_bulk table_dispatch dotproduct; do
+for name in fib primes memcpy_bulk table_dispatch dotproduct dotproduct_simd; do
   fixture="$WASM_DIR/$name.js"
   md="$TMP_DIR/js-$name.md"
 
