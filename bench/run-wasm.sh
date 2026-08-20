@@ -35,7 +35,18 @@ NODE_LABEL="nodejs v$NODE_VERSION"
 V6_LABEL="v6 v$V6_VERSION"
 WASMTIME_LABEL="wasmtime v$WASMTIME_VERSION"
 
-: > "$REPORT_FILE"
+cat > "$REPORT_FILE" <<EOF
+# WASM/WASI benchmarks
+
+Release build (\`make BUILD_TYPE=release\`), no AOT. \`cli/*\` benchmarks run
+the \`.wasm\` file directly (\`wasmtime run file.wasm\` vs \`v6 file.wasm\`, WASI
+fully enabled by default on both, v6 routed through its persistent daemon
+like any other CLI invocation). \`js/*\` benchmarks load the same \`.wasm\` via
+the \`WebAssembly\` API from a JS driver (\`node file.js\` vs \`v6 file.js\`, same
+daemon-accelerated invocation as \`bench/report.md\`). hyperfine, 6 warmups,
+5+ min runs per comparison, run with nothing else competing for CPU.
+
+EOF
 
 echo "==> CLI WASI benchmarks: wasmtime vs v6 (v6 file.wasm)"
 for name in fib primes wasi_io memcpy_bulk table_dispatch dotproduct; do
