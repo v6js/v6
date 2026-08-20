@@ -34,6 +34,13 @@ static const uint8_t data_module[] = {
     0x41, 0x00, 0x0B, 0x04, 0x2A, 0x00, 0x00, 0x00,
 };
 
+static const uint8_t select_module[] = {
+    0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x01,
+    0x60, 0x03, 0x7F, 0x7F, 0x7F, 0x01, 0x7F, 0x03, 0x02, 0x01, 0x00,
+    0x07, 0x07, 0x01, 0x03, 0x73, 0x65, 0x6C, 0x00, 0x00, 0x0A, 0x0B,
+    0x01, 0x09, 0x00, 0x20, 0x00, 0x20, 0x01, 0x20, 0x02, 0x1B, 0x0B,
+};
+
 static const uint8_t table_module[] = {
     0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0A, 0x02, 0x60,
     0x01, 0x7F, 0x01, 0x7F, 0x60, 0x00, 0x01, 0x7F, 0x03, 0x04, 0x03, 0x00,
@@ -226,6 +233,55 @@ int test_wasm_data(void) {
             v6_jvm_call_static_i(jvm, "WasmDataTest", "wasmFunc0", &result);
         v6_check(&fails, call_rc == 0);
         v6_check(&fails, result == 42);
+      }
+      v6_jvm_destroy(jvm);
+    }
+  }
+
+  buf_free(&out);
+  cf_free(&cf);
+  wasm_module_free(&m);
+
+  return fails;
+}
+
+int test_wasm_select(void) {
+  int fails = 0;
+
+  wasm_module m;
+  int rc = wasm_parse_module(select_module, sizeof(select_module), &m);
+  v6_check(&fails, rc == 0);
+  if (rc != 0)
+    return fails;
+
+  class_file cf;
+  cf_init(&cf, "WasmSelectTest", "java/lang/Object");
+  compile_result cr = wasm_compile_module(&m, &cf, "WasmSelectTest");
+  v6_check(&fails, cr.ok);
+
+  buf out;
+  buf_init(&out);
+  cf_emit(&cf, &out);
+
+  if (v6_jvm_available()) {
+    v6_jvm* jvm = v6_jvm_create(NULL, 0);
+    if (jvm) {
+      v6_check(&fails, v6_jvm_load_runtime(jvm) == 0);
+      int def_rc =
+          v6_jvm_define_extra(jvm, "WasmSelectTest", out.data, out.len);
+      v6_check(&fails, def_rc == 0);
+      if (def_rc == 0) {
+        int result = 0;
+        int call_rc = v6_jvm_call_static_i_iii(jvm, "WasmSelectTest",
+                                               "wasmFunc0", 11, 22, 1, &result);
+        v6_check(&fails, call_rc == 0);
+        v6_check(&fails, result == 11);
+
+        int result2 = 0;
+        int call_rc2 = v6_jvm_call_static_i_iii(
+            jvm, "WasmSelectTest", "wasmFunc0", 11, 22, 0, &result2);
+        v6_check(&fails, call_rc2 == 0);
+        v6_check(&fails, result2 == 22);
       }
       v6_jvm_destroy(jvm);
     }
