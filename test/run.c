@@ -18,6 +18,7 @@ int test_wasm_jni_bridge(void);
 int test_wasm_import(void);
 int test_wasm_table(void);
 int test_wasm_globals(void);
+int test_wasm_cli_entry(void);
 
 int main(void) {
   int fails = 0;
@@ -40,6 +41,7 @@ int main(void) {
   fails += test_wasm_import();
   fails += test_wasm_table();
   fails += test_wasm_globals();
+  fails += test_wasm_cli_entry();
 
   if (fails) {
     fprintf(stderr, "%d failure(s)\n", fails);

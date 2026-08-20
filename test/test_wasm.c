@@ -454,3 +454,55 @@ int test_wasm_globals(void) {
 
   return fails;
 }
+
+static const uint8_t compute_module[] = {
+    0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01,
+    0x60, 0x00, 0x01, 0x7F, 0x03, 0x02, 0x01, 0x00, 0x07, 0x0B, 0x01,
+    0x07, 0x63, 0x6F, 0x6D, 0x70, 0x75, 0x74, 0x65, 0x00, 0x00, 0x0A,
+    0x09, 0x01, 0x07, 0x00, 0x41, 0x06, 0x41, 0x07, 0x6C, 0x0B,
+};
+
+int test_wasm_cli_entry(void) {
+  int fails = 0;
+
+  wasm_module m;
+  int rc = wasm_parse_module(compute_module, sizeof(compute_module), &m);
+  v6_check(&fails, rc == 0);
+  if (rc != 0)
+    return fails;
+
+  uint32_t entry_idx = 999;
+  v6_check(&fails, wasm_find_entry(&m, &entry_idx) == 0);
+  v6_check(&fails, entry_idx == 0);
+
+  class_file cf;
+  cf_init(&cf, "WasmCliEntryTest", "java/lang/Object");
+  compile_result cr = wasm_compile_module(&m, &cf, "WasmCliEntryTest");
+  v6_check(&fails, cr.ok);
+
+  v6_check(&fails, cf.method_len == 2);
+
+  buf out;
+  buf_init(&out);
+  cf_emit(&cf, &out);
+
+  v6_jvm* jvm = get_wasm_jvm();
+  if (jvm) {
+    int def_rc =
+        v6_jvm_define_extra(jvm, "WasmCliEntryTest", out.data, out.len);
+    v6_check(&fails, def_rc == 0);
+    if (def_rc == 0) {
+      int result = 0;
+      int call_rc =
+          v6_jvm_call_static_i(jvm, "WasmCliEntryTest", "wasmFunc0", &result);
+      v6_check(&fails, call_rc == 0);
+      v6_check(&fails, result == 42);
+    }
+  }
+
+  buf_free(&out);
+  cf_free(&cf);
+  wasm_module_free(&m);
+
+  return fails;
+}
