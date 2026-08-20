@@ -486,6 +486,7 @@ method* cf_method(class_file* cf, uint16_t access, const char* name,
   m->exceptions = NULL;
   m->exception_len = 0;
   m->exception_cap = 0;
+  m->owner_cf = cf;
   cf->methods[cf->method_len++] = m;
   return m;
 }
@@ -896,7 +897,11 @@ void emit_iconst(method* m, int n) {
     op_emit1(m, op_bipush, (uint8_t)n);
     return;
   }
-  op_emit2(m, op_sipush, (uint16_t)n);
+  if (n >= -32768 && n <= 32767) {
+    op_emit2(m, op_sipush, (uint16_t)n);
+    return;
+  }
+  op_emit2(m, op_ldc_w, cf_integer(m->owner_cf, n));
 }
 
 static uint16_t ref_class(class_file* cf) {

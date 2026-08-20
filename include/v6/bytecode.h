@@ -227,6 +227,8 @@ typedef struct exc_entry {
   uint16_t catch_type;
 } exc_entry;
 
+struct class_file;
+
 typedef struct method {
   uint16_t access;
   uint16_t name_idx;
@@ -237,6 +239,7 @@ typedef struct method {
   exc_entry* exceptions;
   size_t exception_len;
   size_t exception_cap;
+  struct class_file* owner_cf;
 } method;
 
 typedef struct field {
