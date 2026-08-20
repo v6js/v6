@@ -15,6 +15,10 @@ public final class V6WasmMemory {
     return data.length / PAGE_SIZE;
   }
 
+  public void initData(int offset, byte[] src) {
+    System.arraycopy(src, 0, data, offset, src.length);
+  }
+
   public int grow(int deltaPages) {
     int oldPages = size();
     if (deltaPages < 0)
