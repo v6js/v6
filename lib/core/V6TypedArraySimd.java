@@ -2,7 +2,8 @@ import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.VectorSpecies;
 
 public final class V6TypedArraySimd {
-  private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
+  private static final VectorSpecies<Byte> SPECIES =
+      ByteVector.SPECIES_PREFERRED;
 
   public static void fill(byte[] data, int start, int end, byte value) {
     int i = start;

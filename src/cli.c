@@ -569,10 +569,9 @@ int v6_cli_run_wasm(v6_cli_options* opts) {
     classes[0].len = out.len;
 
     int exit_code = 1;
-    int handled =
-        v6_daemon_run(opts->prog, classes, 1, opts->script_path,
-                      opts->script_args, opts->script_argc,
-                      v6_color_enabled_out(), &exit_code);
+    int handled = v6_daemon_run(opts->prog, classes, 1, opts->script_path,
+                                opts->script_args, opts->script_argc,
+                                v6_color_enabled_out(), &exit_code);
     if (handled) {
       buf_free(&out);
       return exit_code;

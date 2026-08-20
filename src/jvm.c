@@ -175,6 +175,7 @@ int v6_jvm_available(void) {
 #define v6_dup _dup
 #define v6_dup2 _dup2
 #define v6_close _close
+
 static int v6_open_null(void) {
   return _open("NUL", _O_WRONLY);
 }
@@ -183,6 +184,7 @@ static int v6_open_null(void) {
 #define v6_dup dup
 #define v6_dup2 dup2
 #define v6_close close
+
 static int v6_open_null(void) {
   return open("/dev/null", O_WRONLY);
 }

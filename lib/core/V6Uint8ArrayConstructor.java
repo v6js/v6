@@ -13,53 +13,54 @@ public final class V6Uint8ArrayConstructor
           return objValue(new V6Uint8ArrayObject(bytes));
         }));
     PROTOTYPE.set("fill", fn((thisArg, args) -> {
-          V6Uint8ArrayObject self = (V6Uint8ArrayObject)thisArg.ref();
-          byte value = (byte)(int)V6Value.argAt(args, 0).toNumber();
-          int len = self.data.length;
-          int start = clampIndex(V6Value.argAt(args, 1), 0, len);
-          int end = clampIndex(V6Value.argAt(args, 2), len, len);
-          V6TypedArraySimd.fill(self.data, start, end, value);
-          return thisArg;
-        }));
+                    V6Uint8ArrayObject self = (V6Uint8ArrayObject)thisArg.ref();
+                    byte value = (byte)(int)V6Value.argAt(args, 0).toNumber();
+                    int len = self.data.length;
+                    int start = clampIndex(V6Value.argAt(args, 1), 0, len);
+                    int end = clampIndex(V6Value.argAt(args, 2), len, len);
+                    V6TypedArraySimd.fill(self.data, start, end, value);
+                    return thisArg;
+                  }));
     PROTOTYPE.set("copyWithin", fn((thisArg, args) -> {
-          V6Uint8ArrayObject self = (V6Uint8ArrayObject)thisArg.ref();
-          int len = self.data.length;
-          int target = clampIndex(V6Value.argAt(args, 0), 0, len);
-          int start = clampIndex(V6Value.argAt(args, 1), 0, len);
-          int end = clampIndex(V6Value.argAt(args, 2), len, len);
-          int count = Math.min(end - start, len - target);
-          if (count > 0)
-            System.arraycopy(self.data, start, self.data, target, count);
-          return thisArg;
-        }));
+                    V6Uint8ArrayObject self = (V6Uint8ArrayObject)thisArg.ref();
+                    int len = self.data.length;
+                    int target = clampIndex(V6Value.argAt(args, 0), 0, len);
+                    int start = clampIndex(V6Value.argAt(args, 1), 0, len);
+                    int end = clampIndex(V6Value.argAt(args, 2), len, len);
+                    int count = Math.min(end - start, len - target);
+                    if (count > 0)
+                      System.arraycopy(self.data, start, self.data, target,
+                                       count);
+                    return thisArg;
+                  }));
     PROTOTYPE.set("set", fn((thisArg, args) -> {
-          V6Uint8ArrayObject self = (V6Uint8ArrayObject)thisArg.ref();
-          V6Value src = V6Value.argAt(args, 0);
-          int offset = (int)V6Value.argAt(args, 1).toNumber();
-          if (src.tag() == V6Value.TAG_OBJ && src.ref() instanceof
-                                                   V6Uint8ArrayObject other) {
-            System.arraycopy(other.data, 0, self.data, offset,
-                              other.data.length);
-          } else if (src.tag() == V6Value.TAG_OBJ) {
-            V6Object arr = (V6Object)src.ref();
-            int n = (int)arr.get("length").num();
-            for (int i = 0; i < n; i++)
-              self.data[offset + i] = (byte)(int)arr.get(Integer.toString(i))
-                                           .toNumber();
-          }
-          return new V6Value(V6Value.TAG_UNDEF, 0, null);
-        }));
+                    V6Uint8ArrayObject self = (V6Uint8ArrayObject)thisArg.ref();
+                    V6Value src = V6Value.argAt(args, 0);
+                    int offset = (int)V6Value.argAt(args, 1).toNumber();
+                    if (src.tag() == V6Value.TAG_OBJ &&
+                        src.ref() instanceof V6Uint8ArrayObject other) {
+                      System.arraycopy(other.data, 0, self.data, offset,
+                                       other.data.length);
+                    } else if (src.tag() == V6Value.TAG_OBJ) {
+                      V6Object arr = (V6Object)src.ref();
+                      int n = (int)arr.get("length").num();
+                      for (int i = 0; i < n; i++)
+                        self.data[offset + i] =
+                            (byte)(int)arr.get(Integer.toString(i)).toNumber();
+                    }
+                    return new V6Value(V6Value.TAG_UNDEF, 0, null);
+                  }));
     PROTOTYPE.set("slice", fn((thisArg, args) -> {
-          V6Uint8ArrayObject self = (V6Uint8ArrayObject)thisArg.ref();
-          int len = self.data.length;
-          int start = clampIndex(V6Value.argAt(args, 0), 0, len);
-          int end = clampIndex(V6Value.argAt(args, 1), len, len);
-          int count = Math.max(0, end - start);
-          byte[] out = new byte[count];
-          if (count > 0)
-            System.arraycopy(self.data, start, out, 0, count);
-          return objValue(new V6Uint8ArrayObject(out));
-        }));
+                    V6Uint8ArrayObject self = (V6Uint8ArrayObject)thisArg.ref();
+                    int len = self.data.length;
+                    int start = clampIndex(V6Value.argAt(args, 0), 0, len);
+                    int end = clampIndex(V6Value.argAt(args, 1), len, len);
+                    int count = Math.max(0, end - start);
+                    byte[] out = new byte[count];
+                    if (count > 0)
+                      System.arraycopy(self.data, start, out, 0, count);
+                    return objValue(new V6Uint8ArrayObject(out));
+                  }));
   }
 
   private static int clampIndex(V6Value v, int dflt, int len) {

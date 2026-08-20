@@ -1270,7 +1270,8 @@ static void codegen_numeric(wasm_func_ctx* fc, wasm_reader2* r, uint8_t op) {
     case 0x4D:
       ts_pop(fc);
       op_emit2(m, op_invokestatic,
-               cf_methodref(cf, "V6WasmSimd", "v128Not", "(LV6WasmV128;)LV6WasmV128;"));
+               cf_methodref(cf, "V6WasmSimd", "v128Not",
+                            "(LV6WasmV128;)LV6WasmV128;"));
       ts_push(fc, wasm_type_v128);
       break;
     case 0x4E:
@@ -1309,9 +1310,10 @@ static void codegen_numeric(wasm_func_ctx* fc, wasm_reader2* r, uint8_t op) {
       ts_pop(fc);
       ts_pop(fc);
       ts_pop(fc);
-      op_emit2(m, op_invokestatic,
-               cf_methodref(cf, "V6WasmSimd", "v128Bitselect",
-                            "(LV6WasmV128;LV6WasmV128;LV6WasmV128;)LV6WasmV128;"));
+      op_emit2(
+          m, op_invokestatic,
+          cf_methodref(cf, "V6WasmSimd", "v128Bitselect",
+                       "(LV6WasmV128;LV6WasmV128;LV6WasmV128;)LV6WasmV128;"));
       ts_push(fc, wasm_type_v128);
       break;
     case 0xFA:

@@ -99,10 +99,12 @@ public final class V6WasmSimd {
   }
 
   public static V6WasmV128 v128Xor(V6WasmV128 a, V6WasmV128 b) {
-    return storeBytes(loadBytes(a).lanewise(jdk.incubator.vector.VectorOperators.XOR, loadBytes(b)));
+    return storeBytes(loadBytes(a).lanewise(
+        jdk.incubator.vector.VectorOperators.XOR, loadBytes(b)));
   }
 
-  public static V6WasmV128 v128Bitselect(V6WasmV128 a, V6WasmV128 b, V6WasmV128 c) {
+  public static V6WasmV128 v128Bitselect(V6WasmV128 a, V6WasmV128 b,
+                                         V6WasmV128 c) {
     ByteVector va = loadBytes(a);
     ByteVector vb = loadBytes(b);
     ByteVector vc = loadBytes(c);
@@ -110,11 +112,13 @@ public final class V6WasmSimd {
   }
 
   public static V6WasmV128 f32x4ConvertI32x4S(V6WasmV128 a) {
-    FloatVector v = (FloatVector) loadI32(a).convert(jdk.incubator.vector.VectorOperators.I2F, 0);
+    FloatVector v = (FloatVector)loadI32(a).convert(
+        jdk.incubator.vector.VectorOperators.I2F, 0);
     return storeF32(v);
   }
 
-  public static V6WasmV128 i8x16Shuffle(V6WasmV128 a, V6WasmV128 b, byte[] indices) {
+  public static V6WasmV128 i8x16Shuffle(V6WasmV128 a, V6WasmV128 b,
+                                        byte[] indices) {
     byte[] out = new byte[16];
     for (int i = 0; i < 16; i++) {
       int idx = indices[i] & 0xFF;

@@ -7,11 +7,14 @@ public final class V6WasmMemory {
   static final int PAGE_SIZE = 65536;
 
   private static final VarHandle I32_VIEW =
-      MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.LITTLE_ENDIAN);
-  private static final VarHandle I64_VIEW = MethodHandles.byteArrayViewVarHandle(
-      long[].class, ByteOrder.LITTLE_ENDIAN);
-  private static final VarHandle I16_VIEW = MethodHandles.byteArrayViewVarHandle(
-      short[].class, ByteOrder.LITTLE_ENDIAN);
+      MethodHandles.byteArrayViewVarHandle(int[].class,
+                                           ByteOrder.LITTLE_ENDIAN);
+  private static final VarHandle I64_VIEW =
+      MethodHandles.byteArrayViewVarHandle(long[].class,
+                                           ByteOrder.LITTLE_ENDIAN);
+  private static final VarHandle I16_VIEW =
+      MethodHandles.byteArrayViewVarHandle(short[].class,
+                                           ByteOrder.LITTLE_ENDIAN);
 
   byte[] data;
   int maxPages;
