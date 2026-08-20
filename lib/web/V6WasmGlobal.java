@@ -7,6 +7,12 @@ public final class V6WasmGlobal {
       new V6DaemonClassLoader(V6WasmGlobal.class.getClassLoader());
   private static int moduleCounter = 0;
 
+  public static V6Value instantiateBytesSync(byte[] wasmBytes) {
+    V6WasmModuleObject module = compileModule(wasmBytes);
+    V6Object instance = instantiateModule(module, null);
+    return instance.get("exports");
+  }
+
   public static V6Object build() {
     V6Object o = new V6Object();
     o.set("compile", fn(V6WasmGlobal::compile));
@@ -37,8 +43,8 @@ public final class V6WasmGlobal {
       if (ref instanceof V6Buffer buf)
         return buf.toBytes();
     }
-    throw new RuntimeException("TypeError: WebAssembly expects a " +
-                               "BufferSource (Uint8Array or ArrayBuffer)");
+    throw new RuntimeException("TypeError: WebAssembly expects a "
+                               + "BufferSource (Uint8Array or ArrayBuffer)");
   }
 
   private static V6WasmModuleObject compileModule(byte[] wasmBytes) {
@@ -121,8 +127,8 @@ public final class V6WasmGlobal {
       String funcIdx = parts[2];
       if (importObject == null || importObject.tag() != V6Value.TAG_OBJ ||
           !(importObject.ref() instanceof V6Object impObj)) {
-        throw new RuntimeException("LinkError: module requires imports but " +
-                                   "no importObject was provided");
+        throw new RuntimeException("LinkError: module requires imports but "
+                                   + "no importObject was provided");
       }
       V6Value modVal = impObj.get(moduleName);
       if (modVal == null || modVal.tag() != V6Value.TAG_OBJ ||

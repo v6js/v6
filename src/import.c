@@ -18,6 +18,48 @@ typedef struct {
   const char* field;
 } node_builtin_ref;
 
+static int specifier_ends_with(const char* spec, const char* suffix) {
+  size_t slen = strlen(spec);
+  size_t suflen = strlen(suffix);
+  return slen >= suflen && strcmp(spec + slen - suflen, suffix) == 0;
+}
+
+static const char b64_chars[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static char* base64_encode(const unsigned char* data, size_t len,
+                           size_t* out_len) {
+  size_t olen = ((len + 2) / 3) * 4;
+  char* out = malloc(olen + 1);
+  size_t i = 0, j = 0;
+  while (i + 3 <= len) {
+    uint32_t n =
+        ((uint32_t)data[i] << 16) | ((uint32_t)data[i + 1] << 8) | data[i + 2];
+    out[j++] = b64_chars[(n >> 18) & 0x3F];
+    out[j++] = b64_chars[(n >> 12) & 0x3F];
+    out[j++] = b64_chars[(n >> 6) & 0x3F];
+    out[j++] = b64_chars[n & 0x3F];
+    i += 3;
+  }
+  size_t rem = len - i;
+  if (rem == 1) {
+    uint32_t n = (uint32_t)data[i] << 16;
+    out[j++] = b64_chars[(n >> 18) & 0x3F];
+    out[j++] = b64_chars[(n >> 12) & 0x3F];
+    out[j++] = '=';
+    out[j++] = '=';
+  } else if (rem == 2) {
+    uint32_t n = ((uint32_t)data[i] << 16) | ((uint32_t)data[i + 1] << 8);
+    out[j++] = b64_chars[(n >> 18) & 0x3F];
+    out[j++] = b64_chars[(n >> 12) & 0x3F];
+    out[j++] = b64_chars[(n >> 6) & 0x3F];
+    out[j++] = '=';
+  }
+  out[j] = '\0';
+  *out_len = j;
+  return out;
+}
+
 static const node_builtin_ref v6_node_builtin_table[] = {
     {"path", "V6Path", "MODULE"},
     {"buffer", "V6Builtins", "NODE_BUFFER"},
@@ -208,6 +250,56 @@ static compiled_module* get_or_compile_module(module_ctx* modctx,
     return mod;
   }
 
+  if (abs_len >= 5 && strcmp(abs_path + abs_len - 5, ".wasm") == 0) {
+    method* wasm_m = cf_method(mod->cf, acc_public | acc_static,
+                               "moduleExports", "()LV6Value;");
+    wasm_m->max_stack = 3;
+
+    size_t b64_len;
+    char* b64 =
+        base64_encode((const unsigned char*)modsrc, (size_t)n, &b64_len);
+
+    uint16_t decoder_get_idx =
+        cf_methodref(mod->cf, "java/util/Base64", "getDecoder",
+                     "()Ljava/util/Base64$Decoder;");
+    op_emit2(wasm_m, op_invokestatic, decoder_get_idx);
+
+    const size_t chunk_limit = 60000;
+    size_t pos = 0;
+    int first = 1;
+    uint16_t concat_idx =
+        cf_methodref(mod->cf, "java/lang/String", "concat",
+                     "(Ljava/lang/String;)Ljava/lang/String;");
+    while (pos < b64_len || first) {
+      size_t take = b64_len - pos;
+      if (take > chunk_limit)
+        take = chunk_limit;
+      char save = b64[pos + take];
+      b64[pos + take] = '\0';
+      uint16_t str_idx = cf_string(mod->cf, b64 + pos);
+      b64[pos + take] = save;
+      op_emit2(wasm_m, op_ldc_w, str_idx);
+      if (!first)
+        op_emit2(wasm_m, op_invokevirtual, concat_idx);
+      first = 0;
+      pos += take;
+    }
+    free(b64);
+
+    uint16_t decode_idx = cf_methodref(mod->cf, "java/util/Base64$Decoder",
+                                       "decode", "(Ljava/lang/String;)[B");
+    op_emit2(wasm_m, op_invokevirtual, decode_idx);
+
+    uint16_t inst_idx = cf_methodref(mod->cf, "V6WasmGlobal",
+                                     "instantiateBytesSync", "([B)LV6Value;");
+    op_emit2(wasm_m, op_invokestatic, inst_idx);
+    op_emit(wasm_m, op_areturn);
+
+    free(modsrc);
+    mod->state = 2;
+    return mod;
+  }
+
   char moddir[v6_max_path];
   path_dirname(abs_path, moddir, sizeof(moddir));
 
@@ -315,7 +407,9 @@ void parse_import_stmt(parser* p, compiler* c) {
       expect_semi(p);
       return;
     }
-    int sniffed_kind = sniff_module_kind(c->module_dir, spec);
+    int sniffed_kind = specifier_ends_with(spec, ".wasm")
+                           ? 1
+                           : sniff_module_kind(c->module_dir, spec);
     compiled_module* mod =
         get_or_compile_module(c->modctx, c->module_dir, spec, sniffed_kind, p);
     free(spec);
@@ -437,7 +531,9 @@ void parse_import_stmt(parser* p, compiler* c) {
     is_value_shape = 1;
     emit_astore(c->m, exports_slot);
   } else {
-    int sniffed_kind = sniff_module_kind(c->module_dir, spec);
+    int sniffed_kind = specifier_ends_with(spec, ".wasm")
+                           ? 1
+                           : sniff_module_kind(c->module_dir, spec);
     compiled_module* mod =
         get_or_compile_module(c->modctx, c->module_dir, spec, sniffed_kind, p);
     free(spec);
