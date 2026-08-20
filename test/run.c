@@ -12,6 +12,7 @@ int test_jar(void);
 int test_wasm(void);
 int test_wasm_codegen(void);
 int test_wasm_memory(void);
+int test_wasm_table(void);
 int test_wasm_globals(void);
 
 int main(void) {
@@ -29,6 +30,7 @@ int main(void) {
   fails += test_wasm();
   fails += test_wasm_codegen();
   fails += test_wasm_memory();
+  fails += test_wasm_table();
   fails += test_wasm_globals();
 
   if (fails) {
