@@ -48,7 +48,7 @@ public final class V6WasmGlobal {
                                + "BufferSource (Uint8Array or ArrayBuffer)");
   }
 
-  private static V6WasmModuleObject compileModule(byte[] wasmBytes) {
+  static V6WasmModuleObject compileModule(byte[] wasmBytes) {
     String className = "V6WasmMod" + (moduleCounter++);
     byte[] classBytes = V6WasmCompiler.compile(wasmBytes, className);
     String exportManifest = V6WasmCompiler.describeExports(wasmBytes);
@@ -155,8 +155,8 @@ public final class V6WasmGlobal {
     }
   }
 
-  private static V6WasmInstanceObject
-  instantiateModule(V6WasmModuleObject module, V6Value importObject) {
+  static V6WasmInstanceObject instantiateModule(V6WasmModuleObject module,
+                                                V6Value importObject) {
     Class<?> cls = LOADER.defineFromBytes(module.className, module.classBytes);
     resolveImports(cls, module, importObject);
     V6Object exports = new V6Object();

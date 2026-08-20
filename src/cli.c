@@ -3,6 +3,7 @@
 #include "v6/bytecode.h"
 #include "v6/cache.h"
 #include "v6/daemon.h"
+#include "v6/internal.h"
 #include "v6/jar.h"
 #include "v6/jvm.h"
 #include "v6/module.h"
@@ -120,6 +121,15 @@ void v6_cli_print_help(const char* prog_path) {
           "  -v, --version           print the version and exit\n"
           "  -h, --help              print this help and exit\n"
           "\n"
+          "wasi sandboxing (running a .wasm file directly enables WASI fully "
+          "by default):\n"
+          "  --no-wasi-args          don't pass CLI args through as WASI "
+          "argv\n"
+          "  --no-wasi-env           don't pass host environment variables "
+          "through\n"
+          "  --no-wasi-random        deny the random_get syscall\n"
+          "  --no-wasi-clock         deny the clock_time_get syscall\n"
+          "\n"
           "running with no script starts an interactive REPL.\n");
 }
 
@@ -164,6 +174,14 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
       opts->eval_code = argv[++i];
     } else if (strcmp(argv[i], "--no-daemon") == 0) {
       opts->no_daemon = 1;
+    } else if (strcmp(argv[i], "--no-wasi-args") == 0) {
+      opts->wasi_deny_args = 1;
+    } else if (strcmp(argv[i], "--no-wasi-env") == 0) {
+      opts->wasi_deny_env = 1;
+    } else if (strcmp(argv[i], "--no-wasi-random") == 0) {
+      opts->wasi_deny_random = 1;
+    } else if (strcmp(argv[i], "--no-wasi-clock") == 0) {
+      opts->wasi_deny_clock = 1;
     } else if (strcmp(argv[i], "--color") == 0) {
       opts->color_mode = v6_color_always;
     } else if (strcmp(argv[i], "--no-color") == 0) {
@@ -427,6 +445,92 @@ static unsigned char* read_file_bytes(const char* path, size_t* out_len) {
   return data;
 }
 
+static const char v6_b64_chars[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static char* v6_base64_encode(const unsigned char* data, size_t len,
+                              size_t* out_len) {
+  size_t olen = ((len + 2) / 3) * 4;
+  char* out = malloc(olen + 1);
+  size_t i = 0, j = 0;
+  while (i + 3 <= len) {
+    uint32_t n =
+        ((uint32_t)data[i] << 16) | ((uint32_t)data[i + 1] << 8) | data[i + 2];
+    out[j++] = v6_b64_chars[(n >> 18) & 0x3F];
+    out[j++] = v6_b64_chars[(n >> 12) & 0x3F];
+    out[j++] = v6_b64_chars[(n >> 6) & 0x3F];
+    out[j++] = v6_b64_chars[n & 0x3F];
+    i += 3;
+  }
+  size_t rem = len - i;
+  if (rem == 1) {
+    uint32_t n = (uint32_t)data[i] << 16;
+    out[j++] = v6_b64_chars[(n >> 18) & 0x3F];
+    out[j++] = v6_b64_chars[(n >> 12) & 0x3F];
+    out[j++] = '=';
+    out[j++] = '=';
+  } else if (rem == 2) {
+    uint32_t n = ((uint32_t)data[i] << 16) | ((uint32_t)data[i + 1] << 8);
+    out[j++] = v6_b64_chars[(n >> 18) & 0x3F];
+    out[j++] = v6_b64_chars[(n >> 12) & 0x3F];
+    out[j++] = v6_b64_chars[(n >> 6) & 0x3F];
+    out[j++] = '=';
+  }
+  out[j] = '\0';
+  *out_len = j;
+  return out;
+}
+
+static void compile_wasi_cli_bootstrap(class_file* cf,
+                                       const unsigned char* wasm_bytes,
+                                       size_t wasm_len, int wasi_flags) {
+  method* m =
+      cf_method(cf, acc_public | acc_static, "main", "([Ljava/lang/String;)V");
+  m->max_stack = 3;
+  m->max_locals = 2;
+
+  size_t b64_len;
+  char* b64 = v6_base64_encode(wasm_bytes, wasm_len, &b64_len);
+
+  op_emit2(m, op_invokestatic,
+           cf_methodref(cf, "java/util/Base64", "getDecoder",
+                        "()Ljava/util/Base64$Decoder;"));
+
+  const size_t chunk_limit = 60000;
+  size_t pos = 0;
+  int first = 1;
+  uint16_t concat_idx = cf_methodref(cf, "java/lang/String", "concat",
+                                     "(Ljava/lang/String;)Ljava/lang/String;");
+  while (pos < b64_len || first) {
+    size_t take = b64_len - pos;
+    if (take > chunk_limit)
+      take = chunk_limit;
+    char save = b64[pos + take];
+    b64[pos + take] = '\0';
+    uint16_t str_idx = cf_string(cf, b64 + pos);
+    b64[pos + take] = save;
+    op_emit2(m, op_ldc_w, str_idx);
+    if (!first)
+      op_emit2(m, op_invokevirtual, concat_idx);
+    first = 0;
+    pos += take;
+  }
+  free(b64);
+
+  op_emit2(m, op_invokevirtual,
+           cf_methodref(cf, "java/util/Base64$Decoder", "decode",
+                        "(Ljava/lang/String;)[B"));
+  emit_astore(m, 1);
+
+  emit_aload(m, 1);
+  emit_aload(m, 0);
+  emit_iconst(m, wasi_flags);
+  op_emit2(
+      m, op_invokestatic,
+      cf_methodref(cf, "V6WasiCliRunner", "run", "([B[Ljava/lang/String;I)V"));
+  op_emit(m, op_return);
+}
+
 int v6_cli_run_wasm(v6_cli_options* opts) {
   size_t len = 0;
   unsigned char* bytes = read_file_bytes(opts->script_path, &len);
@@ -442,35 +546,21 @@ int v6_cli_run_wasm(v6_cli_options* opts) {
     free(bytes);
     return 1;
   }
+  wasm_module_free(&m);
 
-  uint32_t entry_idx;
-  if (wasm_find_entry(&m, &entry_idx) != 0) {
-    fprintf(stderr,
-            "error: %s: no entry point found (no start section and no "
-            "single zero-argument exported function)\n",
-            opts->script_path);
-    wasm_module_free(&m);
-    free(bytes);
-    return 1;
-  }
+  int wasi_flags =
+      (opts->wasi_deny_args ? 0 : 1) | (opts->wasi_deny_env ? 0 : 2) |
+      (opts->wasi_deny_random ? 0 : 4) | (opts->wasi_deny_clock ? 0 : 8);
 
   class_file cf;
   cf_init(&cf, "Main", "java/lang/Object");
-  compile_result cr = wasm_compile_module(&m, &cf, "Main");
-  if (!cr.ok) {
-    fprintf(stderr, "error: %s: %s\n", opts->script_path, cr.message);
-    wasm_module_free(&m);
-    cf_free(&cf);
-    free(bytes);
-    return 1;
-  }
+  compile_wasi_cli_bootstrap(&cf, bytes, len, wasi_flags);
+  free(bytes);
 
   buf out;
   buf_init(&out);
   cf_emit(&cf, &out);
-  wasm_module_free(&m);
   cf_free(&cf);
-  free(bytes);
 
   if (!v6_jvm_available()) {
     fprintf(stderr, "error: no JVM available (built without JAVA_HOME?)\n");

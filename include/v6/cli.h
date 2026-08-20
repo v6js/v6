@@ -23,6 +23,10 @@ typedef struct {
   int script_argc;
   v6_color_mode color_mode;
   const char* prog;
+  int wasi_deny_args;
+  int wasi_deny_env;
+  int wasi_deny_random;
+  int wasi_deny_clock;
 } v6_cli_options;
 
 v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts);

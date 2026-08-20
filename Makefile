@@ -152,6 +152,7 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Shape.ja
                 lib/node/V6UnsupportedConstructor.java \
                 lib/node/V6Inspector.java lib/node/V6TraceEvents.java \
                 lib/node/V6WasiObject.java lib/node/V6WasiConstructor.java \
+                lib/node/V6WasiCliRunner.java \
                 lib/node/V6SparseModules.java \
                 lib/shared/V6EventHandlerProperty.java \
                 lib/web/V6EventObject.java lib/web/V6EventConstructor.java \

@@ -56,7 +56,7 @@ public final class V6WasiConstructor
     return (V6WasiObject)t.ref();
   }
 
-  private static V6Object buildWasiImport(V6WasiObject o) {
+  static V6Object buildWasiImport(V6WasiObject o) {
     V6Object imp = new V6Object();
     imp.set("args_sizes_get", fn((t, a) -> o.argsSizesGet(a)));
     imp.set("args_get", fn((t, a) -> o.argsGet(a)));
