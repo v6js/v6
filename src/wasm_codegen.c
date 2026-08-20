@@ -869,9 +869,21 @@ static void codegen_numeric(wasm_func_ctx* fc, uint8_t op) {
     op_emit(m, op_f2i);
     ts_push(fc, wasm_type_i32);
     break;
+  case 0xA9:
+    ts_pop(fc);
+    op_emit2(m, op_invokestatic,
+             cf_methodref(cf, "V6Wasm", "i32TruncF32U", "(F)I"));
+    ts_push(fc, wasm_type_i32);
+    break;
   case 0xAA:
     ts_pop(fc);
     op_emit(m, op_d2i);
+    ts_push(fc, wasm_type_i32);
+    break;
+  case 0xAB:
+    ts_pop(fc);
+    op_emit2(m, op_invokestatic,
+             cf_methodref(cf, "V6Wasm", "i32TruncF64U", "(D)I"));
     ts_push(fc, wasm_type_i32);
     break;
   case 0xAC:
@@ -891,9 +903,21 @@ static void codegen_numeric(wasm_func_ctx* fc, uint8_t op) {
     op_emit(m, op_f2l);
     ts_push(fc, wasm_type_i64);
     break;
+  case 0xAF:
+    ts_pop(fc);
+    op_emit2(m, op_invokestatic,
+             cf_methodref(cf, "V6Wasm", "i64TruncF32U", "(F)J"));
+    ts_push(fc, wasm_type_i64);
+    break;
   case 0xB0:
     ts_pop(fc);
     op_emit(m, op_d2l);
+    ts_push(fc, wasm_type_i64);
+    break;
+  case 0xB1:
+    ts_pop(fc);
+    op_emit2(m, op_invokestatic,
+             cf_methodref(cf, "V6Wasm", "i64TruncF64U", "(D)J"));
     ts_push(fc, wasm_type_i64);
     break;
   case 0xB2:
@@ -901,9 +925,21 @@ static void codegen_numeric(wasm_func_ctx* fc, uint8_t op) {
     op_emit(m, op_i2f);
     ts_push(fc, wasm_type_f32);
     break;
+  case 0xB3:
+    ts_pop(fc);
+    op_emit2(m, op_invokestatic,
+             cf_methodref(cf, "V6Wasm", "f32ConvertI32U", "(I)F"));
+    ts_push(fc, wasm_type_f32);
+    break;
   case 0xB4:
     ts_pop(fc);
     op_emit(m, op_l2f);
+    ts_push(fc, wasm_type_f32);
+    break;
+  case 0xB5:
+    ts_pop(fc);
+    op_emit2(m, op_invokestatic,
+             cf_methodref(cf, "V6Wasm", "f32ConvertI64U", "(J)F"));
     ts_push(fc, wasm_type_f32);
     break;
   case 0xB6:
@@ -916,9 +952,21 @@ static void codegen_numeric(wasm_func_ctx* fc, uint8_t op) {
     op_emit(m, op_i2d);
     ts_push(fc, wasm_type_f64);
     break;
+  case 0xB8:
+    ts_pop(fc);
+    op_emit2(m, op_invokestatic,
+             cf_methodref(cf, "V6Wasm", "f64ConvertI32U", "(I)D"));
+    ts_push(fc, wasm_type_f64);
+    break;
   case 0xB9:
     ts_pop(fc);
     op_emit(m, op_l2d);
+    ts_push(fc, wasm_type_f64);
+    break;
+  case 0xBA:
+    ts_pop(fc);
+    op_emit2(m, op_invokestatic,
+             cf_methodref(cf, "V6Wasm", "f64ConvertI64U", "(J)D"));
     ts_push(fc, wasm_type_f64);
     break;
   case 0xBB:

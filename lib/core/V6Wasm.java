@@ -42,4 +42,40 @@ public final class V6Wasm {
   public static double selectF64(double a, double b, int cond) {
     return cond != 0 ? a : b;
   }
+
+  public static int i32TruncF32U(float v) {
+    return (int)(long)v;
+  }
+
+  public static int i32TruncF64U(double v) {
+    return (int)(long)v;
+  }
+
+  public static long i64TruncF32U(float v) {
+    return i64TruncF64U((double)v);
+  }
+
+  public static long i64TruncF64U(double v) {
+    if (v < 0x1p63)
+      return (long)v;
+    return ((long)(v - 0x1p63)) | Long.MIN_VALUE;
+  }
+
+  public static float f32ConvertI32U(int v) {
+    return (float)Integer.toUnsignedLong(v);
+  }
+
+  public static float f32ConvertI64U(long v) {
+    return (float)f64ConvertI64U(v);
+  }
+
+  public static double f64ConvertI32U(int v) {
+    return (double)Integer.toUnsignedLong(v);
+  }
+
+  public static double f64ConvertI64U(long v) {
+    if (v >= 0)
+      return (double)v;
+    return ((double)(v >>> 1)) * 2.0 + (v & 1);
+  }
 }
