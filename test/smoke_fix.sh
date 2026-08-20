@@ -5,8 +5,8 @@ PASS=0
 FAIL=0
 FAILED_LIST=()
 while IFS= read -r f; do
-  node_out=$(node "$f" 2>&1 | tr -d '\r')
-  v6_out=$("$V6" "$f" 2>&1 | tr -d '\r')
+  node_out=$(node "$f" </dev/null 2>&1 | tr -d '\r')
+  v6_out=$("$V6" "$f" </dev/null 2>&1 | tr -d '\r')
   if [ "$node_out" == "$v6_out" ]; then
     PASS=$((PASS+1))
   else
