@@ -86,6 +86,8 @@ static const char* jvm_desc_for(uint8_t vt) {
     return "F";
   case wasm_type_f64:
     return "D";
+  case wasm_type_v128:
+    return "LV6WasmV128;";
   default:
     return "I";
   }
@@ -173,6 +175,9 @@ static void emit_load_local(wasm_func_ctx* fc, uint32_t idx) {
   case wasm_type_f64:
     emit_dload(fc->m, slot);
     break;
+  case wasm_type_v128:
+    emit_aload(fc->m, slot);
+    break;
   }
   ts_push(fc, vt);
 }
@@ -193,6 +198,9 @@ static void emit_store_local(wasm_func_ctx* fc, uint32_t idx) {
     break;
   case wasm_type_f64:
     emit_dstore(fc->m, slot);
+    break;
+  case wasm_type_v128:
+    emit_astore(fc->m, slot);
     break;
   }
 }
@@ -1126,6 +1134,212 @@ static void codegen_numeric(wasm_func_ctx* fc, wasm_reader2* r, uint8_t op) {
     break;
   }
 
+  case 0xFD: {
+    uint32_t sub = w2_u32(r);
+    switch (sub) {
+    case 0x00: {
+      w2_u32(r);
+      uint32_t offset = w2_u32(r);
+      uint16_t addr_scratch = fc->next_slot;
+      ts_pop(fc);
+      emit_istore(m, addr_scratch);
+      op_emit2(m, op_getstatic, wasm_memory_field(fc));
+      emit_iload_slot(m, addr_scratch);
+      emit_iconst(m, (int)offset);
+      op_emit(m, op_iadd);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "load",
+                            "(LV6WasmMemory;I)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    }
+    case 0x0B: {
+      w2_u32(r);
+      uint32_t offset = w2_u32(r);
+      uint16_t addr_scratch = fc->next_slot;
+      uint16_t val_scratch = (uint16_t)(fc->next_slot + 1);
+      ts_pop(fc);
+      emit_astore(m, val_scratch);
+      ts_pop(fc);
+      emit_istore(m, addr_scratch);
+      op_emit2(m, op_getstatic, wasm_memory_field(fc));
+      emit_iload_slot(m, addr_scratch);
+      emit_iconst(m, (int)offset);
+      op_emit(m, op_iadd);
+      emit_aload(m, val_scratch);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "store",
+                            "(LV6WasmMemory;ILV6WasmV128;)V"));
+      break;
+    }
+    case 0x0C: {
+      uint8_t bytes[16];
+      for (int i = 0; i < 16; i++)
+        bytes[i] = w2_u8(r);
+      op_emit2(m, op_new, cf_class(cf, "V6WasmV128"));
+      op_emit(m, op_dup);
+      emit_iconst(m, 16);
+      op_emit1(m, op_newarray, wasm_jvm_array_byte);
+      for (int i = 0; i < 16; i++) {
+        op_emit(m, op_dup);
+        emit_iconst(m, i);
+        emit_iconst(m, (int8_t)bytes[i]);
+        op_emit(m, op_bastore);
+      }
+      op_emit2(m, op_invokespecial,
+               cf_methodref(cf, "V6WasmV128", "<init>", "([B)V"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    }
+    case 0x0D: {
+      uint8_t idx[16];
+      for (int i = 0; i < 16; i++)
+        idx[i] = w2_u8(r);
+      ts_pop(fc);
+      ts_pop(fc);
+      emit_iconst(m, 16);
+      op_emit1(m, op_newarray, wasm_jvm_array_byte);
+      for (int i = 0; i < 16; i++) {
+        op_emit(m, op_dup);
+        emit_iconst(m, i);
+        emit_iconst(m, (int)idx[i]);
+        op_emit(m, op_bastore);
+      }
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "i8x16Shuffle",
+                            "(LV6WasmV128;LV6WasmV128;[B)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    }
+    case 0x11:
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "i32x4Splat", "(I)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0x13:
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "f32x4Splat", "(F)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0x1B: {
+      uint8_t lane = w2_u8(r);
+      ts_pop(fc);
+      emit_iconst(m, lane);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "i32x4ExtractLane",
+                            "(LV6WasmV128;I)I"));
+      ts_push(fc, wasm_type_i32);
+      break;
+    }
+    case 0x1F: {
+      uint8_t lane = w2_u8(r);
+      ts_pop(fc);
+      emit_iconst(m, lane);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "f32x4ExtractLane",
+                            "(LV6WasmV128;I)F"));
+      ts_push(fc, wasm_type_f32);
+      break;
+    }
+    case 0xAE:
+      ts_pop(fc);
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "i32x4Add",
+                            "(LV6WasmV128;LV6WasmV128;)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0xE4:
+      ts_pop(fc);
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "f32x4Add",
+                            "(LV6WasmV128;LV6WasmV128;)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0xE6:
+      ts_pop(fc);
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "f32x4Mul",
+                            "(LV6WasmV128;LV6WasmV128;)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0x4D:
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "v128Not", "(LV6WasmV128;)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0x4E:
+      ts_pop(fc);
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "v128And",
+                            "(LV6WasmV128;LV6WasmV128;)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0x4F:
+      ts_pop(fc);
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "v128Andnot",
+                            "(LV6WasmV128;LV6WasmV128;)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0x50:
+      ts_pop(fc);
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "v128Or",
+                            "(LV6WasmV128;LV6WasmV128;)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0x51:
+      ts_pop(fc);
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "v128Xor",
+                            "(LV6WasmV128;LV6WasmV128;)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0x52:
+      ts_pop(fc);
+      ts_pop(fc);
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "v128Bitselect",
+                            "(LV6WasmV128;LV6WasmV128;LV6WasmV128;)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0xFA:
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "f32x4ConvertI32x4S",
+                            "(LV6WasmV128;)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    case 0xB5:
+      ts_pop(fc);
+      ts_pop(fc);
+      op_emit2(m, op_invokestatic,
+               cf_methodref(cf, "V6WasmSimd", "i32x4Mul",
+                            "(LV6WasmV128;LV6WasmV128;)LV6WasmV128;"));
+      ts_push(fc, wasm_type_v128);
+      break;
+    default: {
+      char dbgmsg[64];
+      snprintf(dbgmsg, sizeof(dbgmsg), "unsupported wasm SIMD opcode 0x%02X",
+               sub);
+      wf_error(fc, dbgmsg);
+      break;
+    }
+    }
+    break;
+  }
+
   default: {
     char dbgmsg[64];
     snprintf(dbgmsg, sizeof(dbgmsg),
@@ -1248,6 +1462,9 @@ static void codegen_instr(wasm_func_ctx* fc, wasm_reader2* r) {
         break;
       case wasm_type_f64:
         op_emit(m, op_dreturn);
+        break;
+      case wasm_type_v128:
+        op_emit(m, op_areturn);
         break;
       }
     }
@@ -1593,6 +1810,9 @@ static void compile_one_function(wasm_module* mod, class_file* cf,
         break;
       case wasm_type_f64:
         op_emit(m, op_dreturn);
+        break;
+      case wasm_type_v128:
+        op_emit(m, op_areturn);
         break;
       }
     }
