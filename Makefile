@@ -108,6 +108,7 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Shape.ja
                 lib/core/V6NumberConstructor.java \
                 lib/core/V6Uint8ArrayObject.java \
                 lib/core/V6Uint8ArrayConstructor.java \
+                lib/core/V6TypedArraySimd.java \
                 lib/core/V6CallSiteObject.java \
                 lib/core/V6DateObject.java lib/core/V6DateConstructor.java \
                 lib/core/V6Json.java \
