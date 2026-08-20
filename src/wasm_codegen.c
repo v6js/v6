@@ -121,7 +121,7 @@ static uint16_t wasm_table_field(wasm_func_ctx* fc) {
   return cf_fieldref(fc->cf, fc->class_name, "wasmTable0", "LV6WasmTable;");
 }
 
-static void build_func_desc(const wasm_functype* ft, char* out, size_t cap) {
+void wasm_build_func_desc(const wasm_functype* ft, char* out, size_t cap) {
   size_t p = 0;
   out[p++] = '(';
   for (uint32_t i = 0; i < ft->param_count && p < cap - 3; i++) {
@@ -1158,7 +1158,7 @@ static void codegen_instr(wasm_func_ctx* fc, wasm_reader2* r) {
     uint32_t fidx = w2_u32(r);
     const wasm_functype* ft = wasm_func_type(fc->mod, fidx);
     char desc[512];
-    build_func_desc(ft, desc, sizeof(desc));
+    wasm_build_func_desc(ft, desc, sizeof(desc));
     char fname[32];
     snprintf(fname, sizeof(fname), "wasmFunc%u", fidx);
     for (uint32_t i = 0; i < ft->param_count; i++)
@@ -1641,7 +1641,7 @@ static void compile_indirect_dispatch(wasm_module* mod, class_file* cf,
     char fname[32];
     snprintf(fname, sizeof(fname), "wasmFunc%u", combined_idx);
     char desc[512];
-    build_func_desc(ft, desc, sizeof(desc));
+    wasm_build_func_desc(ft, desc, sizeof(desc));
     op_emit2(m, op_invokestatic, cf_methodref(cf, class_name, fname, desc));
     if (ft->result_count == 0) {
       op_emit(m, op_return);
@@ -1872,7 +1872,7 @@ static void compile_cli_main(wasm_module* mod, class_file* cf,
                              const char* class_name, uint32_t entry_idx) {
   const wasm_functype* ft = wasm_func_type(mod, entry_idx);
   char desc[512];
-  build_func_desc(ft, desc, sizeof(desc));
+  wasm_build_func_desc(ft, desc, sizeof(desc));
   char fname[32];
   snprintf(fname, sizeof(fname), "wasmFunc%u", entry_idx);
   uint16_t entry_ref = cf_methodref(cf, class_name, fname, desc);
@@ -1965,7 +1965,7 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
 
     const wasm_functype* ft = wasm_func_type(mod, i);
     char desc[512];
-    build_func_desc(ft, desc, sizeof(desc));
+    wasm_build_func_desc(ft, desc, sizeof(desc));
     char fname[32];
     snprintf(fname, sizeof(fname), "wasmFunc%u", i);
     method* m = cf_method(cf, acc_public | acc_static, fname, desc);
@@ -1988,7 +1988,7 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
     uint32_t combined_idx = mod->imported_func_count + i;
     const wasm_functype* ft = wasm_func_type(mod, combined_idx);
     char desc[512];
-    build_func_desc(ft, desc, sizeof(desc));
+    wasm_build_func_desc(ft, desc, sizeof(desc));
     char fname[32];
     snprintf(fname, sizeof(fname), "wasmFunc%u", combined_idx);
     method* m = cf_method(cf, acc_public | acc_static, fname, desc);

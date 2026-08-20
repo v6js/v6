@@ -157,3 +157,5 @@ compile_result wasm_compile_module(wasm_module* m, class_file* cf,
                                    const char* class_name);
 
 int wasm_find_entry(const wasm_module* m, uint32_t* out_func_idx);
+
+void wasm_build_func_desc(const wasm_functype* ft, char* out, size_t cap);
