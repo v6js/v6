@@ -95,6 +95,7 @@ static const node_builtin_ref v6_node_builtin_table[] = {
     {"async_hooks", "V6SparseModules", "NODE_ASYNC_HOOKS"},
     {"inspector", "V6SparseModules", "NODE_INSPECTOR"},
     {"trace_events", "V6SparseModules", "NODE_TRACE_EVENTS"},
+    {"wasi", "V6SparseModules", "NODE_WASI"},
 };
 
 static int emit_node_builtin_ref(compiler* c, const char* specifier) {

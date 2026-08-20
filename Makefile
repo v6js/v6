@@ -151,6 +151,7 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Shape.ja
                 lib/node/V6AsyncLocalStorageConstructor.java \
                 lib/node/V6UnsupportedConstructor.java \
                 lib/node/V6Inspector.java lib/node/V6TraceEvents.java \
+                lib/node/V6WasiObject.java lib/node/V6WasiConstructor.java \
                 lib/node/V6SparseModules.java \
                 lib/shared/V6EventHandlerProperty.java \
                 lib/web/V6EventObject.java lib/web/V6EventConstructor.java \
@@ -191,6 +192,7 @@ RT_JAVA_SRCS := lib/core/V6Value.java lib/core/V6Object.java lib/core/V6Shape.ja
                 lib/web/V6WebWorkerObject.java lib/web/V6WebWorkerConstructor.java \
                 lib/web/V6Navigator.java \
                 lib/web/V6WasmModuleObject.java \
+                lib/web/V6WasmInstanceObject.java \
                 lib/web/V6WasmGlobal.java \
                 lib/web/V6WebGlobals.java \
                 lib/interop/V6JavaInterop.java lib/interop/V6JavaMarshal.java \

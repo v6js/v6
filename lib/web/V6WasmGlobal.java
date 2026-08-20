@@ -1,3 +1,4 @@
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -108,6 +109,10 @@ public final class V6WasmGlobal {
         if (result instanceof Double r)
           return V6Value.num(r);
         return V6Value.UNDEF;
+      } catch (InvocationTargetException e) {
+        if (e.getCause() instanceof RuntimeException re)
+          throw re;
+        throw new RuntimeException(e.getCause());
       } catch (ReflectiveOperationException e) {
         throw new RuntimeException(e);
       }
@@ -150,8 +155,8 @@ public final class V6WasmGlobal {
     }
   }
 
-  private static V6Object instantiateModule(V6WasmModuleObject module,
-                                            V6Value importObject) {
+  private static V6WasmInstanceObject
+  instantiateModule(V6WasmModuleObject module, V6Value importObject) {
     Class<?> cls = LOADER.defineFromBytes(module.className, module.classBytes);
     resolveImports(cls, module, importObject);
     V6Object exports = new V6Object();
@@ -171,7 +176,7 @@ public final class V6WasmGlobal {
         throw new RuntimeException("LinkError: " + e.getMessage());
       }
     }
-    V6Object instance = new V6Object();
+    V6WasmInstanceObject instance = new V6WasmInstanceObject(cls);
     instance.set("exports", obj(exports));
     return instance;
   }

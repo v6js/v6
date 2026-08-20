@@ -86,4 +86,5 @@ public final class V6SparseModules {
   public static final V6Value NODE_INSPECTOR = objValue(V6Inspector.build());
   public static final V6Value NODE_TRACE_EVENTS =
       objValue(V6TraceEvents.build());
+  public static final V6Value NODE_WASI = objValue(V6WasiConstructor.build());
 }
