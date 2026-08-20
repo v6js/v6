@@ -61,6 +61,8 @@ public final class V6Promise extends V6Object {
                     })});
           } catch (V6Throw e) {
             reject(e.value);
+          } catch (V6ProcessExit e) {
+            throw e;
           } catch (RuntimeException e) {
             reject(new V6Value(V6Value.TAG_STR, 0,
                                String.valueOf(e.getMessage())));
@@ -117,6 +119,8 @@ public final class V6Promise extends V6Object {
                   onFulfilled.asCallable().call(UNDEF, new V6Value[] {v}));
             } catch (V6Throw e) {
               result.reject(e.value);
+            } catch (V6ProcessExit e) {
+              throw e;
             } catch (RuntimeException e) {
               result.reject(new V6Value(V6Value.TAG_STR, 0,
                                         String.valueOf(e.getMessage())));
@@ -132,6 +136,8 @@ public final class V6Promise extends V6Object {
                   onRejected.asCallable().call(UNDEF, new V6Value[] {v}));
             } catch (V6Throw e) {
               result.reject(e.value);
+            } catch (V6ProcessExit e) {
+              throw e;
             } catch (RuntimeException e) {
               result.reject(new V6Value(V6Value.TAG_STR, 0,
                                         String.valueOf(e.getMessage())));
