@@ -17,16 +17,16 @@ check() {
   fi
 }
 
-out=$("$V6" test/fix/wasm/cli/noargs.wasm </dev/null 2>&1)
+out=$("$V6" test/fix/wasm/cli/noargs.wasm </dev/null 2>&1 | tr -d '\r')
 check "cli/noargs.wasm" "42" "$out"
 
-out=$("$V6" test/fix/wasm/cli/wasi_hello.wasm </dev/null 2>&1)
+out=$("$V6" test/fix/wasm/cli/wasi_hello.wasm </dev/null 2>&1 | tr -d '\r')
 check "cli/wasi_hello.wasm" "hello from wasi" "$out"
 
-out=$("$V6" test/fix/wasm/cli/wasi_random.wasm </dev/null 2>&1)
+out=$("$V6" test/fix/wasm/cli/wasi_random.wasm </dev/null 2>&1 | tr -d '\r')
 check "cli/wasi_random.wasm (allowed)" "got random" "$out"
 
-out=$("$V6" --no-wasi-random test/fix/wasm/cli/wasi_random.wasm </dev/null 2>&1)
+out=$("$V6" --no-wasi-random test/fix/wasm/cli/wasi_random.wasm </dev/null 2>&1 | tr -d '\r')
 check "cli/wasi_random.wasm (--no-wasi-random)" \
   "error: LinkError: import 'wasi_snapshot_preview1.random_get' not found" "$out"
 

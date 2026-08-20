@@ -562,6 +562,23 @@ int v6_cli_run_wasm(v6_cli_options* opts) {
   cf_emit(&cf, &out);
   cf_free(&cf);
 
+  if (!opts->classpath && !opts->no_daemon) {
+    v6_daemon_class_entry classes[1];
+    classes[0].name = "Main";
+    classes[0].data = out.data;
+    classes[0].len = out.len;
+
+    int exit_code = 1;
+    int handled =
+        v6_daemon_run(opts->prog, classes, 1, opts->script_path,
+                      opts->script_args, opts->script_argc,
+                      v6_color_enabled_out(), &exit_code);
+    if (handled) {
+      buf_free(&out);
+      return exit_code;
+    }
+  }
+
   if (!v6_jvm_available()) {
     fprintf(stderr, "error: no JVM available (built without JAVA_HOME?)\n");
     buf_free(&out);

@@ -34,7 +34,7 @@ public final class V6WasiCliRunner {
       throw e;
     } catch (RuntimeException e) {
       System.err.println("error: " + e.getMessage());
-      System.exit(1);
+      throw new V6ProcessExit(1);
     }
   }
 
