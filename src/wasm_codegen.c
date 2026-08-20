@@ -1245,6 +1245,40 @@ static void compile_one_function(wasm_module* mod, class_file* cf,
   }
 }
 
+static void compile_global_inits(wasm_module* mod, class_file* cf,
+                                 const char* class_name, method* clinit,
+                                 compile_result* out_err) {
+  for (uint32_t i = 0; i < mod->global_count; i++) {
+    wasm_global_decl* g = &mod->globals[i];
+
+    wasm_func_ctx fc;
+    memset(&fc, 0, sizeof(fc));
+    fc.cf = cf;
+    fc.m = clinit;
+    fc.mod = mod;
+    fc.class_name = class_name;
+
+    codegen_body(&fc, g->init_start, g->init_len);
+
+    if (fc.had_error) {
+      if (out_err->ok) {
+        out_err->ok = 0;
+        snprintf(out_err->message, sizeof(out_err->message), "%s", fc.err_msg);
+      }
+      return;
+    }
+
+    uint32_t combined_idx = mod->imported_global_count + i;
+    char name[32];
+    snprintf(name, sizeof(name), "wasmGlobal%u", combined_idx);
+    op_emit2(clinit, op_putstatic,
+             cf_fieldref(cf, class_name, name, jvm_desc_for(g->val_type)));
+  }
+  op_emit(clinit, op_return);
+  clinit->max_stack = 8;
+  clinit->max_locals = 1;
+}
+
 compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
                                    const char* class_name) {
   if (mod->import_count > 0)
@@ -1253,8 +1287,6 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
     return wasm_err("wasm linear memory not yet supported in this build");
   if (mod->table_count > 0)
     return wasm_err("wasm tables not yet supported in this build");
-  if (mod->global_count > 0)
-    return wasm_err("wasm globals not yet supported in this build");
   if (mod->element_count > 0)
     return wasm_err("wasm element segments not yet supported in this build");
   if (mod->data_count > 0)
@@ -1267,6 +1299,13 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
   result.line = 0;
   result.message[0] = '\0';
 
+  for (uint32_t i = 0; i < mod->global_count; i++) {
+    uint32_t combined_idx = mod->imported_global_count + i;
+    char name[32];
+    snprintf(name, sizeof(name), "wasmGlobal%u", combined_idx);
+    cf_field(cf, acc_static, name, jvm_desc_for(mod->globals[i].val_type));
+  }
+
   for (uint32_t i = 0; i < mod->func_count; i++) {
     uint32_t combined_idx = mod->imported_func_count + i;
     const wasm_functype* ft = wasm_func_type(mod, combined_idx);
@@ -1276,6 +1315,11 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
     snprintf(fname, sizeof(fname), "wasmFunc%u", combined_idx);
     method* m = cf_method(cf, acc_public | acc_static, fname, desc);
     compile_one_function(mod, cf, class_name, combined_idx, m, &result);
+  }
+
+  if (mod->global_count > 0) {
+    method* clinit = cf_method(cf, acc_static, "<clinit>", "()V");
+    compile_global_inits(mod, cf, class_name, clinit, &result);
   }
 
   return result;
