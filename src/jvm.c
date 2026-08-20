@@ -301,6 +301,88 @@ static jbyteArray JNICALL v6_wasm_compile_native(JNIEnv* env, jclass cls,
   return result;
 }
 
+static jstring JNICALL v6_wasm_describe_exports_native(JNIEnv* env, jclass cls,
+                                                       jbyteArray wasm_bytes) {
+  (void)cls;
+  jsize len = (*env)->GetArrayLength(env, wasm_bytes);
+  jbyte* bytes = (*env)->GetByteArrayElements(env, wasm_bytes, NULL);
+
+  wasm_module m;
+  int rc = wasm_parse_module((const uint8_t*)bytes, (size_t)len, &m);
+  (*env)->ReleaseByteArrayElements(env, wasm_bytes, bytes, JNI_ABORT);
+
+  if (rc != 0) {
+    char msg[300];
+    snprintf(msg, sizeof(msg), "%s", m.err_msg);
+    (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/RuntimeException"),
+                     msg);
+    return NULL;
+  }
+
+  buf text;
+  buf_init(&text);
+  for (uint32_t i = 0; i < m.export_count; i++) {
+    if (m.exports[i].kind != wasm_import_func)
+      continue;
+    uint32_t fidx = m.exports[i].index;
+    const wasm_functype* ft = wasm_func_type(&m, fidx);
+    if (!ft)
+      continue;
+    char desc[512];
+    wasm_build_func_desc(ft, desc, sizeof(desc));
+    char line[600];
+    int n = snprintf(line, sizeof(line), "%s\t%u\t%s\n", m.exports[i].name,
+                     fidx, desc);
+    if (n > 0)
+      buf_bytes(&text, (const uint8_t*)line, (size_t)n);
+  }
+  buf_u8(&text, 0);
+
+  jstring result = (*env)->NewStringUTF(env, (const char*)text.data);
+  buf_free(&text);
+  wasm_module_free(&m);
+  return result;
+}
+
+static jstring JNICALL v6_wasm_describe_imports_native(JNIEnv* env, jclass cls,
+                                                       jbyteArray wasm_bytes) {
+  (void)cls;
+  jsize len = (*env)->GetArrayLength(env, wasm_bytes);
+  jbyte* bytes = (*env)->GetByteArrayElements(env, wasm_bytes, NULL);
+
+  wasm_module m;
+  int rc = wasm_parse_module((const uint8_t*)bytes, (size_t)len, &m);
+  (*env)->ReleaseByteArrayElements(env, wasm_bytes, bytes, JNI_ABORT);
+
+  if (rc != 0) {
+    char msg[300];
+    snprintf(msg, sizeof(msg), "%s", m.err_msg);
+    (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/RuntimeException"),
+                     msg);
+    return NULL;
+  }
+
+  buf text;
+  buf_init(&text);
+  uint32_t fidx = 0;
+  for (uint32_t i = 0; i < m.import_count; i++) {
+    if (m.imports[i].kind != wasm_import_func)
+      continue;
+    char line[600];
+    int n = snprintf(line, sizeof(line), "%s\t%s\t%u\n",
+                     m.imports[i].module_name, m.imports[i].field_name, fidx);
+    if (n > 0)
+      buf_bytes(&text, (const uint8_t*)line, (size_t)n);
+    fidx++;
+  }
+  buf_u8(&text, 0);
+
+  jstring result = (*env)->NewStringUTF(env, (const char*)text.data);
+  buf_free(&text);
+  wasm_module_free(&m);
+  return result;
+}
+
 int v6_jvm_load_runtime(v6_jvm* jvm) {
   JNIEnv* env = jvm->env;
   jclass value_cls = NULL;
@@ -323,13 +405,19 @@ int v6_jvm_load_runtime(v6_jvm* jvm) {
     return -1;
 
   if (wasm_compiler_cls) {
-    JNINativeMethod methods[1];
+    JNINativeMethod methods[3];
     methods[0].name = "compile";
     methods[0].signature = "([B"
                            "Ljava/lang/String;"
                            ")[B";
     methods[0].fnPtr = (void*)v6_wasm_compile_native;
-    if ((*env)->RegisterNatives(env, wasm_compiler_cls, methods, 1) != 0)
+    methods[1].name = "describeExports";
+    methods[1].signature = "([B)Ljava/lang/String;";
+    methods[1].fnPtr = (void*)v6_wasm_describe_exports_native;
+    methods[2].name = "describeImports";
+    methods[2].signature = "([B)Ljava/lang/String;";
+    methods[2].fnPtr = (void*)v6_wasm_describe_imports_native;
+    if ((*env)->RegisterNatives(env, wasm_compiler_cls, methods, 3) != 0)
       return -1;
   }
 
