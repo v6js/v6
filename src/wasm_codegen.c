@@ -1510,6 +1510,93 @@ static void compile_one_function(wasm_module* mod, class_file* cf,
   }
 }
 
+static void narrow_double_and_return(method* m, uint8_t result_type) {
+  switch (result_type) {
+  case wasm_type_i32:
+    op_emit(m, op_d2i);
+    op_emit(m, op_ireturn);
+    break;
+  case wasm_type_i64:
+    op_emit(m, op_d2l);
+    op_emit(m, op_lreturn);
+    break;
+  case wasm_type_f32:
+    op_emit(m, op_d2f);
+    op_emit(m, op_freturn);
+    break;
+  case wasm_type_f64:
+    op_emit(m, op_dreturn);
+    break;
+  }
+}
+
+static void widen_param_to_double(method* m, uint8_t vt, uint16_t slot) {
+  switch (vt) {
+  case wasm_type_i32:
+    emit_iload_slot(m, slot);
+    op_emit(m, op_i2d);
+    break;
+  case wasm_type_i64:
+    emit_lload(m, slot);
+    op_emit(m, op_l2d);
+    break;
+  case wasm_type_f32:
+    emit_fload(m, slot);
+    op_emit(m, op_f2d);
+    break;
+  case wasm_type_f64:
+    emit_dload(m, slot);
+    break;
+  }
+}
+
+static void compile_import_wrapper(wasm_module* mod, class_file* cf,
+                                   const char* class_name, uint32_t idx,
+                                   method* m) {
+  const wasm_functype* ft = wasm_func_type(mod, idx);
+
+  uint16_t* param_slots = malloc(sizeof(uint16_t) * (ft->param_count + 1));
+  uint16_t slot = 0;
+  for (uint32_t i = 0; i < ft->param_count; i++) {
+    param_slots[i] = slot;
+    slot += (uint16_t)slot_width(ft->params[i]);
+  }
+
+  char field_name[32];
+  snprintf(field_name, sizeof(field_name), "wasmImportFunc%u", idx);
+  uint16_t import_field = cf_fieldref(cf, class_name, field_name, "LV6Value;");
+
+  op_emit2(m, op_getstatic, import_field);
+  emit_undef(cf, m);
+
+  emit_iconst(m, (int)ft->param_count);
+  op_emit2(m, op_anewarray, cf_class(cf, "V6Value"));
+  for (uint32_t i = 0; i < ft->param_count; i++) {
+    op_emit(m, op_dup);
+    emit_iconst(m, (int)i);
+    widen_param_to_double(m, ft->params[i], param_slots[i]);
+    op_emit2(m, op_invokestatic, value_num_method(cf));
+    op_emit(m, op_aastore);
+  }
+
+  op_emit2(
+      m, op_invokevirtual,
+      cf_methodref(cf, "V6Value", "call", "(LV6Value;[LV6Value;)LV6Value;"));
+
+  if (ft->result_count == 0) {
+    op_emit(m, op_pop);
+    op_emit(m, op_return);
+  } else {
+    op_emit2(m, op_invokevirtual,
+             cf_methodref(cf, "V6Value", "toNumber", "()D"));
+    narrow_double_and_return(m, ft->results[0]);
+  }
+
+  m->max_stack = 64;
+  m->max_locals = slot;
+  free(param_slots);
+}
+
 static void compile_indirect_dispatch(wasm_module* mod, class_file* cf,
                                       const char* class_name,
                                       uint32_t type_index, method* m) {
@@ -1744,8 +1831,10 @@ static void compile_clinit(wasm_module* mod, class_file* cf,
 
 compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
                                    const char* class_name) {
-  if (mod->import_count > 0)
-    return wasm_err("wasm imports not yet supported in this build");
+  for (uint32_t i = 0; i < mod->import_count; i++) {
+    if (mod->imports[i].kind != wasm_import_func)
+      return wasm_err("only wasm function imports are supported in this build");
+  }
   if (mod->memory_count > 1)
     return wasm_err("wasm multi-memory not supported (max one memory)");
   if (mod->table_count > 1)
@@ -1769,6 +1858,32 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
     char name[32];
     snprintf(name, sizeof(name), "wasmGlobal%u", combined_idx);
     cf_field(cf, acc_static, name, jvm_desc_for(mod->globals[i].val_type));
+  }
+
+  for (uint32_t i = 0; i < mod->imported_func_count; i++) {
+    char field_name[32];
+    snprintf(field_name, sizeof(field_name), "wasmImportFunc%u", i);
+    cf_field(cf, acc_static, field_name, "LV6Value;");
+
+    const wasm_functype* ft = wasm_func_type(mod, i);
+    char desc[512];
+    build_func_desc(ft, desc, sizeof(desc));
+    char fname[32];
+    snprintf(fname, sizeof(fname), "wasmFunc%u", i);
+    method* m = cf_method(cf, acc_public | acc_static, fname, desc);
+    compile_import_wrapper(mod, cf, class_name, i, m);
+
+    char setter_name[32];
+    snprintf(setter_name, sizeof(setter_name), "wasmSetImport%u", i);
+    char setter_desc[16] = "(LV6Value;)V";
+    method* setter =
+        cf_method(cf, acc_public | acc_static, setter_name, setter_desc);
+    emit_aload(setter, 0);
+    op_emit2(setter, op_putstatic,
+             cf_fieldref(cf, class_name, field_name, "LV6Value;"));
+    op_emit(setter, op_return);
+    setter->max_stack = 1;
+    setter->max_locals = 1;
   }
 
   for (uint32_t i = 0; i < mod->func_count; i++) {
