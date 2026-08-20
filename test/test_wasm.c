@@ -41,6 +41,13 @@ static const uint8_t select_module[] = {
     0x01, 0x09, 0x00, 0x20, 0x00, 0x20, 0x01, 0x20, 0x02, 0x1B, 0x0B,
 };
 
+static const uint8_t import_module[] = {
+    0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, 0x01, 0x06,
+    0x01, 0x60, 0x01, 0x7F, 0x01, 0x7F, 0x02, 0x0B, 0x01, 0x03,
+    0x65, 0x6E, 0x76, 0x03, 0x64, 0x62, 0x6C, 0x00, 0x00, 0x07,
+    0x07, 0x01, 0x03, 0x64, 0x62, 0x6C, 0x00, 0x00,
+};
+
 static const uint8_t table_module[] = {
     0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0A, 0x02, 0x60,
     0x01, 0x7F, 0x01, 0x7F, 0x60, 0x00, 0x01, 0x7F, 0x03, 0x04, 0x03, 0x00,
@@ -286,6 +293,44 @@ int test_wasm_select(void) {
       v6_jvm_destroy(jvm);
     }
   }
+
+  buf_free(&out);
+  cf_free(&cf);
+  wasm_module_free(&m);
+
+  return fails;
+}
+
+int test_wasm_import(void) {
+  int fails = 0;
+
+  wasm_module m;
+  int rc = wasm_parse_module(import_module, sizeof(import_module), &m);
+  v6_check(&fails, rc == 0);
+  if (rc != 0)
+    return fails;
+
+  v6_check(&fails, m.import_count == 1);
+  v6_check(&fails, m.imports[0].kind == wasm_import_func);
+  v6_check(&fails, strcmp(m.imports[0].module_name, "env") == 0);
+  v6_check(&fails, strcmp(m.imports[0].field_name, "dbl") == 0);
+  v6_check(&fails, m.imported_func_count == 1);
+  v6_check(&fails, wasm_func_is_import(&m, 0) == 1);
+
+  class_file cf;
+  cf_init(&cf, "WasmImportTest", "java/lang/Object");
+  compile_result cr = wasm_compile_module(&m, &cf, "WasmImportTest");
+  v6_check(&fails, cr.ok);
+
+  v6_check(&fails, cf.field_len == 1);
+  v6_check(&fails, cf.method_len == 2);
+
+  buf out;
+  buf_init(&out);
+  cf_emit(&cf, &out);
+  v6_check(&fails, out.len > 10);
+  v6_check(&fails, out.data[0] == 0xCA && out.data[1] == 0xFE &&
+                       out.data[2] == 0xBA && out.data[3] == 0xBE);
 
   buf_free(&out);
   cf_free(&cf);
