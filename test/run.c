@@ -10,6 +10,7 @@ int test_runtime(void);
 int test_jvm(void);
 int test_jar(void);
 int test_wasm(void);
+int test_wasm_codegen(void);
 
 int main(void) {
   int fails = 0;
@@ -24,6 +25,7 @@ int main(void) {
   fails += test_jvm();
   fails += test_jar();
   fails += test_wasm();
+  fails += test_wasm_codegen();
 
   if (fails) {
     fprintf(stderr, "%d failure(s)\n", fails);
