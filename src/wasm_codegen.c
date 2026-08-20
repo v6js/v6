@@ -138,6 +138,25 @@ static void build_func_desc(const wasm_functype* ft, char* out, size_t cap) {
   out[p] = '\0';
 }
 
+static void build_indirect_desc(const wasm_functype* ft, char* out,
+                                size_t cap) {
+  size_t p = 0;
+  out[p++] = '(';
+  for (uint32_t i = 0; i < ft->param_count && p < cap - 4; i++) {
+    const char* d = jvm_desc_for(ft->params[i]);
+    out[p++] = d[0];
+  }
+  out[p++] = 'I';
+  out[p++] = ')';
+  if (ft->result_count == 0) {
+    out[p++] = 'V';
+  } else {
+    const char* d = jvm_desc_for(ft->results[0]);
+    out[p++] = d[0];
+  }
+  out[p] = '\0';
+}
+
 static void emit_load_local(wasm_func_ctx* fc, uint32_t idx) {
   uint8_t vt = fc->local_types[idx];
   uint16_t slot = fc->local_slots[idx];
@@ -1105,24 +1124,23 @@ static void codegen_instr(wasm_func_ctx* fc, wasm_reader2* r) {
     uint32_t tidx = w2_u32(r);
     w2_u32(r);
     const wasm_functype* ft = &fc->mod->types[tidx];
-    char desc[512];
-    build_func_desc(ft, desc, sizeof(desc));
-    char callee_desc[560];
-    snprintf(callee_desc, sizeof(callee_desc), "(LV6WasmTable;I%s", desc + 1);
     ts_pop(fc);
     for (uint32_t i = 0; i < ft->param_count; i++)
       ts_pop(fc);
-    uint16_t tbl = wasm_table_field(fc);
-    op_emit2(m, op_getstatic, tbl);
-    op_emit(m, op_swap);
-    char helper[64];
-    snprintf(helper, sizeof(helper), "callIndirect%s",
-             ft->result_count == 0             ? "V"
-             : ft->results[0] == wasm_type_i32 ? "I"
-             : ft->results[0] == wasm_type_i64 ? "J"
-             : ft->results[0] == wasm_type_f32 ? "F"
-                                               : "D");
-    op_emit2(m, op_invokestatic, sm(fc, helper, callee_desc));
+
+    uint16_t idx_scratch = fc->next_slot;
+    emit_istore(m, idx_scratch);
+    op_emit2(m, op_getstatic, wasm_table_field(fc));
+    emit_iload_slot(m, idx_scratch);
+    op_emit2(m, op_invokevirtual,
+             cf_methodref(cf, "V6WasmTable", "get", "(I)I"));
+
+    char dispatch_desc[512];
+    build_indirect_desc(ft, dispatch_desc, sizeof(dispatch_desc));
+    char dispatch_name[32];
+    snprintf(dispatch_name, sizeof(dispatch_name), "wasmIndirect%u", tidx);
+    op_emit2(m, op_invokestatic,
+             cf_methodref(cf, fc->class_name, dispatch_name, dispatch_desc));
     if (ft->result_count > 0)
       ts_push(fc, ft->results[0]);
     break;
@@ -1444,6 +1462,104 @@ static void compile_one_function(wasm_module* mod, class_file* cf,
   }
 }
 
+static void compile_indirect_dispatch(wasm_module* mod, class_file* cf,
+                                      const char* class_name,
+                                      uint32_t type_index, method* m) {
+  const wasm_functype* ft = &mod->types[type_index];
+
+  uint16_t* param_slots = malloc(sizeof(uint16_t) * (ft->param_count + 1));
+  uint16_t slot = 0;
+  for (uint32_t i = 0; i < ft->param_count; i++) {
+    param_slots[i] = slot;
+    slot += (uint16_t)slot_width(ft->params[i]);
+  }
+  uint16_t func_idx_slot = slot;
+  slot += 1;
+
+  for (uint32_t fi = 0; fi < mod->func_count; fi++) {
+    if (mod->func_type_indices[fi] != type_index)
+      continue;
+    uint32_t combined_idx = mod->imported_func_count + fi;
+
+    emit_iload_slot(m, func_idx_slot);
+    emit_iconst(m, (int)combined_idx);
+    size_t skip = op_pos(m);
+    op_emit2(m, op_if_icmpne, 0);
+
+    for (uint32_t i = 0; i < ft->param_count; i++) {
+      switch (ft->params[i]) {
+      case wasm_type_i32:
+        emit_iload_slot(m, param_slots[i]);
+        break;
+      case wasm_type_i64:
+        emit_lload(m, param_slots[i]);
+        break;
+      case wasm_type_f32:
+        emit_fload(m, param_slots[i]);
+        break;
+      case wasm_type_f64:
+        emit_dload(m, param_slots[i]);
+        break;
+      }
+    }
+    char fname[32];
+    snprintf(fname, sizeof(fname), "wasmFunc%u", combined_idx);
+    char desc[512];
+    build_func_desc(ft, desc, sizeof(desc));
+    op_emit2(m, op_invokestatic, cf_methodref(cf, class_name, fname, desc));
+    if (ft->result_count == 0) {
+      op_emit(m, op_return);
+    } else {
+      switch (ft->results[0]) {
+      case wasm_type_i32:
+        op_emit(m, op_ireturn);
+        break;
+      case wasm_type_i64:
+        op_emit(m, op_lreturn);
+        break;
+      case wasm_type_f32:
+        op_emit(m, op_freturn);
+        break;
+      case wasm_type_f64:
+        op_emit(m, op_dreturn);
+        break;
+      }
+    }
+
+    size_t here = op_pos(m);
+    op_patch2(m, (uint16_t)(skip + 1), (uint16_t)(here - skip));
+  }
+
+  op_emit2(m, op_invokestatic,
+           cf_methodref(cf, "V6Wasm", "trapUnreachable", "()V"));
+  if (ft->result_count == 0) {
+    op_emit(m, op_return);
+  } else {
+    switch (ft->results[0]) {
+    case wasm_type_i32:
+      emit_iconst(m, 0);
+      op_emit(m, op_ireturn);
+      break;
+    case wasm_type_i64:
+      op_emit2(m, op_ldc2_w, cf_long(cf, 0));
+      op_emit(m, op_lreturn);
+      break;
+    case wasm_type_f32:
+      op_emit2(m, op_ldc_w, cf_float(cf, 0));
+      op_emit(m, op_freturn);
+      break;
+    case wasm_type_f64:
+      op_emit2(m, op_ldc2_w, cf_double(cf, 0));
+      op_emit(m, op_dreturn);
+      break;
+    }
+  }
+
+  m->max_stack = 64;
+  m->max_locals = func_idx_slot + 1;
+  free(param_slots);
+}
+
 static void compile_clinit(wasm_module* mod, class_file* cf,
                            const char* class_name, method* clinit,
                            compile_result* out_err) {
@@ -1458,6 +1574,55 @@ static void compile_clinit(wasm_module* mod, class_file* cf,
              cf_methodref(cf, "V6WasmMemory", "<init>", "(II)V"));
     op_emit2(clinit, op_putstatic,
              cf_fieldref(cf, class_name, "wasmMemory0", "LV6WasmMemory;"));
+  }
+
+  if (mod->table_count > 0) {
+    wasm_limits* lim = &mod->tables[0];
+    uint16_t tbl_cls = cf_class(cf, "V6WasmTable");
+    op_emit2(clinit, op_new, tbl_cls);
+    op_emit(clinit, op_dup);
+    emit_iconst(clinit, (int)lim->min);
+    emit_iconst(clinit, lim->has_max ? (int)lim->max : -1);
+    op_emit2(clinit, op_invokespecial,
+             cf_methodref(cf, "V6WasmTable", "<init>", "(II)V"));
+    op_emit2(clinit, op_putstatic,
+             cf_fieldref(cf, class_name, "wasmTable0", "LV6WasmTable;"));
+  }
+
+  for (uint32_t i = 0; i < mod->element_count; i++) {
+    wasm_element_seg* e = &mod->elements[i];
+    if (!e->offset_start)
+      continue;
+
+    wasm_func_ctx fc;
+    memset(&fc, 0, sizeof(fc));
+    fc.cf = cf;
+    fc.m = clinit;
+    fc.mod = mod;
+    fc.class_name = class_name;
+
+    codegen_body(&fc, e->offset_start, e->offset_len);
+
+    if (fc.had_error) {
+      if (out_err->ok) {
+        out_err->ok = 0;
+        snprintf(out_err->message, sizeof(out_err->message), "%s", fc.err_msg);
+      }
+      return;
+    }
+
+    uint16_t off_scratch = 0;
+    emit_istore(clinit, off_scratch);
+    for (uint32_t j = 0; j < e->func_count; j++) {
+      op_emit2(clinit, op_getstatic,
+               cf_fieldref(cf, class_name, "wasmTable0", "LV6WasmTable;"));
+      emit_iload_slot(clinit, off_scratch);
+      emit_iconst(clinit, (int)j);
+      op_emit(clinit, op_iadd);
+      emit_iconst(clinit, (int)e->func_indices[j]);
+      op_emit2(clinit, op_invokevirtual,
+               cf_methodref(cf, "V6WasmTable", "set", "(II)V"));
+    }
   }
 
   for (uint32_t i = 0; i < mod->global_count; i++) {
@@ -1497,10 +1662,8 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
     return wasm_err("wasm imports not yet supported in this build");
   if (mod->memory_count > 1)
     return wasm_err("wasm multi-memory not supported (max one memory)");
-  if (mod->table_count > 0)
-    return wasm_err("wasm tables not yet supported in this build");
-  if (mod->element_count > 0)
-    return wasm_err("wasm element segments not yet supported in this build");
+  if (mod->table_count > 1)
+    return wasm_err("wasm multi-table not supported (max one table)");
   if (mod->data_count > 0)
     return wasm_err("wasm data segments not yet supported in this build");
   if (mod->func_count != mod->code_count)
@@ -1513,6 +1676,9 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
 
   if (mod->memory_count > 0)
     cf_field(cf, acc_static, "wasmMemory0", "LV6WasmMemory;");
+
+  if (mod->table_count > 0)
+    cf_field(cf, acc_static, "wasmTable0", "LV6WasmTable;");
 
   for (uint32_t i = 0; i < mod->global_count; i++) {
     uint32_t combined_idx = mod->imported_global_count + i;
@@ -1532,7 +1698,19 @@ compile_result wasm_compile_module(wasm_module* mod, class_file* cf,
     compile_one_function(mod, cf, class_name, combined_idx, m, &result);
   }
 
-  if (mod->global_count > 0 || mod->memory_count > 0) {
+  if (mod->table_count > 0) {
+    for (uint32_t t = 0; t < mod->type_count; t++) {
+      const wasm_functype* ft = &mod->types[t];
+      char desc[512];
+      build_indirect_desc(ft, desc, sizeof(desc));
+      char dispatch_name[32];
+      snprintf(dispatch_name, sizeof(dispatch_name), "wasmIndirect%u", t);
+      method* m = cf_method(cf, acc_static, dispatch_name, desc);
+      compile_indirect_dispatch(mod, cf, class_name, t, m);
+    }
+  }
+
+  if (mod->global_count > 0 || mod->memory_count > 0 || mod->table_count > 0) {
     method* clinit = cf_method(cf, acc_static, "<clinit>", "()V");
     compile_clinit(mod, cf, class_name, clinit, &result);
   }
