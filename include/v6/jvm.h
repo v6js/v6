@@ -14,6 +14,9 @@ int v6_jvm_call_static_i_ii(v6_jvm* jvm, const char* class_name,
                             const char* method_name, int a, int b, int* out);
 int v6_jvm_call_static_i(v6_jvm* jvm, const char* class_name,
                          const char* method_name, int* out);
+int v6_jvm_call_static_i_iii(v6_jvm* jvm, const char* class_name,
+                             const char* method_name, int a, int b, int c,
+                             int* out);
 int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
                char** script_args, int script_argc);
 int v6_jvm_serve_daemon(v6_jvm* jvm, const char* lock_file_path,
