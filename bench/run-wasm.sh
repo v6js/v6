@@ -38,7 +38,7 @@ WASMTIME_LABEL="wasmtime v$WASMTIME_VERSION"
 : > "$REPORT_FILE"
 
 echo "==> CLI WASI benchmarks: wasmtime vs v6 (v6 file.wasm)"
-for name in fib primes wasi_io; do
+for name in fib primes wasi_io memcpy_bulk table_dispatch dotproduct; do
   wasm="$WASM_DIR/$name.wasm"
   md="$TMP_DIR/cli-$name.md"
 
@@ -61,7 +61,7 @@ for name in fib primes wasi_io; do
 done
 
 echo "==> JS WebAssembly-API benchmarks: node vs v6"
-for name in fib primes; do
+for name in fib primes memcpy_bulk table_dispatch dotproduct; do
   fixture="$WASM_DIR/$name.js"
   md="$TMP_DIR/js-$name.md"
 
