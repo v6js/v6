@@ -8,9 +8,6 @@ const stubWasi = {
 
 WebAssembly.instantiate(bytes, { wasi_snapshot_preview1: stubWasi }).then(
   (result) => {
-    const start = Date.now();
-    const r = result.instance.exports.run();
-    const elapsed = Date.now() - start;
-    console.log("result=" + r + " ms=" + elapsed);
+    console.log(result.instance.exports.run());
   }
 );
