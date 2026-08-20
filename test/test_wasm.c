@@ -18,6 +18,14 @@ static const uint8_t global_module[] = {
     0x00, 0x0A, 0x06, 0x01, 0x04, 0x00, 0x23, 0x00, 0x0B,
 };
 
+static const uint8_t memory_module[] = {
+    0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01,
+    0x60, 0x00, 0x01, 0x7F, 0x03, 0x02, 0x01, 0x00, 0x05, 0x03, 0x01,
+    0x00, 0x01, 0x07, 0x07, 0x01, 0x03, 0x72, 0x75, 0x6E, 0x00, 0x00,
+    0x0A, 0x11, 0x01, 0x0F, 0x00, 0x41, 0x00, 0x41, 0xFB, 0x00, 0x36,
+    0x02, 0x00, 0x41, 0x00, 0x28, 0x02, 0x00, 0x0B,
+};
+
 int test_wasm(void) {
   int fails = 0;
 
@@ -108,6 +116,53 @@ int test_wasm_codegen(void) {
                                                -7, 10, &result2);
         v6_check(&fails, call_rc2 == 0);
         v6_check(&fails, result2 == 3);
+      }
+      v6_jvm_destroy(jvm);
+    }
+  }
+
+  buf_free(&out);
+  cf_free(&cf);
+  wasm_module_free(&m);
+
+  return fails;
+}
+
+int test_wasm_memory(void) {
+  int fails = 0;
+
+  wasm_module m;
+  int rc = wasm_parse_module(memory_module, sizeof(memory_module), &m);
+  v6_check(&fails, rc == 0);
+  if (rc != 0)
+    return fails;
+
+  v6_check(&fails, m.memory_count == 1);
+  v6_check(&fails, m.memories[0].min == 1);
+  v6_check(&fails, m.memories[0].has_max == 0);
+
+  class_file cf;
+  cf_init(&cf, "WasmMemoryTest", "java/lang/Object");
+  compile_result cr = wasm_compile_module(&m, &cf, "WasmMemoryTest");
+  v6_check(&fails, cr.ok);
+
+  buf out;
+  buf_init(&out);
+  cf_emit(&cf, &out);
+
+  if (v6_jvm_available()) {
+    v6_jvm* jvm = v6_jvm_create(NULL, 0);
+    if (jvm) {
+      v6_check(&fails, v6_jvm_load_runtime(jvm) == 0);
+      int def_rc =
+          v6_jvm_define_extra(jvm, "WasmMemoryTest", out.data, out.len);
+      v6_check(&fails, def_rc == 0);
+      if (def_rc == 0) {
+        int result = 0;
+        int call_rc =
+            v6_jvm_call_static_i(jvm, "WasmMemoryTest", "wasmFunc0", &result);
+        v6_check(&fails, call_rc == 0);
+        v6_check(&fails, result == 123);
       }
       v6_jvm_destroy(jvm);
     }
