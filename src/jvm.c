@@ -333,6 +333,35 @@ int v6_jvm_call_static_i_ii(v6_jvm* jvm, const char* class_name,
   return 0;
 }
 
+int v6_jvm_call_static_i(v6_jvm* jvm, const char* class_name,
+                         const char* method_name, int* out) {
+  JNIEnv* env = jvm->env;
+  jclass cls = (*env)->FindClass(env, class_name);
+  if (!cls) {
+    if ((*env)->ExceptionCheck(env)) {
+      (*env)->ExceptionDescribe(env);
+      (*env)->ExceptionClear(env);
+    }
+    return -1;
+  }
+  jmethodID m = (*env)->GetStaticMethodID(env, cls, method_name, "()I");
+  if (!m) {
+    if ((*env)->ExceptionCheck(env)) {
+      (*env)->ExceptionDescribe(env);
+      (*env)->ExceptionClear(env);
+    }
+    return -1;
+  }
+  jint result = (*env)->CallStaticIntMethod(env, cls, m);
+  if ((*env)->ExceptionCheck(env)) {
+    (*env)->ExceptionDescribe(env);
+    (*env)->ExceptionClear(env);
+    return -1;
+  }
+  *out = (int)result;
+  return 0;
+}
+
 int v6_jvm_run(v6_jvm* jvm, const unsigned char* class_bytes, size_t len,
                char** script_args, int script_argc) {
   JNIEnv* env = jvm->env;
@@ -538,6 +567,15 @@ int v6_jvm_call_static_i_ii(v6_jvm* jvm, const char* class_name,
   (void)method_name;
   (void)a;
   (void)b;
+  (void)out;
+  return -1;
+}
+
+int v6_jvm_call_static_i(v6_jvm* jvm, const char* class_name,
+                         const char* method_name, int* out) {
+  (void)jvm;
+  (void)class_name;
+  (void)method_name;
   (void)out;
   return -1;
 }
