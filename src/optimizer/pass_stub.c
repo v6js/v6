@@ -17,8 +17,3 @@ int v6_opt_pass_loop_invariant(ast_node* program, ast_arena* arena) {
   (void)arena;
   return 0;
 }
-
-void v6_opt_pass_mangle(ast_node* program, ast_arena* arena) {
-  (void)program;
-  (void)arena;
-}

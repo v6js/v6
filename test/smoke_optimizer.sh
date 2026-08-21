@@ -59,6 +59,7 @@ check_js_fixture algebraic-simplify --opt-algebraic-simplify
 check_js_fixture dead-code --opt-dead-code
 check_js_fixture control-flow-simplify --opt-control-flow
 check_js_fixture dead-store --opt-dead-store
+check_js_fixture obfuscation --opt-obfuscation
 
 for dir in test/fix/optimizer/*/; do
   name=$(basename "$dir")
