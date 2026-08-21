@@ -23,6 +23,7 @@ typedef struct v6_bundler_limits {
 
 void v6_bundler_format_size(double bytes, char* out, size_t out_size);
 int v6_bundler_parse_size(const char* s, long long* out_bytes);
+void v6_bundler_clear_screen(void);
 
 void v6_bundler_print_bundle_summary(const v6_bundler_graph* g,
                                      const char* outfile, size_t out_len,

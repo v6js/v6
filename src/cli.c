@@ -130,7 +130,7 @@ void v6_cli_print_help(const char* prog_path) {
           "  --name <ident>          global variable name for iife output\n"
           "  -w, --watch             rebuild on file changes\n"
           "  --serve                 serve the bundle with a dev server\n"
-          "  --port <n>              dev server port (default: 5173)\n"
+          "  --port <n>              dev server port (default: 3000)\n"
           "  --max-size <size>       warn/error if the bundle exceeds this "
           "size (e.g. 500kB)\n"
           "  --max-deps <n>          warn/error if the module count exceeds "

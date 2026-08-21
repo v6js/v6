@@ -130,7 +130,7 @@ int v6_cli_run_bundle(v6_cli_options* opts) {
     verbosity = v6_bundler_verbosity_verbose;
 
   if (opts->bundle_serve) {
-    int port = opts->bundle_serve_port > 0 ? opts->bundle_serve_port : 5173;
+    int port = opts->bundle_serve_port > 0 ? opts->bundle_serve_port : 3000;
     return v6_bundler_devserver_run(entry, opts, outfile, port);
   }
 

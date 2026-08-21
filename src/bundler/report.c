@@ -6,11 +6,32 @@
 #include <string.h>
 
 #ifdef _WIN32
+#include <windows.h>
 #define v6_strnicmp _strnicmp
 #else
 #include <strings.h>
 #define v6_strnicmp strncasecmp
 #endif
+
+void v6_bundler_clear_screen(void) {
+#ifdef _WIN32
+  HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+  CONSOLE_SCREEN_BUFFER_INFO info;
+  if (h == INVALID_HANDLE_VALUE || !GetConsoleScreenBufferInfo(h, &info)) {
+    printf("\x1b[2J\x1b[H");
+    return;
+  }
+  DWORD cell_count = (DWORD)info.dwSize.X * (DWORD)info.dwSize.Y;
+  COORD origin = {0, 0};
+  DWORD written;
+  FillConsoleOutputCharacterA(h, ' ', cell_count, origin, &written);
+  FillConsoleOutputAttribute(h, info.wAttributes, cell_count, origin, &written);
+  SetConsoleCursorPosition(h, origin);
+#else
+  printf("\x1b[2J\x1b[H");
+#endif
+  fflush(stdout);
+}
 
 void v6_bundler_format_size(double bytes, char* out, size_t out_size) {
   static const char* units[] = {"B", "kB", "MB", "GB"};

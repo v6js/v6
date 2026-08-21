@@ -83,7 +83,7 @@ check_pattern "devserver (index.html has hmr client script)" \
   '__v6_hmr__' "$serve_page"
 serve_bundle=$(curl -s http://127.0.0.1:5987/bundle.js 2>/dev/null)
 check_pattern "devserver (bundle.js exposes global module registry, not wrapped)" \
-  '^var __v6_modules = \{\};' "$serve_bundle"
+  '^var __v6_modules = ' "$serve_bundle"
 check_not_pattern "devserver (bundle.js has no CJS/ESM export tail)" \
   'module\.exports = __v6_entry_exports|export default' "$serve_bundle"
 kill "$serve_pid" >/dev/null 2>&1 || true

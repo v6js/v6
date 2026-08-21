@@ -112,6 +112,9 @@ int v6_bundler_run_watch_loop(const char* entry, v6_bundler_format fmt, const ch
                           v6_bundler_verbosity verbosity,
                           v6_bundler_rebuild_cb on_rebuild, void* cb_arg) {
   for (;;) {
+    if (verbosity != v6_bundler_verbosity_quiet)
+      v6_bundler_clear_screen();
+
     char** dirs = NULL;
     int dir_count = 0;
     int rc = v6_bundler_build_js_once(entry, fmt, global_name, outfile, limits,
@@ -125,9 +128,11 @@ int v6_bundler_run_watch_loop(const char* entry, v6_bundler_format fmt, const ch
       v6_bundler_watcher_add_dir(w, dirs[i]);
     free_watch_dirs(dirs, dir_count);
 
-    printf("watching %d director%s for changes...\n", dir_count,
-           dir_count == 1 ? "y" : "ies");
-    fflush(stdout);
+    if (verbosity != v6_bundler_verbosity_quiet) {
+      printf("Watching %d director%s for changes...\n", dir_count,
+            dir_count == 1 ? "y" : "ies");
+      fflush(stdout);
+    }
 
     int changed = v6_bundler_watcher_wait(w, -1);
     v6_bundler_watcher_free(w);

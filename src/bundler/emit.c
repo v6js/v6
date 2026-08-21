@@ -191,9 +191,12 @@ void v6_bundler_emit_one_module(v6_bundler_strbuf* b, v6_bundler_module* m) {
 
 static void emit_runtime_preamble(v6_bundler_strbuf* b) {
   v6_bundler_strbuf_append_cstr(
-      b, "var __v6_modules = {};\n"
-         "var __v6_specmap = {};\n"
-         "var __v6_cache = {};\n"
+      b, "var __v6_modules = typeof __v6_modules !== \"undefined\" ? "
+         "__v6_modules : {};\n"
+         "var __v6_specmap = typeof __v6_specmap !== \"undefined\" ? "
+         "__v6_specmap : {};\n"
+         "var __v6_cache = typeof __v6_cache !== \"undefined\" ? __v6_cache "
+         ": {};\n"
          "function __v6_make_require(fromId) {\n"
          "  return function(spec) {\n"
          "    var map = __v6_specmap[fromId] || {};\n"
