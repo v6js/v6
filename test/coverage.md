@@ -1,16 +1,16 @@
 # test262 coverage
 
-**Overall (language + built-ins + annexB): 21.89% (10643/48622)**
+**Overall (language + built-ins + annexB): 21.87% (10636/48622)**
 
 ## By category
 
 | Category | Pass | Total | % | Scored |
 |:---|---:|---:|---:|:---:|
-| language | 8083 | 23724 | 34.07 | yes |
-| built-ins | 2478 | 23812 | 10.41 | yes |
+| language | 8081 | 23724 | 34.06 | yes |
+| built-ins | 2473 | 23812 | 10.39 | yes |
 | annexB | 82 | 1086 | 7.55 | yes |
 | intl402 | 0 | 3357 | 0.00 | no |
-| staging | 95 | 1483 | 6.41 | no |
+| staging | 94 | 1483 | 6.34 | no |
 
 ## By area (scored categories only)
 
@@ -20,8 +20,8 @@
 | annexB/language | 78 | 845 | 9.23 |
 | built-ins/AbstractModuleSource | 0 | 8 | 0.00 |
 | built-ins/AggregateError | 0 | 25 | 0.00 |
-| built-ins/Array | 122 | 3082 | 3.96 |
-| built-ins/ArrayBuffer | 8 | 221 | 3.62 |
+| built-ins/Array | 129 | 3082 | 4.19 |
+| built-ins/ArrayBuffer | 7 | 221 | 3.17 |
 | built-ins/ArrayIteratorPrototype | 0 | 27 | 0.00 |
 | built-ins/AsyncDisposableStack | 0 | 104 | 0.00 |
 | built-ins/AsyncFromSyncIteratorPrototype | 6 | 38 | 15.79 |
@@ -49,13 +49,13 @@
 | built-ins/NaN | 2 | 6 | 33.33 |
 | built-ins/NativeErrors | 18 | 94 | 19.15 |
 | built-ins/Number | 115 | 340 | 33.82 |
-| built-ins/Object | 756 | 3411 | 22.16 |
-| built-ins/Promise | 68 | 732 | 9.29 |
+| built-ins/Object | 745 | 3411 | 21.84 |
+| built-ins/Promise | 66 | 732 | 9.02 |
 | built-ins/Proxy | 0 | 311 | 0.00 |
 | built-ins/Reflect | 0 | 153 | 0.00 |
 | built-ins/RegExp | 550 | 1879 | 29.27 |
 | built-ins/RegExpStringIteratorPrototype | 0 | 17 | 0.00 |
-| built-ins/Set | 26 | 383 | 6.79 |
+| built-ins/Set | 29 | 383 | 7.57 |
 | built-ins/SetIteratorPrototype | 0 | 11 | 0.00 |
 | built-ins/ShadowRealm | 0 | 64 | 0.00 |
 | built-ins/SharedArrayBuffer | 0 | 104 | 0.00 |
@@ -68,9 +68,9 @@
 | built-ins/TypedArray | 0 | 1446 | 0.00 |
 | built-ins/TypedArrayConstructors | 1 | 738 | 0.14 |
 | built-ins/Uint8Array | 0 | 70 | 0.00 |
-| built-ins/WeakMap | 12 | 141 | 8.51 |
+| built-ins/WeakMap | 10 | 141 | 7.09 |
 | built-ins/WeakRef | 0 | 29 | 0.00 |
-| built-ins/WeakSet | 8 | 85 | 9.41 |
+| built-ins/WeakSet | 9 | 85 | 10.59 |
 | built-ins/decodeURI | 8 | 55 | 14.55 |
 | built-ins/decodeURIComponent | 13 | 56 | 23.21 |
 | built-ins/encodeURI | 17 | 31 | 54.84 |
@@ -82,7 +82,7 @@
 | built-ins/parseFloat | 41 | 54 | 75.93 |
 | built-ins/parseInt | 43 | 55 | 78.18 |
 | built-ins/undefined | 1 | 8 | 12.50 |
-| language/arguments-object | 117 | 263 | 44.49 |
+| language/arguments-object | 115 | 263 | 43.73 |
 | language/asi | 89 | 102 | 87.25 |
 | language/block-scope | 44 | 145 | 30.34 |
 | language/comments | 30 | 52 | 57.69 |
@@ -166,7 +166,7 @@
 | Map | 5 | 40 | 12.50 |
 | Math.sumPrecise | 0 | 10 | 0.00 |
 | Object.fromEntries | 4 | 25 | 16.00 |
-| Object.hasOwn | 9 | 62 | 14.52 |
+| Object.hasOwn | 4 | 62 | 6.45 |
 | Object.is | 1 | 2 | 50.00 |
 | Promise | 2 | 4 | 50.00 |
 | Promise.allSettled | 22 | 102 | 21.57 |
@@ -195,7 +195,7 @@
 | Symbol.asyncIterator | 0 | 538 | 0.00 |
 | Symbol.hasInstance | 0 | 17 | 0.00 |
 | Symbol.isConcatSpreadable | 0 | 34 | 0.00 |
-| Symbol.iterator | 171 | 1867 | 9.16 |
+| Symbol.iterator | 170 | 1867 | 9.11 |
 | Symbol.match | 5 | 88 | 5.68 |
 | Symbol.matchAll | 0 | 63 | 0.00 |
 | Symbol.prototype.description | 2 | 8 | 25.00 |
@@ -204,7 +204,7 @@
 | Symbol.species | 6 | 284 | 2.11 |
 | Symbol.split | 0 | 58 | 0.00 |
 | Symbol.toPrimitive | 0 | 233 | 0.00 |
-| Symbol.toStringTag | 2 | 131 | 1.53 |
+| Symbol.toStringTag | 1 | 131 | 0.76 |
 | Symbol.unscopables | 1 | 45 | 2.22 |
 | Temporal | 0 | 6714 | 0.00 |
 | TypedArray | 7 | 2521 | 0.28 |
@@ -213,9 +213,9 @@
 | Uint32Array | 0 | 2 | 0.00 |
 | Uint8Array | 2 | 13 | 15.38 |
 | Uint8ClampedArray | 0 | 6 | 0.00 |
-| WeakMap | 10 | 79 | 12.66 |
+| WeakMap | 9 | 79 | 11.39 |
 | WeakRef | 0 | 37 | 0.00 |
-| WeakSet | 7 | 34 | 20.59 |
+| WeakSet | 8 | 34 | 23.53 |
 | __getter__ | 0 | 27 | 0.00 |
 | __proto__ | 1 | 20 | 5.00 |
 | __setter__ | 0 | 27 | 0.00 |
@@ -226,7 +226,7 @@
 | arraybuffer-transfer | 0 | 59 | 0.00 |
 | arrow-function | 149 | 949 | 15.70 |
 | async-functions | 288 | 702 | 41.03 |
-| async-iteration | 1202 | 4971 | 24.18 |
+| async-iteration | 1201 | 4971 | 24.16 |
 | await-dictionary | 0 | 89 | 0.00 |
 | caller | 17 | 23 | 73.91 |
 | canonical-tz | 0 | 19 | 0.00 |
@@ -319,5 +319,5 @@
 | Category | Pass | Total | % |
 |:---|---:|---:|---:|
 | intl402 | 0 | 3357 | 0.00 |
-| staging | 95 | 1483 | 6.41 |
+| staging | 94 | 1483 | 6.34 |
 
