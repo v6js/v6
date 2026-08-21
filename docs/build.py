@@ -23,9 +23,7 @@ TEMPLATE = """<!doctype html>
 <title>{title}</title>
 <meta name="description" content="{description}">
 <link rel="stylesheet" href="{root}style.css">
-<link rel="stylesheet" href="{root}vendor/styles/github.min.css" media="(prefers-color-scheme: light)" id="hljs-light">
-<link rel="stylesheet" href="{root}vendor/styles/github-dark.min.css" media="(prefers-color-scheme: dark)" id="hljs-dark">
-</head>
+{hljs_head}</head>
 <body>
 <header class="site-header">
   <div class="wrap">
@@ -53,9 +51,7 @@ TEMPLATE = """<!doctype html>
     <a href="{github_url}">{github_label}</a>
   </div>
 </footer>
-<script src="{root}vendor/highlight.min.js"></script>
-<script>hljs.highlightAll();</script>
-<script src="{root}script.js"></script>
+{hljs_scripts}<script src="{root}script.js"></script>
 </body>
 </html>
 """
@@ -135,6 +131,16 @@ def build_sidebar_layout(html):
 def render(content, title, description, root_prefix, active, wrap_class=""):
   nav = {key: ("active" if key == active else "") for key in NAV_KEYS}
   github_url = CONFIG["github_url"]
+  has_code = "<pre" in content
+  hljs_head = (
+      f'<link rel="stylesheet" href="{root_prefix}vendor/styles/github.min.css" media="(prefers-color-scheme: light)" id="hljs-light">\n'
+      f'<link rel="stylesheet" href="{root_prefix}vendor/styles/github-dark.min.css" media="(prefers-color-scheme: dark)" id="hljs-dark">\n'
+      if has_code else ""
+  )
+  hljs_scripts = (
+      f'<script src="{root_prefix}vendor/highlight.min.js"></script>\n<script>hljs.highlightAll();</script>\n'
+      if has_code else ""
+  )
   return TEMPLATE.format(
       title=title,
       description=description,
@@ -147,6 +153,8 @@ def render(content, title, description, root_prefix, active, wrap_class=""):
       nav_blog=nav["NAV_BLOG"],
       content=content,
       wrap_class=wrap_class,
+      hljs_head=hljs_head,
+      hljs_scripts=hljs_scripts,
   )
 
 
@@ -202,6 +210,7 @@ def discover_posts():
       slug = entry.name
       date = CONFIG["posts"].get(slug, {}).get("date", "")
       posts.append((slug, date, entry, index_md))
+  posts.sort(key=lambda p: p[1], reverse=True)
   return posts
 
 

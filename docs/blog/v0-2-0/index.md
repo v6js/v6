@@ -6,7 +6,7 @@ This release is mostly about WebAssembly, what shipped, what got measured, and w
 
 ### A `.wasm` file is a JVM class, same as a `.js` file
 
-`v6 app.wasm` parses the module, single-pass compiles each WASM function to a JVM method the same way the JS path compiles a function body to bytecode, and executes it through the persistent daemon. A WASM `i32`, `i64`, `f32` and `f64` map onto the JVM's own primitive stack types directly, no boxing and no `V6Value` wrapper, since a WASM function's types are already fully known at compile time and there's no dynamic property access or shape system in the way.
+`v6 app.wasm` parses the module and single-pass compiles each WASM function directly to a JVM method, streaming straight from the binary's function body to bytecode with no intermediate tree, then executes it through the persistent daemon. A WASM `i32`, `i64`, `f32` and `f64` map onto the JVM's own primitive stack types directly, no boxing and no `V6Value` wrapper, since a WASM function's types are already fully known from the binary's own type section and there's no dynamic property access or shape system in the way. This is the one place in the compiler that still works the way the [intro post](../intro/index.html) originally described the whole thing; see the next section for why the JS path no longer does.
 
 ```
 v6 app.wasm
@@ -24,6 +24,18 @@ WebAssembly.instantiate(bytes).then((result) => {
 WASI Preview 1 covers `fd_write`, `proc_exit`, `args_get` / `args_sizes_get`, `environ_get` / `environ_sizes_get`, `random_get` and `clock_time_get`, enough for a typical compiled-to-WASM CLI program. Argv and the host environment pass through by default; `--no-wasi-args`, `--no-wasi-env`, `--no-wasi-random` and `--no-wasi-clock` deny each individually for a sandboxed run.
 
 Routing `.wasm` execution through the same daemon the JS path already uses was the single biggest lever for CLI performance. A cold JVM boot dominates a short-lived WASM CLI invocation the same way it dominates a short-lived script, and the daemon removes that cost the same way for both.
+
+### The JS compiler has an AST now
+
+The [intro post](../intro/index.html) spent its first two sections on a specific architectural claim: V6's JavaScript compiler had no AST, source was lexed and parsed once, and bytecode was emitted directly during that single pass. That is no longer true, and it's worth saying plainly rather than quietly letting the old post go stale.
+
+The JS path now parses a whole program into a real tree first (`ast_parse_program_from`, allocated into an arena), runs a hoisting pass over that completed tree before any code generation happens (`ast_hoist_scope`), and only then walks the tree a second time to emit bytecode (`ast_codegen_stmt_list`). The arena is freed once codegen finishes.
+
+The reason is hoisting correctness, not a change of taste. JavaScript's `var`, function, class and import bindings are visible throughout their entire enclosing scope regardless of where they're lexically written, which means the compiler has to know about a declaration before it reaches it in the source. A true single-pass, emit-while-parsing design structurally cannot do that: by the time parsing reaches a `var` declared halfway through a function, code that referenced it earlier in the same function has already been emitted. Building the tree first and running a dedicated hoisting pass over it before codegen starts is the straightforward way to get this right, and it's what V6 does now.
+
+The tradeoff the intro post described, that a no-AST compiler can't do whole-program optimizations like dead code elimination or cross-function constant folding, no longer applies either, since the whole function or program body is sitting in memory as a tree before codegen touches it. Nothing in v0.2.0 uses that yet, but the door that was previously closed is now open.
+
+WebAssembly compilation, described above, is the one part of the compiler that still works the way the intro post originally described the whole thing: a single pass straight from the binary's bytecode to JVM bytecode, no tree. That's a reasonable fit specifically because a `.wasm` module's binary format is already fully structured and type-annotated by the time it reaches the compiler; there's no hoisting problem to solve, since WASM has no equivalent of JavaScript's declaration-visible-before-declaration semantics.
 
 ### Benchmarks against wasmtime
 

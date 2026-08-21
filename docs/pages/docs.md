@@ -133,7 +133,7 @@ This is the same trust model `make` and `ccache` use for deciding whether a buil
 
 ### Architecture
 
-V6 has no intermediate representation. Source text is lexed and parsed once, and bytecode is emitted directly during that single pass, rather than building an AST first and generating code from it afterward.
+JavaScript source is parsed into a real AST first, then compiled to bytecode in two further passes over that tree: a hoisting pass that declares every `var`, function, class and import binding in a scope before any of that scope's code is generated, followed by the codegen pass itself. This exists because JavaScript's hoisting semantics make a bindings-visible-before-declaration guarantee that a true single-pass, emit-while-parsing compiler cannot satisfy on its own. WebAssembly compilation is the exception: a `.wasm` module's binary format is already fully typed and structured, so it compiles in a genuine single pass straight from the binary to JVM bytecode, no tree involved. See the [v0.2.0 release notes](../blog/v0-2-0/index.html) for the reasoning behind the JS side of this.
 
 #### From source to class file
 
