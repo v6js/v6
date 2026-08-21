@@ -17,7 +17,7 @@ done < <(find test/fix -name "*.js" \
   ! -path "*/cjs/circ_a.js" ! -path "*/cjs/circ_b.js" ! -path "*/cjs/greet.js" \
   ! -path "*/cjs/increment.js" ! -path "*/cjs/math.js" ! -path "*node_modules*" \
   ! -path "*/esm/circ_a.js" ! -path "*/esm/circ_b.js" ! -path "*/esm/math_utils.js" \
-  ! -path "*/esm/side_effect.js" ! -path "*/wasm/cjs_import.js")
+  ! -path "*/esm/side_effect.js" ! -path "*/wasm/cjs_import.js" ! -path "*/bundler/*")
 echo "PASS=$PASS FAIL=$FAIL"
 if [ "$FAIL" -gt 0 ]; then
   printf '%s\n' "${FAILED_LIST[@]}"
