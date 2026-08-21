@@ -131,6 +131,15 @@ void v6_cli_print_help(const char* prog_path) {
           "  -w, --watch             rebuild on file changes\n"
           "  --serve                 serve the bundle with a dev server\n"
           "  --port <n>              dev server port (default: 5173)\n"
+          "  --max-size <size>       warn/error if the bundle exceeds this "
+          "size (e.g. 500kB)\n"
+          "  --max-deps <n>          warn/error if the module count exceeds "
+          "n\n"
+          "  --size-limit <mode>     warn or error when a limit is exceeded "
+          "(default: warn)\n"
+          "  -q, --quiet             suppress the bundle summary output\n"
+          "  --verbose               print resolved imports for each "
+          "module\n"
           "\n"
           "wasi sandboxing (running a .wasm file directly enables WASI fully "
           "by default):\n"
@@ -220,6 +229,16 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
       opts->bundle_serve = 1;
     } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
       opts->bundle_serve_port = atoi(argv[++i]);
+    } else if (strcmp(argv[i], "--max-size") == 0 && i + 1 < argc) {
+      opts->bundle_max_size = argv[++i];
+    } else if (strcmp(argv[i], "--max-deps") == 0 && i + 1 < argc) {
+      opts->bundle_max_deps = argv[++i];
+    } else if (strcmp(argv[i], "--size-limit") == 0 && i + 1 < argc) {
+      opts->bundle_size_limit = argv[++i];
+    } else if (strcmp(argv[i], "-q") == 0 || strcmp(argv[i], "--quiet") == 0) {
+      opts->bundle_quiet = 1;
+    } else if (strcmp(argv[i], "--verbose") == 0) {
+      opts->bundle_verbose = 1;
     } else if (opts->bundle_mode && !opts->bundle_entry) {
       opts->bundle_entry = argv[i];
     } else if (!opts->script_path && !opts->eval_code) {

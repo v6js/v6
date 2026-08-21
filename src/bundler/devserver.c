@@ -10,10 +10,12 @@
 #include "v6/bundler_fsutil.h"
 #include "v6/bundler_graph.h"
 #include "v6/bundler_hmr.h"
+#include "v6/bundler_report.h"
 #include "v6/bundler_strbuf.h"
 #include "v6/bundler_thread.h"
 #include "v6/bundler_watch.h"
 #include "v6/bundler_ws.h"
+#include "v6/color.h"
 #include "v6/module.h"
 
 #include <stdio.h>
@@ -314,6 +316,7 @@ typedef struct watch_thread_ctx {
   const char* entry;
   const char* global_name;
   const char* outfile;
+  v6_bundler_verbosity verbosity;
   hmr_client_list* clients;
 } watch_thread_ctx;
 
@@ -376,15 +379,16 @@ static void watch_thread_fn(void* arg) {
     size_t out_len = 0;
     char* output = v6_bundler_emit(&g, &eopts, &out_len);
     v6_bundler_write_file(wc->outfile, output, out_len);
-    printf("bundled %d module%s -> %s (%zu bytes)\n", g.count,
-          g.count == 1 ? "" : "s", wc->outfile, out_len);
+    v6_bundler_print_bundle_summary(&g, wc->outfile, out_len, wc->verbosity);
     fflush(stdout);
     free(output);
 
     size_t patch_len = 0;
     char* patch = v6_bundler_hmr_compute_patch(&snap, &g, &patch_len);
     if (patch) {
-      printf("hmr: pushing module update\n");
+      int hc = v6_color_enabled_out();
+      printf("%s%s%12s%s pushing module update\n", v6_c_bold(hc), v6_c_cyan(hc), "HMR",
+            v6_c_reset(hc));
       fflush(stdout);
       hmr_broadcast(wc->clients, patch);
       free(patch);
@@ -451,10 +455,17 @@ int v6_bundler_devserver_run(const char* entry, v6_cli_options* opts,
   hmr_client_list clients;
   hmr_list_init(&clients);
 
+  v6_bundler_verbosity verbosity = v6_bundler_verbosity_normal;
+  if (opts->bundle_quiet)
+    verbosity = v6_bundler_verbosity_quiet;
+  else if (opts->bundle_verbose)
+    verbosity = v6_bundler_verbosity_verbose;
+
   watch_thread_ctx* wc = malloc(sizeof(watch_thread_ctx));
   wc->entry = entry;
   wc->global_name = opts->bundle_global_name;
   wc->outfile = outfile;
+  wc->verbosity = verbosity;
   wc->clients = &clients;
   v6_bundler_thread_start(watch_thread_fn, wc);
 

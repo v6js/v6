@@ -2,9 +2,11 @@
 #include "v6/bundler_build.h"
 #include "v6/bundler_devserver.h"
 #include "v6/bundler_html.h"
+#include "v6/bundler_report.h"
 #include "v6/module.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int parse_format(const char* s, v6_bundler_format* out) {
@@ -40,6 +42,44 @@ static int has_suffix(const char* s, const char* suffix) {
   if (lsuf > ls)
     return 0;
   return strcmp(s + ls - lsuf, suffix) == 0;
+}
+
+static int parse_limits(v6_cli_options* opts, v6_bundler_limits* out) {
+  out->max_size = 0;
+  out->max_deps = 0;
+  out->mode = v6_bundler_limit_warn;
+
+  if (opts->bundle_size_limit) {
+    if (strcmp(opts->bundle_size_limit, "warn") == 0) {
+      out->mode = v6_bundler_limit_warn;
+    } else if (strcmp(opts->bundle_size_limit, "error") == 0) {
+      out->mode = v6_bundler_limit_error;
+    } else {
+      fprintf(stderr,
+             "error: unknown --size-limit \"%s\" (expected warn or error)\n",
+             opts->bundle_size_limit);
+      return -1;
+    }
+  }
+
+  if (opts->bundle_max_size) {
+    if (v6_bundler_parse_size(opts->bundle_max_size, &out->max_size) != 0) {
+      fprintf(stderr, "error: invalid --max-size \"%s\"\n", opts->bundle_max_size);
+      return -1;
+    }
+  }
+
+  if (opts->bundle_max_deps) {
+    char* end;
+    long long v = strtoll(opts->bundle_max_deps, &end, 10);
+    if (end == opts->bundle_max_deps || v <= 0) {
+      fprintf(stderr, "error: invalid --max-deps \"%s\"\n", opts->bundle_max_deps);
+      return -1;
+    }
+    out->max_deps = v;
+  }
+
+  return 0;
 }
 
 int v6_cli_run_bundle(v6_cli_options* opts) {
@@ -79,6 +119,16 @@ int v6_cli_run_bundle(v6_cli_options* opts) {
   const char* outfile =
       opts->bundle_outfile ? opts->bundle_outfile : "dist/bundle.js";
 
+  v6_bundler_limits limits;
+  if (parse_limits(opts, &limits) != 0)
+    return 1;
+
+  v6_bundler_verbosity verbosity = v6_bundler_verbosity_normal;
+  if (opts->bundle_quiet)
+    verbosity = v6_bundler_verbosity_quiet;
+  else if (opts->bundle_verbose)
+    verbosity = v6_bundler_verbosity_verbose;
+
   if (opts->bundle_serve) {
     int port = opts->bundle_serve_port > 0 ? opts->bundle_serve_port : 5173;
     return v6_bundler_devserver_run(entry, opts, outfile, port);
@@ -86,9 +136,9 @@ int v6_cli_run_bundle(v6_cli_options* opts) {
 
   if (opts->bundle_watch) {
     return v6_bundler_run_watch_loop(entry, fmt, opts->bundle_global_name, outfile,
-                                 NULL, NULL);
+                                 &limits, verbosity, NULL, NULL);
   }
 
   return v6_bundler_build_js_once(entry, fmt, opts->bundle_global_name, outfile,
-                              NULL, NULL);
+                              &limits, verbosity, NULL, NULL);
 }

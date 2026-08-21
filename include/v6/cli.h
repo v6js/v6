@@ -38,6 +38,11 @@ typedef struct {
   int bundle_watch;
   int bundle_serve;
   int bundle_serve_port;
+  const char* bundle_max_size;
+  const char* bundle_max_deps;
+  const char* bundle_size_limit;
+  int bundle_quiet;
+  int bundle_verbose;
 } v6_cli_options;
 
 v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts);
