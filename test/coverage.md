@@ -1,27 +1,27 @@
 # test262 coverage
 
-**Overall (language + built-ins + annexB): 21.10% (10257/48622)**
+**Overall (language + built-ins + annexB): 21.87% (10636/48622)**
 
 ## By category
 
 | Category | Pass | Total | % | Scored |
 |:---|---:|---:|---:|:---:|
-| language | 7919 | 23724 | 33.38 | yes |
-| built-ins | 2325 | 23812 | 9.76 | yes |
-| annexB | 13 | 1086 | 1.20 | yes |
+| language | 8081 | 23724 | 34.06 | yes |
+| built-ins | 2472 | 23812 | 10.38 | yes |
+| annexB | 83 | 1086 | 7.64 | yes |
 | intl402 | 0 | 3357 | 0.00 | no |
-| staging | 66 | 1483 | 4.45 | no |
+| staging | 95 | 1483 | 6.41 | no |
 
 ## By area (scored categories only)
 
 | Area | Pass | Total | % |
 |:---|---:|---:|---:|
-| annexB/built-ins | 4 | 241 | 1.66 |
-| annexB/language | 9 | 845 | 1.07 |
+| annexB/built-ins | 5 | 241 | 2.07 |
+| annexB/language | 78 | 845 | 9.23 |
 | built-ins/AbstractModuleSource | 0 | 8 | 0.00 |
 | built-ins/AggregateError | 0 | 25 | 0.00 |
-| built-ins/Array | 104 | 3082 | 3.37 |
-| built-ins/ArrayBuffer | 6 | 221 | 2.71 |
+| built-ins/Array | 126 | 3082 | 4.09 |
+| built-ins/ArrayBuffer | 7 | 221 | 3.17 |
 | built-ins/ArrayIteratorPrototype | 0 | 27 | 0.00 |
 | built-ins/AsyncDisposableStack | 0 | 104 | 0.00 |
 | built-ins/AsyncFromSyncIteratorPrototype | 6 | 38 | 15.79 |
@@ -33,33 +33,33 @@
 | built-ins/BigInt | 6 | 77 | 7.79 |
 | built-ins/Boolean | 14 | 51 | 27.45 |
 | built-ins/DataView | 0 | 561 | 0.00 |
-| built-ins/Date | 69 | 594 | 11.62 |
+| built-ins/Date | 84 | 594 | 14.14 |
 | built-ins/DisposableStack | 0 | 93 | 0.00 |
-| built-ins/Error | 6 | 93 | 6.45 |
+| built-ins/Error | 3 | 93 | 3.23 |
 | built-ins/FinalizationRegistry | 0 | 47 | 0.00 |
-| built-ins/Function | 60 | 509 | 11.79 |
+| built-ins/Function | 59 | 509 | 11.59 |
 | built-ins/GeneratorFunction | 0 | 23 | 0.00 |
 | built-ins/GeneratorPrototype | 34 | 61 | 55.74 |
 | built-ins/Infinity | 2 | 6 | 33.33 |
 | built-ins/Iterator | 0 | 654 | 0.00 |
-| built-ins/JSON | 11 | 165 | 6.67 |
-| built-ins/Map | 13 | 204 | 6.37 |
+| built-ins/JSON | 17 | 165 | 10.30 |
+| built-ins/Map | 16 | 204 | 7.84 |
 | built-ins/MapIteratorPrototype | 0 | 11 | 0.00 |
-| built-ins/Math | 58 | 327 | 17.74 |
+| built-ins/Math | 99 | 327 | 30.28 |
 | built-ins/NaN | 2 | 6 | 33.33 |
 | built-ins/NativeErrors | 18 | 94 | 19.15 |
-| built-ins/Number | 106 | 340 | 31.18 |
-| built-ins/Object | 827 | 3411 | 24.25 |
-| built-ins/Promise | 40 | 732 | 5.46 |
+| built-ins/Number | 115 | 340 | 33.82 |
+| built-ins/Object | 749 | 3411 | 21.96 |
+| built-ins/Promise | 66 | 732 | 9.02 |
 | built-ins/Proxy | 0 | 311 | 0.00 |
 | built-ins/Reflect | 0 | 153 | 0.00 |
-| built-ins/RegExp | 403 | 1879 | 21.45 |
+| built-ins/RegExp | 550 | 1879 | 29.27 |
 | built-ins/RegExpStringIteratorPrototype | 0 | 17 | 0.00 |
-| built-ins/Set | 9 | 383 | 2.35 |
+| built-ins/Set | 27 | 383 | 7.05 |
 | built-ins/SetIteratorPrototype | 0 | 11 | 0.00 |
 | built-ins/ShadowRealm | 0 | 64 | 0.00 |
 | built-ins/SharedArrayBuffer | 0 | 104 | 0.00 |
-| built-ins/String | 331 | 1223 | 27.06 |
+| built-ins/String | 261 | 1223 | 21.34 |
 | built-ins/StringIteratorPrototype | 0 | 7 | 0.00 |
 | built-ins/SuppressedError | 0 | 22 | 0.00 |
 | built-ins/Symbol | 7 | 98 | 7.14 |
@@ -68,9 +68,9 @@
 | built-ins/TypedArray | 0 | 1446 | 0.00 |
 | built-ins/TypedArrayConstructors | 1 | 738 | 0.14 |
 | built-ins/Uint8Array | 0 | 70 | 0.00 |
-| built-ins/WeakMap | 4 | 141 | 2.84 |
+| built-ins/WeakMap | 10 | 141 | 7.09 |
 | built-ins/WeakRef | 0 | 29 | 0.00 |
-| built-ins/WeakSet | 4 | 85 | 4.71 |
+| built-ins/WeakSet | 9 | 85 | 10.59 |
 | built-ins/decodeURI | 8 | 55 | 14.55 |
 | built-ins/decodeURIComponent | 13 | 56 | 23.21 |
 | built-ins/encodeURI | 17 | 31 | 54.84 |
@@ -82,33 +82,33 @@
 | built-ins/parseFloat | 41 | 54 | 75.93 |
 | built-ins/parseInt | 43 | 55 | 78.18 |
 | built-ins/undefined | 1 | 8 | 12.50 |
-| language/arguments-object | 19 | 263 | 7.22 |
-| language/asi | 85 | 102 | 83.33 |
+| language/arguments-object | 116 | 263 | 44.11 |
+| language/asi | 89 | 102 | 87.25 |
 | language/block-scope | 44 | 145 | 30.34 |
 | language/comments | 30 | 52 | 57.69 |
 | language/computed-property-names | 22 | 48 | 45.83 |
 | language/destructuring | 13 | 19 | 68.42 |
-| language/directive-prologue | 6 | 62 | 9.68 |
+| language/directive-prologue | 24 | 62 | 38.71 |
 | language/eval-code | 7 | 347 | 2.02 |
 | language/export | 3 | 3 | 100.00 |
-| language/expressions | 3940 | 11102 | 35.49 |
+| language/expressions | 4020 | 11102 | 36.21 |
 | language/function-code | 72 | 217 | 33.18 |
 | language/future-reserved-words | 34 | 55 | 61.82 |
 | language/global-code | 6 | 42 | 14.29 |
-| language/identifier-resolution | 5 | 14 | 35.71 |
-| language/identifiers | 114 | 268 | 42.54 |
+| language/identifier-resolution | 6 | 14 | 42.86 |
+| language/identifiers | 116 | 268 | 43.28 |
 | language/import | 14 | 129 | 10.85 |
 | language/keywords | 25 | 25 | 100.00 |
-| language/line-terminators | 15 | 41 | 36.59 |
-| language/literals | 192 | 534 | 35.96 |
+| language/line-terminators | 11 | 41 | 26.83 |
+| language/literals | 188 | 534 | 35.21 |
 | language/module-code | 152 | 599 | 25.38 |
 | language/punctuators | 11 | 11 | 100.00 |
-| language/reserved-words | 24 | 27 | 88.89 |
-| language/rest-parameters | 6 | 11 | 54.55 |
+| language/reserved-words | 13 | 27 | 48.15 |
+| language/rest-parameters | 1 | 11 | 9.09 |
 | language/source-text | 1 | 1 | 100.00 |
-| language/statementList | 40 | 80 | 50.00 |
-| language/statements | 2940 | 9347 | 31.45 |
-| language/types | 72 | 113 | 63.72 |
+| language/statementList | 36 | 80 | 45.00 |
+| language/statements | 2929 | 9347 | 31.34 |
+| language/types | 71 | 113 | 62.83 |
 | language/white-space | 27 | 67 | 40.30 |
 
 ## By declared feature
@@ -118,15 +118,15 @@
 | AggregateError | 0 | 31 | 0.00 |
 | Array.fromAsync | 0 | 95 | 0.00 |
 | Array.prototype.at | 0 | 12 | 0.00 |
-| Array.prototype.flat | 0 | 15 | 0.00 |
+| Array.prototype.flat | 7 | 15 | 46.67 |
 | Array.prototype.flatMap | 0 | 21 | 0.00 |
-| Array.prototype.includes | 0 | 69 | 0.00 |
+| Array.prototype.includes | 3 | 69 | 4.35 |
 | Array.prototype.values | 0 | 4 | 0.00 |
 | ArrayBuffer | 2 | 278 | 0.72 |
 | Atomics | 0 | 386 | 0.00 |
 | Atomics.pause | 0 | 5 | 0.00 |
 | Atomics.waitAsync | 0 | 101 | 0.00 |
-| BigInt | 65 | 1499 | 4.34 |
+| BigInt | 68 | 1499 | 4.54 |
 | DataView | 0 | 193 | 0.00 |
 | DataView.prototype.getFloat32 | 0 | 7 | 0.00 |
 | DataView.prototype.getFloat64 | 0 | 5 | 0.00 |
@@ -165,12 +165,12 @@
 | Iterator.prototype.join | 0 | 18 | 0.00 |
 | Map | 5 | 40 | 12.50 |
 | Math.sumPrecise | 0 | 10 | 0.00 |
-| Object.fromEntries | 2 | 25 | 8.00 |
-| Object.hasOwn | 52 | 62 | 83.87 |
+| Object.fromEntries | 4 | 25 | 16.00 |
+| Object.hasOwn | 5 | 62 | 8.06 |
 | Object.is | 1 | 2 | 50.00 |
 | Promise | 2 | 4 | 50.00 |
-| Promise.allSettled | 1 | 102 | 0.98 |
-| Promise.any | 0 | 92 | 0.00 |
+| Promise.allSettled | 21 | 102 | 20.59 |
+| Promise.any | 6 | 92 | 6.52 |
 | Promise.prototype.finally | 0 | 29 | 0.00 |
 | Proxy | 0 | 479 | 0.00 |
 | Reflect | 0 | 478 | 0.00 |
@@ -182,30 +182,30 @@
 | ShadowRealm | 0 | 64 | 0.00 |
 | SharedArrayBuffer | 0 | 467 | 0.00 |
 | String.fromCodePoint | 10 | 22 | 45.45 |
-| String.prototype.at | 0 | 11 | 0.00 |
+| String.prototype.at | 2 | 11 | 18.18 |
 | String.prototype.endsWith | 0 | 27 | 0.00 |
-| String.prototype.includes | 0 | 26 | 0.00 |
+| String.prototype.includes | 4 | 26 | 15.38 |
 | String.prototype.isWellFormed | 0 | 8 | 0.00 |
 | String.prototype.matchAll | 0 | 16 | 0.00 |
 | String.prototype.replaceAll | 0 | 41 | 0.00 |
 | String.prototype.toWellFormed | 0 | 8 | 0.00 |
 | String.prototype.trimEnd | 0 | 24 | 0.00 |
 | String.prototype.trimStart | 2 | 23 | 8.70 |
-| Symbol | 29 | 1484 | 1.95 |
+| Symbol | 44 | 1484 | 2.96 |
 | Symbol.asyncIterator | 0 | 538 | 0.00 |
 | Symbol.hasInstance | 0 | 17 | 0.00 |
 | Symbol.isConcatSpreadable | 0 | 34 | 0.00 |
-| Symbol.iterator | 146 | 1867 | 7.82 |
+| Symbol.iterator | 170 | 1867 | 9.11 |
 | Symbol.match | 5 | 88 | 5.68 |
-| Symbol.matchAll | 4 | 63 | 6.35 |
+| Symbol.matchAll | 0 | 63 | 0.00 |
 | Symbol.prototype.description | 2 | 8 | 25.00 |
-| Symbol.replace | 8 | 98 | 8.16 |
-| Symbol.search | 4 | 37 | 10.81 |
-| Symbol.species | 3 | 284 | 1.06 |
+| Symbol.replace | 0 | 98 | 0.00 |
+| Symbol.search | 0 | 37 | 0.00 |
+| Symbol.species | 6 | 284 | 2.11 |
 | Symbol.split | 0 | 58 | 0.00 |
 | Symbol.toPrimitive | 0 | 233 | 0.00 |
-| Symbol.toStringTag | 1 | 131 | 0.76 |
-| Symbol.unscopables | 0 | 45 | 0.00 |
+| Symbol.toStringTag | 2 | 131 | 1.53 |
+| Symbol.unscopables | 1 | 45 | 2.22 |
 | Temporal | 0 | 6714 | 0.00 |
 | TypedArray | 7 | 2521 | 0.28 |
 | TypedArray.prototype.at | 0 | 13 | 0.00 |
@@ -213,53 +213,53 @@
 | Uint32Array | 0 | 2 | 0.00 |
 | Uint8Array | 2 | 13 | 15.38 |
 | Uint8ClampedArray | 0 | 6 | 0.00 |
-| WeakMap | 3 | 79 | 3.80 |
+| WeakMap | 9 | 79 | 11.39 |
 | WeakRef | 0 | 37 | 0.00 |
-| WeakSet | 3 | 34 | 8.82 |
+| WeakSet | 8 | 34 | 23.53 |
 | __getter__ | 0 | 27 | 0.00 |
-| __proto__ | 0 | 20 | 0.00 |
+| __proto__ | 1 | 20 | 5.00 |
 | __setter__ | 0 | 27 | 0.00 |
 | align-detached-buffer-semantics-with-web-reality | 0 | 158 | 0.00 |
 | arbitrary-module-namespace-names | 5 | 16 | 31.25 |
 | array-find-from-last | 0 | 109 | 0.00 |
 | array-grouping | 0 | 28 | 0.00 |
 | arraybuffer-transfer | 0 | 59 | 0.00 |
-| arrow-function | 141 | 949 | 14.86 |
-| async-functions | 287 | 702 | 40.88 |
-| async-iteration | 1203 | 4971 | 24.20 |
+| arrow-function | 149 | 949 | 15.70 |
+| async-functions | 288 | 702 | 41.03 |
+| async-iteration | 1201 | 4971 | 24.16 |
 | await-dictionary | 0 | 89 | 0.00 |
-| caller | 18 | 23 | 78.26 |
+| caller | 17 | 23 | 73.91 |
 | canonical-tz | 0 | 19 | 0.00 |
 | change-array-by-copy | 0 | 132 | 0.00 |
-| class | 957 | 4794 | 19.96 |
-| class-fields-private | 107 | 1134 | 9.44 |
+| class | 986 | 4794 | 20.57 |
+| class-fields-private | 124 | 1134 | 10.93 |
 | class-fields-private-in | 2 | 19 | 10.53 |
 | class-fields-public | 159 | 2058 | 7.73 |
-| class-methods-private | 426 | 1709 | 24.93 |
+| class-methods-private | 440 | 1709 | 25.75 |
 | class-static-block | 28 | 65 | 43.08 |
 | class-static-fields-private | 4 | 345 | 1.16 |
 | class-static-fields-public | 29 | 213 | 13.62 |
-| class-static-methods-private | 380 | 1513 | 25.12 |
-| coalesce-expression | 19 | 26 | 73.08 |
+| class-static-methods-private | 395 | 1513 | 26.11 |
+| coalesce-expression | 1 | 26 | 3.85 |
 | computed-property-names | 152 | 478 | 31.80 |
 | const | 0 | 15 | 0.00 |
 | cross-realm | 0 | 203 | 0.00 |
 | decorators | 2 | 27 | 7.41 |
-| default-parameters | 1005 | 2269 | 44.29 |
+| default-parameters | 994 | 2269 | 43.81 |
 | destructuring-assignment | 90 | 141 | 63.83 |
-| destructuring-binding | 2515 | 6637 | 37.89 |
+| destructuring-binding | 2503 | 6637 | 37.71 |
 | dynamic-import | 376 | 1011 | 37.19 |
 | error-cause | 0 | 5 | 0.00 |
 | error-stack-accessor | 0 | 35 | 0.00 |
 | explicit-resource-management | 62 | 483 | 12.84 |
-| exponentiation | 45 | 104 | 43.27 |
+| exponentiation | 20 | 104 | 19.23 |
 | export-star-as-namespace-from-module | 4 | 19 | 21.05 |
 | for-in-order | 1 | 9 | 11.11 |
 | for-of | 0 | 5 | 0.00 |
-| generators | 1355 | 4118 | 32.90 |
+| generators | 1392 | 4118 | 33.80 |
 | globalThis | 7 | 148 | 4.73 |
 | hashbang | 19 | 29 | 65.52 |
-| host-gc-required | 0 | 15 | 0.00 |
+| host-gc-required | 1 | 15 | 6.67 |
 | immutable-arraybuffer | 0 | 66 | 0.00 |
 | import-attributes | 14 | 101 | 13.86 |
 | import-bytes | 0 | 5 | 0.00 |
@@ -276,26 +276,26 @@
 | json-parse-with-source | 0 | 22 | 0.00 |
 | json-superset | 2 | 4 | 50.00 |
 | legacy-regexp | 0 | 26 | 0.00 |
-| let | 8 | 77 | 10.39 |
-| logical-assignment-operators | 19 | 108 | 17.59 |
-| new.target | 10 | 63 | 15.87 |
+| let | 6 | 77 | 7.79 |
+| logical-assignment-operators | 51 | 108 | 47.22 |
+| new.target | 16 | 63 | 25.40 |
 | nonextensible-applies-to-private | 0 | 4 | 0.00 |
 | numeric-separator-literal | 102 | 159 | 64.15 |
 | object-rest | 6 | 358 | 1.68 |
-| object-spread | 66 | 135 | 48.89 |
+| object-spread | 56 | 135 | 41.48 |
 | optional-catch-binding | 1 | 5 | 20.00 |
 | optional-chaining | 35 | 56 | 62.50 |
 | promise-try | 0 | 15 | 0.00 |
 | promise-with-resolvers | 0 | 10 | 0.00 |
 | proxy-missing-checks | 0 | 3 | 0.00 |
-| regexp-dotall | 2 | 17 | 11.76 |
+| regexp-dotall | 1 | 17 | 5.88 |
 | regexp-duplicate-named-groups | 0 | 19 | 0.00 |
-| regexp-lookbehind | 7 | 19 | 36.84 |
+| regexp-lookbehind | 8 | 19 | 42.11 |
 | regexp-match-indices | 1 | 31 | 3.23 |
 | regexp-modifiers | 57 | 230 | 24.78 |
 | regexp-named-groups | 4 | 100 | 4.00 |
-| regexp-unicode-property-escapes | 0 | 681 | 0.00 |
-| regexp-v-flag | 15 | 187 | 8.02 |
+| regexp-unicode-property-escapes | 148 | 681 | 21.73 |
+| regexp-v-flag | 14 | 187 | 7.49 |
 | resizable-arraybuffer | 0 | 465 | 0.00 |
 | rest-parameters | 12 | 96 | 12.50 |
 | set-methods | 0 | 193 | 0.00 |
@@ -305,11 +305,11 @@
 | stable-typedarray-sort | 0 | 1 | 0.00 |
 | string-trimming | 2 | 54 | 3.70 |
 | super | 5 | 19 | 26.32 |
-| symbols-as-weakmap-keys | 0 | 29 | 0.00 |
+| symbols-as-weakmap-keys | 3 | 29 | 10.34 |
 | tail-call-optimization | 0 | 35 | 0.00 |
-| template | 0 | 1 | 0.00 |
+| template | 1 | 1 | 100.00 |
 | top-level-await | 4 | 277 | 1.44 |
-| u180e | 14 | 25 | 56.00 |
+| u180e | 13 | 25 | 52.00 |
 | uint8array-base64 | 0 | 71 | 0.00 |
 | upsert | 0 | 72 | 0.00 |
 | well-formed-json-stringify | 0 | 1 | 0.00 |
@@ -319,5 +319,5 @@
 | Category | Pass | Total | % |
 |:---|---:|---:|---:|
 | intl402 | 0 | 3357 | 0.00 |
-| staging | 66 | 1483 | 4.45 |
+| staging | 95 | 1483 | 6.41 |
 
