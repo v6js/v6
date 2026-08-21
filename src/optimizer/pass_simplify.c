@@ -1,7 +1,63 @@
 #include "v6/optimizer_pass.h"
+#include "v6/optimizer_print.h"
 
 static int is_num_literal(ast_node* n, double v) {
   return n->kind == ast_num && n->num == v;
+}
+
+static void copy_node(ast_node* dst, ast_node* src) {
+  int line = dst->line;
+  *dst = *src;
+  dst->line = line;
+}
+
+static int is_pure_expr(ast_node* n) {
+  switch (n->kind) {
+  case ast_num:
+  case ast_bigint:
+  case ast_str:
+  case ast_bool:
+  case ast_null:
+  case ast_undef:
+  case ast_ident:
+  case ast_this:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+static int simplify_seq(ast_node* n) {
+  int out = 0;
+  int removed = 0;
+  for (int i = 0; i < n->list.len; i++) {
+    ast_node* item = n->list.items[i];
+    int is_last = i == n->list.len - 1;
+    if (!is_last && is_pure_expr(item)) {
+      removed = 1;
+      continue;
+    }
+    n->list.items[out++] = item;
+  }
+  if (out != n->list.len)
+    n->list.len = out;
+  if (n->list.len == 1) {
+    copy_node(n, n->list.items[0]);
+    return 1;
+  }
+  return removed;
+}
+
+static int simplify_member(ast_node* n) {
+  if (!n->flag_a || n->b->kind != ast_str)
+    return 0;
+  if (!v6_opt_is_valid_ident_name(n->b->str, n->b->str_len))
+    return 0;
+  n->flag_a = 0;
+  n->str = n->b->str;
+  n->str_len = n->b->str_len;
+  n->b = NULL;
+  return 1;
 }
 
 static void become_unary(ast_node* n, tok_kind op, ast_node* operand) {
@@ -104,6 +160,8 @@ static void simplify_expr(ast_node* n, int* changed) {
     break;
   case ast_seq:
     simplify_list(&n->list, changed);
+    if (simplify_seq(n))
+      *changed = 1;
     break;
   case ast_spread:
   case ast_await:
@@ -116,8 +174,14 @@ static void simplify_expr(ast_node* n, int* changed) {
   case ast_object_lit:
     for (int i = 0; i < n->props.len; i++) {
       ast_prop* p = &n->props.items[i];
-      if (p->computed)
+      if (p->computed) {
         simplify_expr(p->key, changed);
+        if (p->key->kind == ast_str &&
+            v6_opt_is_valid_ident_name(p->key->str, p->key->str_len)) {
+          p->computed = 0;
+          *changed = 1;
+        }
+      }
       simplify_expr(p->value, changed);
     }
     break;
@@ -125,6 +189,8 @@ static void simplify_expr(ast_node* n, int* changed) {
     simplify_expr(n->a, changed);
     if (n->flag_a)
       simplify_expr(n->b, changed);
+    if (simplify_member(n))
+      *changed = 1;
     break;
   case ast_call:
   case ast_new:
@@ -189,8 +255,14 @@ static void simplify_stmt(ast_node* n, int* changed) {
       simplify_expr(n->a, changed);
     for (int i = 0; i < n->members.len; i++) {
       ast_class_member* m = &n->members.items[i];
-      if (m->computed)
+      if (m->computed) {
         simplify_expr(m->key, changed);
+        if (m->key->kind == ast_str &&
+            v6_opt_is_valid_ident_name(m->key->str, m->key->str_len)) {
+          m->computed = 0;
+          *changed = 1;
+        }
+      }
       if (m->value)
         simplify_expr(m->value, changed);
     }

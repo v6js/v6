@@ -1,5 +1,40 @@
 #include "v6/optimizer_pass.h"
 
+#include <string.h>
+
+static void list_ensure_cap(ast_arena* arena, ast_list* list, int min_cap) {
+  if (list->cap >= min_cap)
+    return;
+  int new_cap = list->cap == 0 ? 4 : list->cap * 2;
+  while (new_cap < min_cap)
+    new_cap *= 2;
+  ast_node** items =
+      ast_arena_alloc(arena, sizeof(ast_node*) * (size_t)new_cap);
+  if (list->items)
+    memcpy(items, list->items, sizeof(ast_node*) * (size_t)list->len);
+  list->items = items;
+  list->cap = new_cap;
+}
+
+static void list_replace_one(ast_arena* arena, ast_list* list, int at,
+                             ast_node** src, int count) {
+  if (count == 1) {
+    list->items[at] = src[0];
+    return;
+  }
+  if (count == 0) {
+    memmove(list->items + at, list->items + at + 1,
+            sizeof(ast_node*) * (size_t)(list->len - at - 1));
+    list->len -= 1;
+    return;
+  }
+  list_ensure_cap(arena, list, list->len + count - 1);
+  memmove(list->items + at + count, list->items + at + 1,
+          sizeof(ast_node*) * (size_t)(list->len - at - 1));
+  memcpy(list->items + at, src, sizeof(ast_node*) * (size_t)count);
+  list->len += count - 1;
+}
+
 static int is_terminator(ast_node* s) {
   if (!s)
     return 0;
@@ -11,6 +46,37 @@ static int is_terminator(ast_node* s) {
     return 1;
   case ast_block:
     return s->list.len > 0 && is_terminator(s->list.items[s->list.len - 1]);
+  default:
+    return 0;
+  }
+}
+
+static int is_switch_literal(ast_node* n) {
+  switch (n->kind) {
+  case ast_num:
+  case ast_str:
+  case ast_bool:
+  case ast_null:
+  case ast_undef:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+static int literal_strict_eq(ast_node* a, ast_node* b) {
+  if (a->kind != b->kind)
+    return 0;
+  switch (a->kind) {
+  case ast_num:
+    return a->num == b->num;
+  case ast_str:
+    return a->str_len == b->str_len && memcmp(a->str, b->str, a->str_len) == 0;
+  case ast_bool:
+    return a->flag_a == b->flag_a;
+  case ast_null:
+  case ast_undef:
+    return 1;
   default:
     return 0;
   }
@@ -117,10 +183,61 @@ static void dce_stmt(ast_arena* arena, ast_node* n, int* changed) {
   case ast_for_of:
     dce_stmt(arena, n->c, changed);
     break;
-  case ast_switch:
+  case ast_switch: {
+    if (is_switch_literal(n->a)) {
+      int matched_idx = -1, default_idx = -1, give_up = 0;
+      for (int i = 0; i < n->cases.len; i++) {
+        ast_switch_case* c = &n->cases.items[i];
+        if (!c->test) {
+          default_idx = i;
+          continue;
+        }
+        if (!is_switch_literal(c->test)) {
+          give_up = 1;
+          break;
+        }
+        if (literal_strict_eq(n->a, c->test)) {
+          matched_idx = i;
+          break;
+        }
+      }
+      if (!give_up) {
+        int start = matched_idx >= 0 ? matched_idx : default_idx;
+        if (start < 0) {
+          become_empty(n);
+          *changed = 1;
+          break;
+        }
+        ast_list* body = &n->cases.items[start].body;
+        int body_terminates =
+            body->len > 0 && is_terminator(body->items[body->len - 1]);
+        int is_last_case = start == n->cases.len - 1;
+        if (body_terminates || is_last_case) {
+          int drop_last = body->len > 0 &&
+                          body->items[body->len - 1]->kind == ast_break &&
+                          body->items[body->len - 1]->str_len == 0;
+          int count = body->len - (drop_last ? 1 : 0);
+          ast_node** items =
+              count > 0
+                  ? ast_arena_alloc(arena, sizeof(ast_node*) * (size_t)count)
+                  : NULL;
+          for (int k = 0; k < count; k++)
+            items[k] = body->items[k];
+          n->kind = ast_block;
+          n->a = n->b = n->c = n->d = NULL;
+          n->list.items = items;
+          n->list.len = count;
+          n->list.cap = count;
+          *changed = 1;
+          dce_stmt(arena, n, changed);
+          break;
+        }
+      }
+    }
     for (int i = 0; i < n->cases.len; i++)
       dce_list(arena, &n->cases.items[i].body, changed);
     break;
+  }
   case ast_try:
     dce_stmt(arena, n->a, changed);
     dce_stmt(arena, n->c, changed);
@@ -165,6 +282,27 @@ static int has_hoisted_decl(ast_node* s) {
   return 0;
 }
 
+static int block_is_unwrappable(ast_node* block) {
+  for (int i = 0; i < block->list.len; i++) {
+    ast_node* s = block->list.items[i];
+    if (s->kind == ast_func_decl || s->kind == ast_class_decl)
+      return 0;
+    if (s->kind == ast_var_decl && s->flag_a != tok_kw_var)
+      return 0;
+  }
+  return 1;
+}
+
+static void unwrap_blocks(ast_arena* arena, ast_list* list, int* changed) {
+  for (int i = 0; i < list->len; i++) {
+    ast_node* s = list->items[i];
+    if (s->kind == ast_block && block_is_unwrappable(s)) {
+      list_replace_one(arena, list, i, s->list.items, s->list.len);
+      *changed = 1;
+    }
+  }
+}
+
 static void dce_list(ast_arena* arena, ast_list* list, int* changed) {
   int cut_at = -1;
   for (int i = 0; i < list->len; i++) {
@@ -201,6 +339,8 @@ static void dce_list(ast_arena* arena, ast_list* list, int* changed) {
     *changed = 1;
     list->len = out;
   }
+
+  unwrap_blocks(arena, list, changed);
 }
 
 int v6_opt_pass_dead_code(ast_node* program, ast_arena* arena) {

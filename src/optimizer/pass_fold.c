@@ -429,6 +429,86 @@ static int fold_cond(ast_node* n) {
   return 1;
 }
 
+static int fold_member(ast_node* n) {
+  ast_node* obj = n->a;
+  if (obj->kind == ast_array_lit) {
+    if (!n->flag_a)
+      return 0;
+    const_val idx_v;
+    if (!get_const(n->b, &idx_v) || idx_v.kind != cv_num)
+      return 0;
+    double idxd = idx_v.num;
+    if (idxd != trunc(idxd) || idxd < 0)
+      return 0;
+    for (int i = 0; i < obj->list.len; i++) {
+      if (obj->list.items[i]->kind == ast_spread ||
+          obj->list.items[i]->kind == ast_pat_hole)
+        return 0;
+    }
+    int idx = (int)idxd;
+    if (idx >= obj->list.len)
+      return 0;
+    copy_node(n, obj->list.items[idx]);
+    return 1;
+  }
+  if (obj->kind == ast_object_lit) {
+    const char* key;
+    size_t key_len;
+    if (n->flag_a) {
+      const_val kv;
+      if (!get_const(n->b, &kv))
+        return 0;
+      key = to_string_val(g_fold_arena, kv, &key_len);
+    } else {
+      key = n->str;
+      key_len = n->str_len;
+    }
+    for (int i = 0; i < obj->props.len; i++) {
+      if (obj->props.items[i].is_spread || obj->props.items[i].computed)
+        return 0;
+    }
+    ast_prop* found = NULL;
+    for (int i = 0; i < obj->props.len; i++) {
+      ast_prop* p = &obj->props.items[i];
+      if (p->key->kind == ast_str && p->key->str_len == key_len &&
+          memcmp(p->key->str, key, key_len) == 0)
+        found = p;
+    }
+    if (!found || found->is_getter || found->is_setter || found->is_method)
+      return 0;
+    copy_node(n, found->value);
+    return 1;
+  }
+  return 0;
+}
+
+static int fold_template(ast_node* n) {
+  for (int i = 0; i < n->list.len; i++) {
+    const_val v;
+    if (!get_const(n->list.items[i], &v))
+      return 0;
+  }
+  v6_opt_buf buf;
+  v6_opt_buf_init(&buf);
+  for (int i = 0; i < n->quasis_cooked.len; i++) {
+    ast_node* q = n->quasis_cooked.items[i];
+    v6_opt_buf_append(&buf, q->str, q->str_len);
+    if (i < n->list.len) {
+      const_val v;
+      get_const(n->list.items[i], &v);
+      size_t sl;
+      const char* s = to_string_val(g_fold_arena, v, &sl);
+      v6_opt_buf_append(&buf, s, sl);
+    }
+  }
+  size_t total_len;
+  char* result = v6_opt_buf_take(&buf, &total_len);
+  char* arena_copy = ast_arena_strdup(g_fold_arena, result, total_len);
+  free(result);
+  set_str(n, arena_copy, total_len);
+  return 1;
+}
+
 static void fold_list(ast_list* list, int* changed);
 static void fold_expr(ast_node* n, int* changed);
 static void fold_stmt(ast_node* n, int* changed);
@@ -491,6 +571,8 @@ static void fold_expr(ast_node* n, int* changed) {
     fold_expr(n->a, changed);
     if (n->flag_a)
       fold_expr(n->b, changed);
+    if (fold_member(n))
+      *changed = 1;
     break;
   case ast_call:
   case ast_new:
@@ -499,6 +581,8 @@ static void fold_expr(ast_node* n, int* changed) {
     break;
   case ast_template:
     fold_list(&n->list, changed);
+    if (fold_template(n))
+      *changed = 1;
     break;
   case ast_tagged_template:
     fold_expr(n->a, changed);

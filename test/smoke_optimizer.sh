@@ -60,6 +60,10 @@ check_js_fixture dead-code --opt-dead-code
 check_js_fixture control-flow-simplify --opt-control-flow
 check_js_fixture dead-store --opt-dead-store
 check_js_fixture obfuscation --opt-obfuscation
+check_js_fixture switch-fold --opt-dead-code
+check_js_fixture seq-bool -Oz
+check_js_fixture computed-access --opt-algebraic-simplify
+check_js_fixture literal-access --opt-const-fold
 
 for dir in test/fix/optimizer/*/; do
   name=$(basename "$dir")

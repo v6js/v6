@@ -534,7 +534,7 @@ static const char* assign_text(tok_kind op) {
   }
 }
 
-static int expr_own_prec(ast_node* node) {
+static int expr_own_prec(ast_node* node, const v6_opt_print_opts* opts) {
   switch (node->kind) {
   case ast_seq:
     return prec_seq;
@@ -563,6 +563,8 @@ static int expr_own_prec(ast_node* node) {
     return prec_call;
   case ast_paren_pattern_assign:
     return prec_assign;
+  case ast_bool:
+    return opts->minify ? prec_unary : prec_primary;
   default:
     return prec_primary;
   }
@@ -604,7 +606,7 @@ static void print_expr_prec(v6_opt_buf* out, ast_node* node, int min_prec,
   if (!node)
     return;
 
-  int own_prec = expr_own_prec(node);
+  int own_prec = expr_own_prec(node, opts);
   int force_parens = 0;
 
   if (node->kind == ast_logical && node->op == tok_question_question) {
@@ -644,7 +646,10 @@ static void print_expr_prec(v6_opt_buf* out, ast_node* node, int min_prec,
     v6_opt_buf_append(out, node->str2, node->str2_len);
     break;
   case ast_bool:
-    emit_cstr(out, node->flag_a ? "true" : "false");
+    if (opts->minify)
+      emit_cstr(out, node->flag_a ? "!0" : "!1");
+    else
+      emit_cstr(out, node->flag_a ? "true" : "false");
     break;
   case ast_null:
     emit_cstr(out, "null");

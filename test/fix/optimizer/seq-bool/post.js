@@ -1,0 +1,1 @@
+console.log(3);console.log((sideEffect(),5));function sideEffect(){console.log("effect");return 99;}let x="hi";console.log(x);console.log(!0,!1);console.log((!0).toString());console.log((!1).toString());let arr=[!0,!1,!0];console.log(JSON.stringify(arr));function usesBool(a){return a===!0;}console.log(usesBool(!0));

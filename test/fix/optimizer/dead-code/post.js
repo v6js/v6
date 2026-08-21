@@ -7,9 +7,7 @@ function deadIfFalse(x) {
   return x;
 }
 function keepIfTrue(x) {
-  {
-    console.log("kept branch");
-  }
+  console.log("kept branch");
   return x;
 }
 function deadWhile() {

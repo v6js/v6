@@ -1,0 +1,10 @@
+console.log([1, 2, 3][1]);
+console.log({ a: 1, b: 2 }.b);
+console.log({ a: 1, b: 2 }["a"]);
+console.log({ a: 1, a: 2 }.a);
+console.log([...[1, 2]][0]);
+console.log({ get x() { return 5; } }.x);
+let n = 3;
+console.log(`value is ${n} and ${1 + 1}`);
+console.log(`no subs here`);
+console.log(`mixed ${n} static ${"str"}`);
