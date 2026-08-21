@@ -121,6 +121,15 @@ void v6_cli_print_help(const char* prog_path) {
           "  -v, --version           print the version and exit\n"
           "  -h, --help              print this help and exit\n"
           "\n"
+          "bundler:\n"
+          "  -b [entry]              bundle [entry] (default: auto-detected)\n"
+          "  --format <fmt>          esm, cjs, or iife (default: esm)\n"
+          "  --outfile <path>        output file (default: dist/bundle.js)\n"
+          "  --name <ident>          global variable name for iife output\n"
+          "  -w, --watch             rebuild on file changes\n"
+          "  --serve                 serve the bundle with a dev server\n"
+          "  --port <n>              dev server port (default: 5173)\n"
+          "\n"
           "wasi sandboxing (running a .wasm file directly enables WASI fully "
           "by default):\n"
           "  --no-wasi-args          don't pass CLI args through as WASI "
@@ -163,6 +172,13 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
   opts->script_args = argc > 1 ? malloc(sizeof(char*) * (size_t)argc) : NULL;
 
   for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--bundle") == 0) {
+      opts->bundle_mode = 1;
+      break;
+    }
+  }
+
+  for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
       opts->out_path = argv[++i];
     } else if ((strcmp(argv[i], "-cp") == 0 ||
@@ -186,6 +202,22 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
       opts->color_mode = v6_color_always;
     } else if (strcmp(argv[i], "--no-color") == 0) {
       opts->color_mode = v6_color_never;
+    } else if (strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--bundle") == 0) {
+      opts->bundle_mode = 1;
+    } else if (strcmp(argv[i], "--format") == 0 && i + 1 < argc) {
+      opts->bundle_format = argv[++i];
+    } else if (strcmp(argv[i], "--outfile") == 0 && i + 1 < argc) {
+      opts->bundle_outfile = argv[++i];
+    } else if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
+      opts->bundle_global_name = argv[++i];
+    } else if (strcmp(argv[i], "-w") == 0 || strcmp(argv[i], "--watch") == 0) {
+      opts->bundle_watch = 1;
+    } else if (strcmp(argv[i], "--serve") == 0) {
+      opts->bundle_serve = 1;
+    } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
+      opts->bundle_serve_port = atoi(argv[++i]);
+    } else if (opts->bundle_mode && !opts->bundle_entry) {
+      opts->bundle_entry = argv[i];
     } else if (!opts->script_path && !opts->eval_code) {
       opts->script_path = argv[i];
     } else {
@@ -193,6 +225,8 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
     }
   }
 
+  if (opts->bundle_mode)
+    return v6_action_bundle;
   if (opts->eval_code)
     return v6_action_eval;
   if (opts->script_path)

@@ -68,7 +68,7 @@ OBJ := $(BUILD)/obj
 BIN := $(BUILD)/bin
 GEN := $(BUILD)/lib
 
-RT_SRCS := $(filter-out src/main.c,$(wildcard src/*.c))
+RT_SRCS := $(filter-out src/main.c,$(wildcard src/*.c)) $(wildcard src/bundler/*.c)
 RT_OBJS := $(patsubst src/%.c,$(OBJ)/%.o,$(RT_SRCS))
 
 TEST_SRCS := $(wildcard test/*.c)
@@ -274,6 +274,7 @@ dirs:
 	@$(call MKDIR_P,$(GEN))
 	@$(call MKDIR_P,$(GEN)/rt)
 	@$(call MKDIR_P,$(OBJ)/rt)
+	@$(call MKDIR_P,$(OBJ)/bundler)
 
 fmt:
 	clang-format -i $(FMT_FILES)
@@ -283,3 +284,4 @@ clean:
 
 -include $(wildcard $(OBJ)/*.d)
 -include $(wildcard $(OBJ)/rt/*.d)
+-include $(wildcard $(OBJ)/bundler/*.d)

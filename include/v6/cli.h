@@ -9,6 +9,7 @@ typedef enum {
   v6_action_version,
   v6_action_help,
   v6_action_daemon_serve,
+  v6_action_bundle,
   v6_action_error,
 } v6_cli_action;
 
@@ -27,6 +28,15 @@ typedef struct {
   int wasi_deny_env;
   int wasi_deny_random;
   int wasi_deny_clock;
+
+  int bundle_mode;
+  const char* bundle_entry;
+  const char* bundle_outfile;
+  const char* bundle_format;
+  const char* bundle_global_name;
+  int bundle_watch;
+  int bundle_serve;
+  int bundle_serve_port;
 } v6_cli_options;
 
 v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts);
@@ -40,3 +50,4 @@ int v6_cli_run_wasm(v6_cli_options* opts);
 int v6_cli_run_script(v6_cli_options* opts);
 int v6_cli_eval(v6_cli_options* opts);
 int v6_cli_serve_daemon(const char* lock_path);
+int v6_cli_run_bundle(v6_cli_options* opts);
