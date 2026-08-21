@@ -161,6 +161,34 @@ static void emit_module_body(bundle_strbuf* b, bundle_module* m) {
   }
 }
 
+static void emit_module_id(bundle_strbuf* b, const bundle_module* m) {
+  emit_js_string(b, m->abs_path, strlen(m->abs_path));
+}
+
+void bundle_emit_one_module(bundle_strbuf* b, bundle_module* m) {
+  bundle_strbuf_append_cstr(b, "__v6_modules[");
+  emit_module_id(b, m);
+  bundle_strbuf_append_cstr(b, "] = function(module, exports, require) {\n");
+  emit_module_body(b, m);
+  bundle_strbuf_append_cstr(b, "};\n");
+
+  bundle_strbuf_append_cstr(b, "__v6_specmap[");
+  emit_module_id(b, m);
+  bundle_strbuf_append_cstr(b, "] = {");
+  for (int j = 0; j < m->import_count; j++) {
+    if (j > 0)
+      bundle_strbuf_append_cstr(b, ",");
+    emit_js_string(b, m->imports[j].specifier, strlen(m->imports[j].specifier));
+    bundle_strbuf_append_cstr(b, ":");
+    if (m->imports[j].target) {
+      emit_module_id(b, m->imports[j].target);
+    } else {
+      bundle_strbuf_append_cstr(b, "null");
+    }
+  }
+  bundle_strbuf_append_cstr(b, "};\n");
+}
+
 static void emit_runtime_preamble(bundle_strbuf* b) {
   bundle_strbuf_append_cstr(
       b, "var __v6_modules = {};\n"
@@ -170,7 +198,7 @@ static void emit_runtime_preamble(bundle_strbuf* b) {
          "  return function(spec) {\n"
          "    var map = __v6_specmap[fromId] || {};\n"
          "    var toId = map[spec];\n"
-         "    if (toId === undefined) {\n"
+         "    if (toId === undefined || toId === null) {\n"
          "      throw new Error(\"cannot resolve \\\"\" + spec + \"\\\" from "
          "module \" + fromId);\n"
          "    }\n"
@@ -183,6 +211,10 @@ static void emit_runtime_preamble(bundle_strbuf* b) {
          "  __v6_cache[id] = mod;\n"
          "  __v6_modules[id](mod, mod.exports, __v6_make_require(id));\n"
          "  return mod.exports;\n"
+         "}\n"
+         "function __v6_hmr_apply(ids) {\n"
+         "  for (var i = 0; i < ids.length; i++) delete __v6_cache[ids[i]];\n"
+         "  for (var i = 0; i < ids.length; i++) __v6_require(ids[i]);\n"
          "}\n");
 }
 
@@ -202,36 +234,14 @@ char* bundle_emit(bundle_graph* g, const bundle_emit_options* opts,
   emit_runtime_preamble(&b);
 
   for (int i = 0; i < count; i++) {
-    bundle_module* m = order[i];
-    bundle_strbuf_append_fmt(&b,
-                             "__v6_modules[%d] = function(module, "
-                             "exports, require) {\n",
-                             m->order_index);
-    emit_module_body(&b, m);
-    bundle_strbuf_append_cstr(&b, "};\n");
-
-    if (m->import_count > 0) {
-      bundle_strbuf_append_fmt(&b, "__v6_specmap[%d] = {", m->order_index);
-      for (int j = 0; j < m->import_count; j++) {
-        if (j > 0)
-          bundle_strbuf_append_cstr(&b, ",");
-        emit_js_string(&b, m->imports[j].specifier,
-                       strlen(m->imports[j].specifier));
-        bundle_strbuf_append_cstr(&b, ":");
-        if (m->imports[j].target) {
-          bundle_strbuf_append_fmt(&b, "%d", m->imports[j].target->order_index);
-        } else {
-          bundle_strbuf_append_cstr(&b, "-1");
-        }
-      }
-      bundle_strbuf_append_cstr(&b, "};\n");
-    }
+    bundle_emit_one_module(&b, order[i]);
   }
 
   free(order);
 
-  bundle_strbuf_append_fmt(&b, "var __v6_entry_exports = __v6_require(%d);\n",
-                           g->entry->order_index);
+  bundle_strbuf_append_cstr(&b, "var __v6_entry_exports = __v6_require(");
+  emit_module_id(&b, g->entry);
+  bundle_strbuf_append_cstr(&b, ");\n");
 
   if (opts->format == bundle_fmt_cjs) {
     bundle_strbuf_append_cstr(&b, "module.exports = __v6_entry_exports;\n");
@@ -246,7 +256,7 @@ char* bundle_emit(bundle_graph* g, const bundle_emit_options* opts,
       bundle_strbuf_append_fmt(&b, "export var %s = __v6_entry_exports.%s;\n",
                                key, key);
     }
-  } else {
+  } else if (opts->format == bundle_fmt_iife) {
     if (opts->global_name) {
       bundle_strbuf_append_fmt(&b, "globalThis.%s = __v6_entry_exports;\n",
                                opts->global_name);

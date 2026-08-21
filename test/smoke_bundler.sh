@@ -37,6 +37,21 @@ check_pattern() {
   fi
 }
 
+check_not_pattern() {
+  local label="$1"
+  local pattern="$2"
+  local actual="$3"
+  if echo "$actual" | grep -qE "$pattern"; then
+    FAIL=$((FAIL+1))
+    FAILED_LIST+=("$label")
+    echo "--- FAIL: $label ---"
+    echo "unexpected pattern present: $pattern"
+    echo "actual: $actual"
+  else
+    PASS=$((PASS+1))
+  fi
+}
+
 html_dir="test/fix/bundler/html-entry"
 html_out="$TMP/html-entry-dist"
 "$V6" -b "$html_dir/index.html" --outdir "$html_out" >/dev/null 2>&1
@@ -53,6 +68,27 @@ else
   FAIL=$((FAIL+1))
   FAILED_LIST+=("html-entry (dist/index.html not written)")
 fi
+
+serve_dir="$TMP/serve-test"
+mkdir -p "$serve_dir"
+abs_v6="$(pwd)/$V6"
+cp test/fix/bundler/basic-cjs/index.js test/fix/bundler/basic-cjs/greet.js "$serve_dir/"
+cd "$serve_dir"
+"$abs_v6" -b index.js --serve --port 5987 >"$TMP/serve.log" 2>&1 &
+serve_pid=$!
+cd - >/dev/null
+sleep 1.5
+serve_page=$(curl -s http://127.0.0.1:5987/ 2>/dev/null)
+check_pattern "devserver (index.html has hmr client script)" \
+  '__v6_hmr__' "$serve_page"
+serve_bundle=$(curl -s http://127.0.0.1:5987/bundle.js 2>/dev/null)
+check_pattern "devserver (bundle.js exposes global module registry, not wrapped)" \
+  '^var __v6_modules = \{\};' "$serve_bundle"
+check_not_pattern "devserver (bundle.js has no CJS/ESM export tail)" \
+  'module\.exports = __v6_entry_exports|export default' "$serve_bundle"
+kill "$serve_pid" >/dev/null 2>&1 || true
+wait "$serve_pid" 2>/dev/null
+sleep 0.5
 
 for dir in test/fix/bundler/*/; do
   name=$(basename "$dir")

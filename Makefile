@@ -42,7 +42,7 @@ ifneq ($(JAVA_HOME),)
 endif
 
 ifeq ($(PLATFORM),linux)
-  LDLIBS := -ldl
+  LDLIBS := -ldl -lpthread
 else ifeq ($(PLATFORM),windows)
   LDLIBS := -lws2_32
 else
