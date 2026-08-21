@@ -82,7 +82,7 @@ static void print_rebuild_status(const v6_bundler_graph* g, size_t out_len,
 
 static void watch_thread_fn(void* arg) {
   watch_thread_ctx* wc = (watch_thread_ctx*)arg;
-  hmr_snapshot snap;
+  v6_bundler_hmr_snapshot snap;
   v6_bundler_hmr_snapshot_init(&snap);
 
   for (;;) {

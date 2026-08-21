@@ -90,6 +90,28 @@ kill "$serve_pid" >/dev/null 2>&1 || true
 wait "$serve_pid" 2>/dev/null
 sleep 0.5
 
+html_serve_dir="$TMP/html-serve-test"
+mkdir -p "$html_serve_dir/src"
+cp "$html_dir/index.html" "$html_serve_dir/"
+cp "$html_dir/src/main.js" "$html_dir/src/math.js" "$html_dir/src/styles.css" "$html_serve_dir/src/"
+abs_v6="$(pwd)/$V6"
+cd "$html_serve_dir"
+"$abs_v6" -b index.html --serve --port 5988 >"$TMP/html-serve.log" 2>&1 &
+html_serve_pid=$!
+cd - >/dev/null
+sleep 1.5
+html_serve_page=$(curl -s http://127.0.0.1:5988/ 2>/dev/null)
+check_pattern "html-devserver (index.html has hmr client script)" \
+  '__v6_hmr__' "$html_serve_page"
+check_pattern "html-devserver (script tag is unwrapped, no type=module)" \
+  '<script src="main\.[0-9a-f]{8}\.js"></script>' "$html_serve_page"
+html_serve_bundle=$(curl -s "http://127.0.0.1:5988/$(echo "$html_serve_page" | grep -oE 'main\.[0-9a-f]{8}\.js')" 2>/dev/null)
+check_pattern "html-devserver (script uses bare-global dev format)" \
+  '^var __v6_modules = ' "$html_serve_bundle"
+kill "$html_serve_pid" >/dev/null 2>&1 || true
+wait "$html_serve_pid" 2>/dev/null
+sleep 0.5
+
 for dir in test/fix/bundler/*/; do
   name=$(basename "$dir")
   entry="${dir}index.js"

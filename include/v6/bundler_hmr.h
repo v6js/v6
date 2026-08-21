@@ -4,19 +4,20 @@
 
 #include <stddef.h>
 
-typedef struct hmr_snapshot_entry {
+typedef struct v6_bundler_hmr_snapshot_entry {
   char* id;
   unsigned long long hash;
-} hmr_snapshot_entry;
+} v6_bundler_hmr_snapshot_entry;
 
-typedef struct hmr_snapshot {
-  hmr_snapshot_entry* entries;
+typedef struct v6_bundler_hmr_snapshot {
+  v6_bundler_hmr_snapshot_entry* entries;
   int count;
-} hmr_snapshot;
+} v6_bundler_hmr_snapshot;
 
-void v6_bundler_hmr_snapshot_init(hmr_snapshot* snap);
-void v6_bundler_hmr_snapshot_free(hmr_snapshot* snap);
-void v6_bundler_hmr_snapshot_capture(hmr_snapshot* snap, v6_bundler_graph* g);
+void v6_bundler_hmr_snapshot_init(v6_bundler_hmr_snapshot* snap);
+void v6_bundler_hmr_snapshot_free(v6_bundler_hmr_snapshot* snap);
+void v6_bundler_hmr_snapshot_capture(v6_bundler_hmr_snapshot* snap,
+                                     v6_bundler_graph* g);
 
-char* v6_bundler_hmr_compute_patch(hmr_snapshot* prev, v6_bundler_graph* g,
-                                   size_t* out_len);
+char* v6_bundler_hmr_compute_patch(v6_bundler_hmr_snapshot* prev,
+                                   v6_bundler_graph* g, size_t* out_len);

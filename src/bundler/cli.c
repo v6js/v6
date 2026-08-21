@@ -1,8 +1,10 @@
 #include "v6/cli.h"
 #include "v6/bundler_build.h"
 #include "v6/bundler_devserver.h"
+#include "v6/bundler_devserver_html.h"
 #include "v6/bundler_html.h"
 #include "v6/bundler_report.h"
+#include "v6/color.h"
 #include "v6/module.h"
 
 #include <stdio.h>
@@ -94,18 +96,23 @@ int v6_cli_run_bundle(v6_cli_options* opts) {
 
   int is_html = has_suffix(entry, ".html") || has_suffix(entry, ".htm");
 
-  if (opts->bundle_serve && is_html) {
-    fprintf(stderr, "error: --serve is not implemented yet for html entries\n");
-    return 1;
-  }
-  if (opts->bundle_watch && is_html) {
-    fprintf(stderr, "error: --watch is not implemented yet for html entries\n");
-    return 1;
-  }
-
   if (is_html) {
     const char* outdir = opts->bundle_outdir ? opts->bundle_outdir : "dist";
-    return v6_bundler_process_html(entry, outdir, opts->bundle_global_name);
+
+    if (opts->bundle_serve) {
+      int port = opts->bundle_serve_port > 0 ? opts->bundle_serve_port : 3000;
+      return v6_bundler_devserver_run_html(entry, opts, outdir, port);
+    }
+    if (opts->bundle_watch)
+      return v6_bundler_run_watch_loop_html(entry, opts, outdir);
+
+    int rc = v6_bundler_process_html(entry, outdir, opts->bundle_global_name, 0);
+    if (rc == 0 && !opts->bundle_quiet) {
+      int c = v6_color_enabled_out();
+      printf("%s%s%12s%s %s -> %s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
+            v6_c_reset(c), entry, outdir);
+    }
+    return rc;
   }
 
   v6_bundler_format fmt;

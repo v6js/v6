@@ -74,6 +74,46 @@ static v6_bundler_format script_format_for_tag(const char* tag, const char* tag_
   return v6_bundler_fmt_iife;
 }
 
+int v6_bundler_html_scan_scripts(const char* html_path,
+                                 v6_bundler_html_script_ref* out_scripts,
+                                 int max_scripts, int* out_count) {
+  size_t html_len = 0;
+  char* html = read_whole_file(html_path, &html_len);
+  if (!html)
+    return -1;
+
+  char html_dir[1024];
+  path_dirname(html_path, html_dir, sizeof(html_dir));
+
+  int count = 0;
+  char* cursor = html;
+  while (*cursor && count < max_scripts) {
+    char* hit = strstr(cursor, "<script");
+    if (!hit)
+      break;
+    char* tag_end = strchr(hit, '>');
+    if (!tag_end)
+      break;
+    tag_end++;
+
+    char src[1024];
+    if (find_attr_value(hit, tag_end, "src", src, sizeof(src))) {
+      snprintf(out_scripts[count].entry_path, sizeof(out_scripts[count].entry_path),
+              "%s/%s", html_dir, src);
+      char type[64];
+      out_scripts[count].is_module =
+          find_attr_value(hit, tag_end, "type", type, sizeof(type)) &&
+          strcmp(type, "module") == 0;
+      count++;
+    }
+    cursor = tag_end;
+  }
+
+  free(html);
+  *out_count = count;
+  return 0;
+}
+
 static int v6_bundler_one_script(const char* entry_path, const char* outdir,
                              v6_bundler_format fmt, const char* global_name,
                              char* out_url, size_t out_url_size) {
@@ -134,7 +174,7 @@ static int v6_bundler_one_script(const char* entry_path, const char* outdir,
 }
 
 int v6_bundler_process_html(const char* html_path, const char* outdir,
-                        const char* global_name) {
+                        const char* global_name, int dev_mode) {
   size_t html_len = 0;
   char* html = read_whole_file(html_path, &html_len);
   if (!html) {
@@ -188,7 +228,8 @@ int v6_bundler_process_html(const char* html_path, const char* outdir,
     if (is_script && find_attr_value(hit, tag_end, "src", src, sizeof(src))) {
       char entry_path[1200];
       snprintf(entry_path, sizeof(entry_path), "%s/%s", html_dir, src);
-      v6_bundler_format fmt = script_format_for_tag(hit, tag_end);
+      v6_bundler_format fmt =
+          dev_mode ? v6_bundler_fmt_dev : script_format_for_tag(hit, tag_end);
       char out_name[600];
       if (v6_bundler_one_script(entry_path, outdir, fmt, global_name, out_name,
                             sizeof(out_name)) == 0) {
@@ -266,6 +307,5 @@ int v6_bundler_process_html(const char* html_path, const char* outdir,
     return 1;
   }
 
-  printf("wrote %s\n", dst_html);
   return had_error ? 1 : 0;
 }

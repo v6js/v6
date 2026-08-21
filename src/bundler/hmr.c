@@ -6,12 +6,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-void v6_bundler_hmr_snapshot_init(hmr_snapshot* snap) {
+void v6_bundler_hmr_snapshot_init(v6_bundler_hmr_snapshot* snap) {
   snap->entries = NULL;
   snap->count = 0;
 }
 
-void v6_bundler_hmr_snapshot_free(hmr_snapshot* snap) {
+void v6_bundler_hmr_snapshot_free(v6_bundler_hmr_snapshot* snap) {
   for (int i = 0; i < snap->count; i++)
     free(snap->entries[i].id);
   free(snap->entries);
@@ -35,9 +35,10 @@ static unsigned long long module_signature(v6_bundler_module* m) {
   return h;
 }
 
-void v6_bundler_hmr_snapshot_capture(hmr_snapshot* snap, v6_bundler_graph* g) {
+void v6_bundler_hmr_snapshot_capture(v6_bundler_hmr_snapshot* snap, v6_bundler_graph* g) {
   v6_bundler_hmr_snapshot_free(snap);
-  snap->entries = malloc(sizeof(hmr_snapshot_entry) * (size_t)(g->count > 0 ? g->count : 1));
+  snap->entries = malloc(sizeof(v6_bundler_hmr_snapshot_entry) *
+                        (size_t)(g->count > 0 ? g->count : 1));
   snap->count = g->count;
   for (int i = 0; i < g->count; i++) {
     size_t n = strlen(g->modules[i]->id);
@@ -47,7 +48,7 @@ void v6_bundler_hmr_snapshot_capture(hmr_snapshot* snap, v6_bundler_graph* g) {
   }
 }
 
-static int find_prev_hash(hmr_snapshot* prev, const char* id,
+static int find_prev_hash(v6_bundler_hmr_snapshot* prev, const char* id,
                           unsigned long long* out_hash) {
   for (int i = 0; i < prev->count; i++) {
     if (strcmp(prev->entries[i].id, id) == 0) {
@@ -58,7 +59,7 @@ static int find_prev_hash(hmr_snapshot* prev, const char* id,
   return 0;
 }
 
-char* v6_bundler_hmr_compute_patch(hmr_snapshot* prev, v6_bundler_graph* g, size_t* out_len) {
+char* v6_bundler_hmr_compute_patch(v6_bundler_hmr_snapshot* prev, v6_bundler_graph* g, size_t* out_len) {
   if (prev->count == 0 || g->count == 0)
     return NULL;
 
