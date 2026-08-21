@@ -60,7 +60,8 @@ static void free_dirs(char** dirs, int count) {
 }
 
 static int collect_all_watch_dirs(const char* html_path, char*** out_dirs,
-                                  int* out_count) {
+                                  int* out_count,
+                                  v6_bundler_extension_set* extensions) {
   char** dirs = NULL;
   int count = 0, cap = 0;
 
@@ -79,6 +80,7 @@ static int collect_all_watch_dirs(const char* html_path, char*** out_dirs,
   for (int i = 0; i < script_count; i++) {
     v6_bundler_graph g;
     v6_bundler_graph_init(&g);
+    g.extensions = extensions;
     if (v6_bundler_graph_build_with_root(&g, scripts[i].entry_path, root_dir) ==
         0)
       collect_dirs_from_graph(&g, &dirs, &count, &cap);
@@ -99,15 +101,16 @@ static v6_bundler_verbosity verbosity_from_opts(v6_cli_options* opts) {
 }
 
 int v6_bundler_run_watch_loop_html(const char* html_path, v6_cli_options* opts,
-                                   const char* outdir) {
+                                   const char* outdir,
+                                   v6_bundler_extension_set* extensions) {
   v6_bundler_verbosity verbosity = verbosity_from_opts(opts);
 
   for (;;) {
     if (verbosity != v6_bundler_verbosity_quiet)
       v6_bundler_clear_screen();
 
-    int rc =
-        v6_bundler_process_html(html_path, outdir, opts->bundle_global_name, 0);
+    int rc = v6_bundler_process_html(html_path, outdir,
+                                     opts->bundle_global_name, 0, extensions);
 
     if (verbosity != v6_bundler_verbosity_quiet && rc == 0) {
       int c = v6_color_enabled_out();
@@ -118,7 +121,7 @@ int v6_bundler_run_watch_loop_html(const char* html_path, v6_cli_options* opts,
 
     char** dirs = NULL;
     int dir_count = 0;
-    collect_all_watch_dirs(html_path, &dirs, &dir_count);
+    collect_all_watch_dirs(html_path, &dirs, &dir_count, extensions);
 
     v6_bundler_watcher* w = v6_bundler_watcher_create();
     for (int i = 0; i < dir_count; i++)
@@ -146,6 +149,7 @@ typedef struct html_watch_ctx {
   const char* outdir;
   v6_bundler_verbosity verbosity;
   v6_bundler_hmr_clients* clients;
+  v6_bundler_extension_set* extensions;
 } html_watch_ctx;
 
 static void html_watch_thread_fn(void* arg) {
@@ -168,8 +172,8 @@ static void html_watch_thread_fn(void* arg) {
       snap_count++;
     }
 
-    int rc =
-        v6_bundler_process_html(wc->html_path, wc->outdir, wc->global_name, 1);
+    int rc = v6_bundler_process_html(wc->html_path, wc->outdir, wc->global_name,
+                                     1, wc->extensions);
 
     if (wc->verbosity != v6_bundler_verbosity_quiet && rc == 0) {
       int c = v6_color_enabled_out();
@@ -184,6 +188,7 @@ static void html_watch_thread_fn(void* arg) {
     for (int i = 0; i < script_count; i++) {
       v6_bundler_graph g;
       v6_bundler_graph_init(&g);
+      g.extensions = wc->extensions;
       if (v6_bundler_graph_build_with_root(&g, scripts[i].entry_path,
                                            root_dir) == 0) {
         size_t patch_len = 0;
@@ -205,7 +210,7 @@ static void html_watch_thread_fn(void* arg) {
 
     char** dirs = NULL;
     int dir_count = 0;
-    collect_all_watch_dirs(wc->html_path, &dirs, &dir_count);
+    collect_all_watch_dirs(wc->html_path, &dirs, &dir_count, wc->extensions);
 
     v6_bundler_watcher* w = v6_bundler_watcher_create();
     for (int i = 0; i < dir_count; i++)
@@ -231,7 +236,8 @@ static void html_watch_thread_fn(void* arg) {
 }
 
 int v6_bundler_devserver_run_html(const char* html_path, v6_cli_options* opts,
-                                  const char* outdir, int port) {
+                                  const char* outdir, int port,
+                                  v6_bundler_extension_set* extensions) {
   v6_bundler_mkdir_p(outdir);
 
   v6_bundler_hmr_clients* clients = v6_bundler_hmr_clients_create();
@@ -242,6 +248,7 @@ int v6_bundler_devserver_run_html(const char* html_path, v6_cli_options* opts,
   wc->outdir = outdir;
   wc->verbosity = verbosity_from_opts(opts);
   wc->clients = clients;
+  wc->extensions = extensions;
   v6_bundler_thread_start(html_watch_thread_fn, wc);
 
   return v6_bundler_http_serve(outdir, port, clients);

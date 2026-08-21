@@ -140,6 +140,14 @@ void v6_cli_print_help(const char* prog_path) {
           "  -q, --quiet             suppress the bundle summary output\n"
           "  --verbose               print resolved imports for each "
           "module\n"
+          "  --define <k=v>          replace identifier/member expr <k> "
+          "with literal source <v> (repeatable)\n"
+          "  --alias <from=to>       rewrite import specifiers starting "
+          "with <from> to <to> (repeatable)\n"
+          "  --banner <text>         prepend <text> to the emitted "
+          "bundle(s)\n"
+          "  --public-dir <dir>      copy <dir> into the output directory "
+          "as-is\n"
           "\n"
           "wasi sandboxing (running a .wasm file directly enables WASI fully "
           "by default):\n"
@@ -239,6 +247,20 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
       opts->bundle_quiet = 1;
     } else if (strcmp(argv[i], "--verbose") == 0) {
       opts->bundle_verbose = 1;
+    } else if (strcmp(argv[i], "--define") == 0 && i + 1 < argc) {
+      if (opts->bundle_define_count < v6_cli_max_repeatable_flags)
+        opts->bundle_defines[opts->bundle_define_count++] = argv[++i];
+      else
+        i++;
+    } else if (strcmp(argv[i], "--alias") == 0 && i + 1 < argc) {
+      if (opts->bundle_alias_count < v6_cli_max_repeatable_flags)
+        opts->bundle_aliases[opts->bundle_alias_count++] = argv[++i];
+      else
+        i++;
+    } else if (strcmp(argv[i], "--banner") == 0 && i + 1 < argc) {
+      opts->bundle_banner = argv[++i];
+    } else if (strcmp(argv[i], "--public-dir") == 0 && i + 1 < argc) {
+      opts->bundle_public_dir = argv[++i];
     } else if (opts->bundle_mode && !opts->bundle_entry) {
       opts->bundle_entry = argv[i];
     } else if (!opts->script_path && !opts->eval_code) {

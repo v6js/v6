@@ -134,6 +134,7 @@ void v6_bundler_graph_init(v6_bundler_graph* g) {
   g->errors = NULL;
   g->error_count = 0;
   g->error_cap = 0;
+  g->extensions = NULL;
 }
 
 void v6_bundler_graph_free(v6_bundler_graph* g) {
@@ -225,6 +226,12 @@ static v6_bundler_module* load_module(v6_bundler_graph* g,
     push_error(g, msg);
     return m;
   }
+  if (g->extensions) {
+    size_t transformed_len = 0;
+    text = v6_bundler_extension_run_transform(g->extensions, abs_path, text,
+                                              len, &transformed_len);
+    len = transformed_len;
+  }
   m->source = text;
   m->source_len = len;
 
@@ -261,15 +268,22 @@ static v6_bundler_module* load_module(v6_bundler_graph* g,
     spec_buf[sl] = '\0';
 
     char resolved[v6_max_path];
-    char err[256];
-    if (resolve_module_specifier(importer_dir, spec_buf, resolved,
-                                 sizeof(resolved), err, sizeof(err)) != 0) {
-      char msg[1500];
-      snprintf(msg, sizeof(msg), "%s: cannot resolve \"%s\": %s", abs_path,
-               spec_buf, err);
-      push_error(g, msg);
-      add_edge(g, m, spec_buf, sl, specs.items[i].is_require, NULL);
-      continue;
+    int resolved_ok =
+        v6_bundler_extension_run_resolve(g->extensions, importer_dir, spec_buf,
+                                         resolved, sizeof(resolved)) == 0;
+    if (!resolved_ok) {
+      char err[256];
+      resolved_ok =
+          resolve_module_specifier(importer_dir, spec_buf, resolved,
+                                   sizeof(resolved), err, sizeof(err)) == 0;
+      if (!resolved_ok) {
+        char msg[1500];
+        snprintf(msg, sizeof(msg), "%s: cannot resolve \"%s\": %s", abs_path,
+                 spec_buf, err);
+        push_error(g, msg);
+        add_edge(g, m, spec_buf, sl, specs.items[i].is_require, NULL);
+        continue;
+      }
     }
     const char* resolved_interned =
         v6_bundler_intern_cstr(&g->intern, resolved);

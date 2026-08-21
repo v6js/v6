@@ -35,6 +35,7 @@ typedef struct watch_thread_ctx {
   const char* outfile;
   v6_bundler_verbosity verbosity;
   v6_bundler_hmr_clients* clients;
+  v6_bundler_extension_set* extensions;
 } watch_thread_ctx;
 
 static int collect_watch_dirs(v6_bundler_graph* g, char*** out_dirs,
@@ -92,6 +93,7 @@ static void watch_thread_fn(void* arg) {
 
     v6_bundler_graph g;
     v6_bundler_graph_init(&g);
+    g.extensions = wc->extensions;
     int rc = v6_bundler_graph_build(&g, wc->entry);
     if (rc != 0) {
       for (int i = 0; i < g.error_count; i++)
@@ -111,9 +113,12 @@ static void watch_thread_fn(void* arg) {
     eopts.global_name = wc->global_name;
     size_t out_len = 0;
     char* output = v6_bundler_emit(&g, &eopts, &out_len);
+    output = v6_bundler_extension_run_finalize(wc->extensions, output, out_len,
+                                               &out_len);
     v6_bundler_write_file(wc->outfile, output, out_len);
     print_rebuild_status(&g, out_len, wc->verbosity);
     free(output);
+    v6_bundler_extension_run_emit(wc->extensions, dir);
 
     size_t patch_len = 0;
     char* patch = v6_bundler_hmr_compute_patch(&snap, &g, &patch_len);
@@ -157,7 +162,8 @@ static void watch_thread_fn(void* arg) {
 }
 
 int v6_bundler_devserver_run(const char* entry, v6_cli_options* opts,
-                             const char* outfile, int port) {
+                             const char* outfile, int port,
+                             v6_bundler_extension_set* extensions) {
   char serve_dir[1024];
   path_dirname(outfile, serve_dir, sizeof(serve_dir));
   v6_bundler_mkdir_p(serve_dir);
@@ -197,6 +203,7 @@ int v6_bundler_devserver_run(const char* entry, v6_cli_options* opts,
   wc->outfile = outfile;
   wc->verbosity = verbosity;
   wc->clients = clients;
+  wc->extensions = extensions;
   v6_bundler_thread_start(watch_thread_fn, wc);
 
   return v6_bundler_http_serve(serve_dir, port, clients);

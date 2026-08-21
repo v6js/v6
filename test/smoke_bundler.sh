@@ -146,6 +146,39 @@ chunk_node_out=$(cd "$chunk_out" && node -e "
 check "html-chunking (shared module executed once, both scripts see it via node)" \
   "a: hello a|b: hello b" "$chunk_node_out"
 
+abs_v6="$(pwd)/$V6"
+
+define_out="$TMP/ext-define.js"
+"$V6" -b test/fix/bundler/ext-define/main.js \
+  --define 'process.env.NODE_ENV="production"' --define __DEBUG__=true \
+  --outfile "$define_out" --format cjs -q >/dev/null 2>&1
+define_node_out=$(node "$define_out" </dev/null 2>&1 | tr -d '\r')
+check "ext-define (process.env.NODE_ENV and __DEBUG__ substituted)" \
+  "prod mode, debug=true" "$define_node_out"
+
+alias_rel_out="alias_out.js"
+(cd test/fix/bundler/ext-alias &&
+  MSYS_NO_PATHCONV=1 "$abs_v6" -b main.js --alias @/=src/ \
+    --outfile "$alias_rel_out" --format cjs -q >/dev/null 2>&1)
+alias_node_out=$(node "test/fix/bundler/ext-alias/$alias_rel_out" </dev/null 2>&1 |
+  tr -d '\r')
+check "ext-alias (@/ resolves to src/ via node)" "HI!" "$alias_node_out"
+rm -f "test/fix/bundler/ext-alias/$alias_rel_out"
+
+banner_out="$TMP/ext-banner.js"
+"$V6" -b test/fix/bundler/basic-cjs/index.js --banner "/* my banner */" \
+  --outfile "$banner_out" --format cjs -q >/dev/null 2>&1
+check "ext-banner (banner text prepended to output)" "1" \
+  "$(head -1 "$banner_out" | grep -c "my banner")"
+
+public_out_dir="$TMP/ext-public-dist"
+mkdir -p "$public_out_dir"
+"$V6" -b test/fix/bundler/ext-public/main.js \
+  --public-dir test/fix/bundler/ext-public/public \
+  --outfile "$public_out_dir/bundle.js" --format cjs -q >/dev/null 2>&1
+check "ext-public (public dir contents copied into outdir)" "1" \
+  "$([ -f "$public_out_dir/favicon.txt" ] && echo 1 || echo 0)"
+
 for dir in test/fix/bundler/*/; do
   name=$(basename "$dir")
   entry="${dir}index.js"

@@ -2,6 +2,8 @@
 
 #include "v6/color.h"
 
+#define v6_cli_max_repeatable_flags 32
+
 typedef enum {
   v6_action_run_script,
   v6_action_eval,
@@ -43,6 +45,13 @@ typedef struct {
   const char* bundle_size_limit;
   int bundle_quiet;
   int bundle_verbose;
+
+  const char* bundle_defines[v6_cli_max_repeatable_flags];
+  int bundle_define_count;
+  const char* bundle_aliases[v6_cli_max_repeatable_flags];
+  int bundle_alias_count;
+  const char* bundle_banner;
+  const char* bundle_public_dir;
 } v6_cli_options;
 
 v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts);

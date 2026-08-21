@@ -164,7 +164,8 @@ static int path_in_set(const char* path, char shared[][1200],
 }
 
 int v6_bundler_process_html(const char* html_path, const char* outdir,
-                            const char* global_name, int dev_mode) {
+                            const char* global_name, int dev_mode,
+                            v6_bundler_extension_set* extensions) {
   size_t html_len = 0;
   char* html = read_whole_file(html_path, &html_len);
   if (!html) {
@@ -191,6 +192,7 @@ int v6_bundler_process_html(const char* html_path, const char* outdir,
   int had_error = 0;
   for (int i = 0; i < script_count; i++) {
     v6_bundler_graph_init(&graphs[i]);
+    graphs[i].extensions = extensions;
     graph_ok[i] = v6_bundler_graph_build_with_root(
                       &graphs[i], scripts[i].entry_path, html_dir) == 0;
     if (!graph_ok[i]) {
@@ -252,6 +254,8 @@ int v6_bundler_process_html(const char* html_path, const char* outdir,
     }
     size_t shared_len = 0;
     char* shared_output = v6_bundler_strbuf_take(&sb, &shared_len);
+    shared_output = v6_bundler_extension_run_finalize(extensions, shared_output,
+                                                      shared_len, &shared_len);
     unsigned long long hash = v6_bundler_fnv1a(shared_output, shared_len);
     snprintf(shared_chunk_name, sizeof(shared_chunk_name), "shared.%08llx.js",
              hash & 0xffffffffULL);
@@ -297,6 +301,9 @@ int v6_bundler_process_html(const char* html_path, const char* outdir,
       eopts.global_name = global_name;
       output = v6_bundler_emit(&graphs[i], &eopts, &out_len);
     }
+
+    output = v6_bundler_extension_run_finalize(extensions, output, out_len,
+                                               &out_len);
 
     char stem[512];
     stem_of(basename_of(scripts[i].entry_path), stem, sizeof(stem));
@@ -423,6 +430,8 @@ int v6_bundler_process_html(const char* html_path, const char* outdir,
     fprintf(stderr, "error: cannot write %s\n", dst_html);
     return 1;
   }
+
+  v6_bundler_extension_run_emit(extensions, outdir);
 
   return had_error ? 1 : 0;
 }

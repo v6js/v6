@@ -60,9 +60,11 @@ int v6_bundler_build_js_once(const char* entry, v6_bundler_format fmt,
                              const char* global_name, const char* outfile,
                              const v6_bundler_limits* limits,
                              v6_bundler_verbosity verbosity, char*** out_dirs,
-                             int* out_dir_count) {
+                             int* out_dir_count,
+                             v6_bundler_extension_set* extensions) {
   v6_bundler_graph g;
   v6_bundler_graph_init(&g);
+  g.extensions = extensions;
   int rc = v6_bundler_graph_build(&g, entry);
   if (rc != 0) {
     for (int i = 0; i < g.error_count; i++)
@@ -88,6 +90,8 @@ int v6_bundler_build_js_once(const char* entry, v6_bundler_format fmt,
 
   size_t out_len = 0;
   char* output = v6_bundler_emit(&g, &eopts, &out_len);
+  output =
+      v6_bundler_extension_run_finalize(extensions, output, out_len, &out_len);
 
   if (v6_bundler_write_file(outfile, output, out_len) != 0) {
     fprintf(stderr, "error: cannot write %s\n", outfile);
@@ -104,6 +108,8 @@ int v6_bundler_build_js_once(const char* entry, v6_bundler_format fmt,
 
   free(output);
 
+  v6_bundler_extension_run_emit(extensions, dir);
+
   if (out_dirs)
     collect_watch_dirs(&g, out_dirs, out_dir_count);
 
@@ -115,7 +121,8 @@ int v6_bundler_run_watch_loop(const char* entry, v6_bundler_format fmt,
                               const char* global_name, const char* outfile,
                               const v6_bundler_limits* limits,
                               v6_bundler_verbosity verbosity,
-                              v6_bundler_rebuild_cb on_rebuild, void* cb_arg) {
+                              v6_bundler_rebuild_cb on_rebuild, void* cb_arg,
+                              v6_bundler_extension_set* extensions) {
   for (;;) {
     if (verbosity != v6_bundler_verbosity_quiet)
       v6_bundler_clear_screen();
@@ -123,7 +130,7 @@ int v6_bundler_run_watch_loop(const char* entry, v6_bundler_format fmt,
     char** dirs = NULL;
     int dir_count = 0;
     int rc = v6_bundler_build_js_once(entry, fmt, global_name, outfile, limits,
-                                      verbosity, &dirs, &dir_count);
+                                      verbosity, &dirs, &dir_count, extensions);
 
     if (rc == 0 && on_rebuild)
       on_rebuild(cb_arg);

@@ -2,6 +2,7 @@
 
 #include "v6/ast.h"
 #include "v6/bundler_arena.h"
+#include "v6/bundler_extension.h"
 #include "v6/bundler_intern.h"
 #include "v6/export_scan.h"
 
@@ -51,6 +52,7 @@ typedef struct v6_bundler_graph {
   char** errors;
   int error_count;
   int error_cap;
+  v6_bundler_extension_set* extensions;
 } v6_bundler_graph;
 
 void v6_bundler_graph_init(v6_bundler_graph* g);
