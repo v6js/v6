@@ -1,17 +1,5 @@
 #include "v6/optimizer_pass.h"
 
-int v6_opt_pass_const_fold(ast_node* program, ast_arena* arena) {
-  (void)program;
-  (void)arena;
-  return 0;
-}
-
-int v6_opt_pass_algebraic_simplify(ast_node* program, ast_arena* arena) {
-  (void)program;
-  (void)arena;
-  return 0;
-}
-
 int v6_opt_pass_dead_code(ast_node* program, ast_arena* arena) {
   (void)program;
   (void)arena;

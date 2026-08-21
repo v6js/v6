@@ -42,8 +42,8 @@ check_js_fixture() {
   fi
 
   local actual expected
-  actual=$(cat "$out")
-  expected=$(cat "$post")
+  actual=$(cat "$out" | tr -d '\r')
+  expected=$(cat "$post" | tr -d '\r')
   check "$name (matches post.js)" "$expected" "$actual"
 
   local pre_run post_run
@@ -54,6 +54,8 @@ check_js_fixture() {
 }
 
 check_js_fixture print-roundtrip
+check_js_fixture const-fold --opt-const-fold
+check_js_fixture algebraic-simplify --opt-algebraic-simplify
 
 for dir in test/fix/optimizer/*/; do
   name=$(basename "$dir")
@@ -64,8 +66,8 @@ for dir in test/fix/optimizer/*/; do
     out="$TMP/$name.out.css"
     "$V6" --optimize "$dir/pre.css" --outfile "$out" -q --opt-no-whitespace \
       --opt-no-comments >/dev/null 2>&1
-    actual=$(cat "$out")
-    expected=$(cat "$dir/post.css")
+    actual=$(cat "$out" | tr -d '\r')
+    expected=$(cat "$dir/post.css" | tr -d '\r')
     check "$name (css matches post.css)" "$expected" "$actual"
 
     ws_only=$("$V6" --optimize "$dir/pre.css" -q --opt-no-whitespace)
@@ -82,8 +84,8 @@ for dir in test/fix/optimizer/*/; do
   if [ -f "$dir/pre.json" ]; then
     out="$TMP/$name.out.json"
     "$V6" --optimize "$dir/pre.json" --outfile "$out" -q --opt-no-whitespace >/dev/null 2>&1
-    actual=$(cat "$out")
-    expected=$(cat "$dir/post.json")
+    actual=$(cat "$out" | tr -d '\r')
+    expected=$(cat "$dir/post.json" | tr -d '\r')
     check "$name (json matches post.json)" "$expected" "$actual"
 
     unchanged=$("$V6" --optimize "$dir/pre.json" -q | tr -d '\r')
