@@ -1,0 +1,11 @@
+/* header styles */
+.header  .title {
+  color   : red ;
+  font-family: "Comic Sans" , sans-serif;
+  margin: 10px  20px;
+}
+
+.box {
+  width: calc(100%  -  20px);
+  content: "a { b: c }";
+}

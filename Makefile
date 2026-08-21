@@ -68,7 +68,7 @@ OBJ := $(BUILD)/obj
 BIN := $(BUILD)/bin
 GEN := $(BUILD)/lib
 
-RT_SRCS := $(filter-out src/main.c,$(wildcard src/*.c)) $(wildcard src/bundler/*.c)
+RT_SRCS := $(filter-out src/main.c,$(wildcard src/*.c)) $(wildcard src/bundler/*.c) $(wildcard src/optimizer/*.c)
 RT_OBJS := $(patsubst src/%.c,$(OBJ)/%.o,$(RT_SRCS))
 
 TEST_SRCS := $(wildcard test/*.c)
@@ -209,7 +209,7 @@ GEN_ABS := $(abspath $(GEN))
 
 GRADLE ?= gradle
 
-FMT_FILES := $(wildcard src/*.c) $(wildcard src/bundler/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java) $(wildcard lib/node/*.java) $(wildcard lib/shared/*.java) $(wildcard lib/web/*.java) $(wildcard lib/interop/*.java)
+FMT_FILES := $(wildcard src/*.c) $(wildcard src/bundler/*.c) $(wildcard src/optimizer/*.c) $(wildcard include/v6/*.h) $(wildcard test/*.c) $(wildcard test/*.h) $(wildcard tools/*.c) $(wildcard lib/core/*.java) $(wildcard lib/node/*.java) $(wildcard lib/shared/*.java) $(wildcard lib/web/*.java) $(wildcard lib/interop/*.java)
 
 BUILD_TOOL_BIN := build/tools/build_tool$(EXE)
 
@@ -275,6 +275,7 @@ dirs:
 	@$(call MKDIR_P,$(GEN)/rt)
 	@$(call MKDIR_P,$(OBJ)/rt)
 	@$(call MKDIR_P,$(OBJ)/bundler)
+	@$(call MKDIR_P,$(OBJ)/optimizer)
 
 fmt:
 	clang-format -i $(FMT_FILES)
@@ -285,3 +286,4 @@ clean:
 -include $(wildcard $(OBJ)/*.d)
 -include $(wildcard $(OBJ)/rt/*.d)
 -include $(wildcard $(OBJ)/bundler/*.d)
+-include $(wildcard $(OBJ)/optimizer/*.d)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "v6/optimizer_options.h"
 #include "v6/color.h"
 
 #define v6_cli_max_repeatable_flags 32
@@ -12,6 +13,7 @@ typedef enum {
   v6_action_help,
   v6_action_daemon_serve,
   v6_action_bundle,
+  v6_action_optimize,
   v6_action_error,
 } v6_cli_action;
 
@@ -52,6 +54,11 @@ typedef struct {
   int bundle_alias_count;
   const char* bundle_banner;
   const char* bundle_public_dir;
+
+  int optimize_mode;
+  const char* optimize_entry;
+  const char* optimize_outfile;
+  v6_optimizer_options optimizer;
 } v6_cli_options;
 
 v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts);
@@ -66,3 +73,4 @@ int v6_cli_run_script(v6_cli_options* opts);
 int v6_cli_eval(v6_cli_options* opts);
 int v6_cli_serve_daemon(const char* lock_path);
 int v6_cli_run_bundle(v6_cli_options* opts);
+int v6_cli_run_optimize(v6_cli_options* opts);

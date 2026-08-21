@@ -24,6 +24,9 @@ int main(int argc, char** argv) {
   case v6_action_bundle:
     v6_color_init(opts.color_mode);
     return v6_cli_run_bundle(&opts);
+  case v6_action_optimize:
+    v6_color_init(opts.color_mode);
+    return v6_cli_run_optimize(&opts);
   case v6_action_repl:
     return v6_repl_run(&opts);
   case v6_action_error:

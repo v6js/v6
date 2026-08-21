@@ -1,5 +1,6 @@
 #include "v6/cli.h"
 
+#include "v6/optimizer_options.h"
 #include "v6/bytecode.h"
 #include "v6/cache.h"
 #include "v6/daemon.h"
@@ -149,6 +150,40 @@ void v6_cli_print_help(const char* prog_path) {
           "  --public-dir <dir>      copy <dir> into the output directory "
           "as-is\n"
           "\n"
+          "optimizer (also applies to bundler output when -b is combined "
+          "with these flags):\n"
+          "  --optimize <file>       optimize <file> standalone (js, css, "
+          "or json) and exit (file may follow anywhere)\n"
+          "  --outfile <path>        output file for --optimize (default: "
+          "stdout)\n"
+          "  -O1, -O2, -O3           optimization profile (safe, "
+          "default+dead-store, aggressive)\n"
+          "  -Oz                     optimize for size: -O2 passes plus "
+          "whitespace removal and obfuscation\n"
+          "  --opt-const-fold        fold constant expressions\n"
+          "  --opt-algebraic-simplify\n"
+          "                          simplify algebraic identities (x+0, "
+          "x*1, !!x, ...)\n"
+          "  --opt-dead-code         remove unreachable and provably-dead "
+          "code\n"
+          "  --opt-dead-store        remove assignments whose value is "
+          "never read\n"
+          "  --opt-control-flow      simplify if/else and control-flow "
+          "shape\n"
+          "  --opt-inline            inline trivial single-use functions "
+          "(-O3 only by default)\n"
+          "  --opt-common-subexpr    hoist repeated pure subexpressions "
+          "(-O3 only by default)\n"
+          "  --opt-loop-invariant    hoist loop-invariant expressions "
+          "(-O3 only by default)\n"
+          "  --opt-no-<name>         disable one of the above after a "
+          "profile enabled it\n"
+          "  --opt-no-whitespace     strip whitespace from the output\n"
+          "  --opt-obfuscation       rename local identifiers to short "
+          "synthetic names\n"
+          "  --opt-no-comments       strip comments (css only; JS comments "
+          "are always dropped by parsing)\n"
+          "\n"
           "wasi sandboxing (running a .wasm file directly enables WASI fully "
           "by default):\n"
           "  --no-wasi-args          don't pass CLI args through as WASI "
@@ -193,9 +228,12 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--bundle") == 0) {
       opts->bundle_mode = 1;
-      break;
+    } else if (strcmp(argv[i], "--optimize") == 0) {
+      opts->optimize_mode = 1;
     }
   }
+
+  v6_optimizer_options_init(&opts->optimizer);
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
@@ -223,10 +261,15 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
       opts->color_mode = v6_color_never;
     } else if (strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--bundle") == 0) {
       opts->bundle_mode = 1;
+    } else if (strcmp(argv[i], "--optimize") == 0) {
+      opts->optimize_mode = 1;
     } else if (strcmp(argv[i], "--format") == 0 && i + 1 < argc) {
       opts->bundle_format = argv[++i];
     } else if (strcmp(argv[i], "--outfile") == 0 && i + 1 < argc) {
-      opts->bundle_outfile = argv[++i];
+      if (opts->optimize_mode)
+        opts->optimize_outfile = argv[++i];
+      else
+        opts->bundle_outfile = argv[++i];
     } else if (strcmp(argv[i], "--outdir") == 0 && i + 1 < argc) {
       opts->bundle_outdir = argv[++i];
     } else if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
@@ -261,6 +304,59 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
       opts->bundle_banner = argv[++i];
     } else if (strcmp(argv[i], "--public-dir") == 0 && i + 1 < argc) {
       opts->bundle_public_dir = argv[++i];
+    } else if ((strcmp(argv[i], "-O1") == 0 || strcmp(argv[i], "-O2") == 0 ||
+                strcmp(argv[i], "-O3") == 0 || strcmp(argv[i], "-Oz") == 0 ||
+                strcmp(argv[i], "-O0") == 0) &&
+               argv[i][2] != '\0') {
+      v6_opt_profile profile;
+      if (v6_optimizer_parse_profile(argv[i] + 2, &profile) == 0)
+        v6_optimizer_apply_profile(&opts->optimizer, profile);
+    } else if (strcmp(argv[i], "--opt-const-fold") == 0) {
+      opts->optimizer.const_fold = 1;
+    } else if (strcmp(argv[i], "--opt-no-const-fold") == 0) {
+      opts->optimizer.const_fold = 0;
+    } else if (strcmp(argv[i], "--opt-algebraic-simplify") == 0) {
+      opts->optimizer.algebraic_simplify = 1;
+    } else if (strcmp(argv[i], "--opt-no-algebraic-simplify") == 0) {
+      opts->optimizer.algebraic_simplify = 0;
+    } else if (strcmp(argv[i], "--opt-dead-code") == 0) {
+      opts->optimizer.dead_code = 1;
+    } else if (strcmp(argv[i], "--opt-no-dead-code") == 0) {
+      opts->optimizer.dead_code = 0;
+    } else if (strcmp(argv[i], "--opt-dead-store") == 0) {
+      opts->optimizer.dead_store = 1;
+    } else if (strcmp(argv[i], "--opt-no-dead-store") == 0) {
+      opts->optimizer.dead_store = 0;
+    } else if (strcmp(argv[i], "--opt-control-flow") == 0) {
+      opts->optimizer.control_flow_simplify = 1;
+    } else if (strcmp(argv[i], "--opt-no-control-flow") == 0) {
+      opts->optimizer.control_flow_simplify = 0;
+    } else if (strcmp(argv[i], "--opt-inline") == 0) {
+      opts->optimizer.inline_functions = 1;
+    } else if (strcmp(argv[i], "--opt-no-inline") == 0) {
+      opts->optimizer.inline_functions = 0;
+    } else if (strcmp(argv[i], "--opt-common-subexpr") == 0) {
+      opts->optimizer.common_subexpr = 1;
+    } else if (strcmp(argv[i], "--opt-no-common-subexpr") == 0) {
+      opts->optimizer.common_subexpr = 0;
+    } else if (strcmp(argv[i], "--opt-loop-invariant") == 0) {
+      opts->optimizer.loop_invariant = 1;
+    } else if (strcmp(argv[i], "--opt-no-loop-invariant") == 0) {
+      opts->optimizer.loop_invariant = 0;
+    } else if (strcmp(argv[i], "--opt-no-whitespace") == 0) {
+      opts->optimizer.no_whitespace = 1;
+    } else if (strcmp(argv[i], "--opt-whitespace") == 0) {
+      opts->optimizer.no_whitespace = 0;
+    } else if (strcmp(argv[i], "--opt-obfuscation") == 0) {
+      opts->optimizer.obfuscate = 1;
+    } else if (strcmp(argv[i], "--opt-no-obfuscation") == 0) {
+      opts->optimizer.obfuscate = 0;
+    } else if (strcmp(argv[i], "--opt-no-comments") == 0) {
+      opts->optimizer.no_comments = 1;
+    } else if (strcmp(argv[i], "--opt-comments") == 0) {
+      opts->optimizer.no_comments = 0;
+    } else if (opts->optimize_mode && !opts->optimize_entry) {
+      opts->optimize_entry = argv[i];
     } else if (opts->bundle_mode && !opts->bundle_entry) {
       opts->bundle_entry = argv[i];
     } else if (!opts->script_path && !opts->eval_code) {
@@ -272,6 +368,8 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
 
   if (opts->bundle_mode)
     return v6_action_bundle;
+  if (opts->optimize_mode)
+    return v6_action_optimize;
   if (opts->eval_code)
     return v6_action_eval;
   if (opts->script_path)
