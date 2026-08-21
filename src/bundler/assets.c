@@ -1,6 +1,6 @@
-#include "v6/bundle_assets.h"
-#include "v6/bundle_fsutil.h"
-#include "v6/bundle_intern.h"
+#include "v6/bundler_assets.h"
+#include "v6/bundler_fsutil.h"
+#include "v6/bundler_intern.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,7 +36,7 @@ static void split_stem_ext(const char* base, char* stem, size_t stem_size,
   snprintf(ext, ext_size, "%s", dot);
 }
 
-int bundle_process_assets(bundle_graph* g, const char* outdir) {
+int v6_bundler_process_assets(v6_bundler_graph* g, const char* outdir) {
   asset_dedup_entry* dedup = NULL;
   int dedup_count = 0, dedup_cap = 0;
 
@@ -45,11 +45,11 @@ int bundle_process_assets(bundle_graph* g, const char* outdir) {
   int made_dir = 0;
 
   for (int i = 0; i < g->count; i++) {
-    bundle_module* m = g->modules[i];
-    if (m->kind != bundle_mod_css && m->kind != bundle_mod_asset)
+    v6_bundler_module* m = g->modules[i];
+    if (m->kind != v6_bundler_mod_css && m->kind != v6_bundler_mod_asset)
       continue;
 
-    unsigned long long hash = bundle_fnv1a(m->source, m->source_len);
+    unsigned long long hash = v6_bundler_fnv1a(m->source, m->source_len);
 
     const char* existing_url = NULL;
     for (int j = 0; j < dedup_count; j++) {
@@ -60,7 +60,7 @@ int bundle_process_assets(bundle_graph* g, const char* outdir) {
     }
 
     if (existing_url) {
-      m->asset_url = bundle_intern_cstr(&g->intern, existing_url);
+      m->asset_url = v6_bundler_intern_cstr(&g->intern, existing_url);
       continue;
     }
 
@@ -73,16 +73,16 @@ int bundle_process_assets(bundle_graph* g, const char* outdir) {
 
     char url[700];
     snprintf(url, sizeof(url), "/assets/%s", hashed_name);
-    m->asset_url = bundle_intern_cstr(&g->intern, url);
+    m->asset_url = v6_bundler_intern_cstr(&g->intern, url);
 
     if (!made_dir) {
-      bundle_mkdir_p(assets_dir);
+      v6_bundler_mkdir_p(assets_dir);
       made_dir = 1;
     }
 
     char dst_path[1200];
     snprintf(dst_path, sizeof(dst_path), "%s/%s", assets_dir, hashed_name);
-    if (bundle_write_file(dst_path, m->source, m->source_len) != 0) {
+    if (v6_bundler_write_file(dst_path, m->source, m->source_len) != 0) {
       free(dedup);
       return -1;
     }

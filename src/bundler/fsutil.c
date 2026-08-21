@@ -1,4 +1,4 @@
-#include "v6/bundle_fsutil.h"
+#include "v6/bundler_fsutil.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,13 +6,13 @@
 
 #ifdef _WIN32
 #include <direct.h>
-#define bundle_mkdir_raw(p) _mkdir(p)
+#define v6_bundler_mkdir_raw(p) _mkdir(p)
 #else
 #include <sys/stat.h>
-#define bundle_mkdir_raw(p) mkdir(p, 0755)
+#define v6_bundler_mkdir_raw(p) mkdir(p, 0755)
 #endif
 
-int bundle_mkdir_p(const char* path) {
+int v6_bundler_mkdir_p(const char* path) {
   char buf[1024];
   size_t len = strlen(path);
   if (len >= sizeof(buf))
@@ -23,15 +23,15 @@ int bundle_mkdir_p(const char* path) {
     if (buf[i] == '/' || buf[i] == '\\') {
       char save = buf[i];
       buf[i] = '\0';
-      bundle_mkdir_raw(buf);
+      v6_bundler_mkdir_raw(buf);
       buf[i] = save;
     }
   }
-  bundle_mkdir_raw(buf);
+  v6_bundler_mkdir_raw(buf);
   return 0;
 }
 
-int bundle_write_file(const char* path, const char* data, size_t len) {
+int v6_bundler_write_file(const char* path, const char* data, size_t len) {
   FILE* f = fopen(path, "wb");
   if (!f)
     return -1;
@@ -40,7 +40,7 @@ int bundle_write_file(const char* path, const char* data, size_t len) {
   return written == len ? 0 : -1;
 }
 
-int bundle_copy_file(const char* src_path, const char* dst_path) {
+int v6_bundler_copy_file(const char* src_path, const char* dst_path) {
   FILE* in = fopen(src_path, "rb");
   if (!in)
     return -1;

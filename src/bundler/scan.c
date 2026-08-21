@@ -1,15 +1,15 @@
-#include "v6/bundle_scan.h"
+#include "v6/bundler_scan.h"
 
 #include <string.h>
 
-static void push_spec(bundle_arena* a, bundle_specifier_list* out,
+static void push_spec(v6_bundler_arena* a, v6_bundler_specifier_list* out,
                       const char* text, size_t len, int is_require) {
   if (out->len >= out->cap) {
     int new_cap = out->cap == 0 ? 8 : out->cap * 2;
-    bundle_specifier* items =
-        bundle_arena_alloc(a, sizeof(bundle_specifier) * new_cap);
+    v6_bundler_specifier* items =
+        v6_bundler_arena_alloc(a, sizeof(v6_bundler_specifier) * new_cap);
     if (out->items)
-      memcpy(items, out->items, sizeof(bundle_specifier) * out->len);
+      memcpy(items, out->items, sizeof(v6_bundler_specifier) * out->len);
     out->items = items;
     out->cap = new_cap;
   }
@@ -19,15 +19,15 @@ static void push_spec(bundle_arena* a, bundle_specifier_list* out,
   out->len++;
 }
 
-static void walk(bundle_arena* a, ast_node* n, bundle_specifier_list* out);
+static void walk(v6_bundler_arena* a, ast_node* n, v6_bundler_specifier_list* out);
 
-static void walk_list(bundle_arena* a, ast_list* list,
-                      bundle_specifier_list* out) {
+static void walk_list(v6_bundler_arena* a, ast_list* list,
+                      v6_bundler_specifier_list* out) {
   for (int i = 0; i < list->len; i++)
     walk(a, list->items[i], out);
 }
 
-static void walk(bundle_arena* a, ast_node* n, bundle_specifier_list* out) {
+static void walk(v6_bundler_arena* a, ast_node* n, v6_bundler_specifier_list* out) {
   if (!n)
     return;
 
@@ -64,8 +64,8 @@ static void walk(bundle_arena* a, ast_node* n, bundle_specifier_list* out) {
   }
 }
 
-void bundle_scan_imports(bundle_arena* out_arena, ast_node* program,
-                         bundle_specifier_list* out) {
+void v6_bundler_scan_imports(v6_bundler_arena* out_arena, ast_node* program,
+                         v6_bundler_specifier_list* out) {
   out->items = NULL;
   out->len = 0;
   out->cap = 0;

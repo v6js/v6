@@ -1,9 +1,9 @@
-#include "v6/bundle_html.h"
-#include "v6/bundle_assets.h"
-#include "v6/bundle_emit.h"
-#include "v6/bundle_fsutil.h"
-#include "v6/bundle_graph.h"
-#include "v6/bundle_strbuf.h"
+#include "v6/bundler_html.h"
+#include "v6/bundler_assets.h"
+#include "v6/bundler_emit.h"
+#include "v6/bundler_fsutil.h"
+#include "v6/bundler_graph.h"
+#include "v6/bundler_strbuf.h"
 #include "v6/module.h"
 
 #include <stdio.h>
@@ -65,39 +65,39 @@ static int find_attr_value(const char* tag, const char* tag_end,
   return 0;
 }
 
-static bundle_format script_format_for_tag(const char* tag, const char* tag_end) {
+static v6_bundler_format script_format_for_tag(const char* tag, const char* tag_end) {
   char type[64];
   if (find_attr_value(tag, tag_end, "type", type, sizeof(type)) &&
       strcmp(type, "module") == 0) {
-    return bundle_fmt_esm;
+    return v6_bundler_fmt_esm;
   }
-  return bundle_fmt_iife;
+  return v6_bundler_fmt_iife;
 }
 
-static int bundle_one_script(const char* entry_path, const char* outdir,
-                             bundle_format fmt, const char* global_name,
+static int v6_bundler_one_script(const char* entry_path, const char* outdir,
+                             v6_bundler_format fmt, const char* global_name,
                              char* out_url, size_t out_url_size) {
-  bundle_graph g;
-  bundle_graph_init(&g);
-  int rc = bundle_graph_build(&g, entry_path);
+  v6_bundler_graph g;
+  v6_bundler_graph_init(&g);
+  int rc = v6_bundler_graph_build(&g, entry_path);
   if (rc != 0) {
     for (int i = 0; i < g.error_count; i++)
       fprintf(stderr, "error: %s\n", g.errors[i]);
-    bundle_graph_free(&g);
+    v6_bundler_graph_free(&g);
     return -1;
   }
 
-  if (bundle_process_assets(&g, outdir) != 0) {
+  if (v6_bundler_process_assets(&g, outdir) != 0) {
     fprintf(stderr, "error: failed to write asset files for %s\n", entry_path);
-    bundle_graph_free(&g);
+    v6_bundler_graph_free(&g);
     return -1;
   }
 
-  bundle_emit_options eopts;
+  v6_bundler_emit_options eopts;
   eopts.format = fmt;
   eopts.global_name = global_name;
   size_t out_len = 0;
-  char* output = bundle_emit(&g, &eopts, &out_len);
+  char* output = v6_bundler_emit(&g, &eopts, &out_len);
 
   const char* base = strrchr(entry_path, '/');
   const char* bbase = strrchr(entry_path, '\\');
@@ -113,16 +113,16 @@ static int bundle_one_script(const char* entry_path, const char* outdir,
   memcpy(stem, base, stem_len);
   stem[stem_len] = '\0';
 
-  unsigned long long hash = bundle_fnv1a(output, out_len);
+  unsigned long long hash = v6_bundler_fnv1a(output, out_len);
   char out_name[600];
   snprintf(out_name, sizeof(out_name), "%s.%08llx.js", stem, hash & 0xffffffffULL);
 
   char dst_path[1200];
   snprintf(dst_path, sizeof(dst_path), "%s/%s", outdir, out_name);
-  int wrc = bundle_write_file(dst_path, output, out_len);
+  int wrc = v6_bundler_write_file(dst_path, output, out_len);
 
   free(output);
-  bundle_graph_free(&g);
+  v6_bundler_graph_free(&g);
 
   if (wrc != 0) {
     fprintf(stderr, "error: cannot write %s\n", dst_path);
@@ -133,7 +133,7 @@ static int bundle_one_script(const char* entry_path, const char* outdir,
   return 0;
 }
 
-int bundle_process_html(const char* html_path, const char* outdir,
+int v6_bundler_process_html(const char* html_path, const char* outdir,
                         const char* global_name) {
   size_t html_len = 0;
   char* html = read_whole_file(html_path, &html_len);
@@ -145,10 +145,10 @@ int bundle_process_html(const char* html_path, const char* outdir,
   char html_dir[1024];
   path_dirname(html_path, html_dir, sizeof(html_dir));
 
-  bundle_mkdir_p(outdir);
+  v6_bundler_mkdir_p(outdir);
 
-  bundle_strbuf out;
-  bundle_strbuf_init(&out);
+  v6_bundler_strbuf out;
+  v6_bundler_strbuf_init(&out);
 
   char* cursor = html;
   int had_error = 0;
@@ -168,18 +168,18 @@ int bundle_process_html(const char* html_path, const char* outdir,
     }
 
     if (!hit) {
-      bundle_strbuf_append_cstr(&out, cursor);
+      v6_bundler_strbuf_append_cstr(&out, cursor);
       break;
     }
 
     char* tag_end = strchr(hit, '>');
     if (!tag_end) {
-      bundle_strbuf_append_cstr(&out, cursor);
+      v6_bundler_strbuf_append_cstr(&out, cursor);
       break;
     }
     tag_end++;
 
-    bundle_strbuf_append(&out, cursor, (size_t)(hit - cursor));
+    v6_bundler_strbuf_append(&out, cursor, (size_t)(hit - cursor));
 
     char src[1024];
     int handled = 0;
@@ -188,13 +188,13 @@ int bundle_process_html(const char* html_path, const char* outdir,
     if (is_script && find_attr_value(hit, tag_end, "src", src, sizeof(src))) {
       char entry_path[1200];
       snprintf(entry_path, sizeof(entry_path), "%s/%s", html_dir, src);
-      bundle_format fmt = script_format_for_tag(hit, tag_end);
+      v6_bundler_format fmt = script_format_for_tag(hit, tag_end);
       char out_name[600];
-      if (bundle_one_script(entry_path, outdir, fmt, global_name, out_name,
+      if (v6_bundler_one_script(entry_path, outdir, fmt, global_name, out_name,
                             sizeof(out_name)) == 0) {
-        bundle_strbuf_append_fmt(&out, "<script src=\"%s\"%s></script>",
+        v6_bundler_strbuf_append_fmt(&out, "<script src=\"%s\"%s></script>",
                                  out_name,
-                                 fmt == bundle_fmt_esm ? " type=\"module\"" : "");
+                                 fmt == v6_bundler_fmt_esm ? " type=\"module\"" : "");
         handled = 1;
         char* close_tag = strstr(tag_end, "</script>");
         if (close_tag)
@@ -213,7 +213,7 @@ int bundle_process_html(const char* html_path, const char* outdir,
         size_t css_len = 0;
         char* css = read_whole_file(css_path, &css_len);
         if (css) {
-          unsigned long long hash = bundle_fnv1a(css, css_len);
+          unsigned long long hash = v6_bundler_fnv1a(css, css_len);
           const char* base = strrchr(href, '/');
           base = base ? base + 1 : href;
           char stem[400];
@@ -228,12 +228,12 @@ int bundle_process_html(const char* html_path, const char* outdir,
                    hash & 0xffffffffULL);
           char assets_dir[1100];
           snprintf(assets_dir, sizeof(assets_dir), "%s/assets", outdir);
-          bundle_mkdir_p(assets_dir);
+          v6_bundler_mkdir_p(assets_dir);
           char dst_path[1300];
           snprintf(dst_path, sizeof(dst_path), "%s/%s", assets_dir, out_name);
-          bundle_write_file(dst_path, css, css_len);
+          v6_bundler_write_file(dst_path, css, css_len);
           free(css);
-          bundle_strbuf_append_fmt(
+          v6_bundler_strbuf_append_fmt(
               &out, "<link rel=\"stylesheet\" href=\"assets/%s\">", out_name);
           handled = 1;
         }
@@ -241,7 +241,7 @@ int bundle_process_html(const char* html_path, const char* outdir,
     }
 
     if (!handled)
-      bundle_strbuf_append(&out, hit, (size_t)(tag_end - hit));
+      v6_bundler_strbuf_append(&out, hit, (size_t)(tag_end - hit));
 
     cursor = advance_to;
   }
@@ -257,8 +257,8 @@ int bundle_process_html(const char* html_path, const char* outdir,
   char dst_html[1200];
   snprintf(dst_html, sizeof(dst_html), "%s/%s", outdir, base);
   size_t out_len = 0;
-  char* out_data = bundle_strbuf_take(&out, &out_len);
-  int wrc = bundle_write_file(dst_html, out_data, out_len);
+  char* out_data = v6_bundler_strbuf_take(&out, &out_len);
+  int wrc = v6_bundler_write_file(dst_html, out_data, out_len);
   free(out_data);
 
   if (wrc != 0) {

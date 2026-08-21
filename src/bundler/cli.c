@@ -1,23 +1,23 @@
 #include "v6/cli.h"
-#include "v6/bundle_build.h"
-#include "v6/bundle_devserver.h"
-#include "v6/bundle_html.h"
+#include "v6/bundler_build.h"
+#include "v6/bundler_devserver.h"
+#include "v6/bundler_html.h"
 #include "v6/module.h"
 
 #include <stdio.h>
 #include <string.h>
 
-static int parse_format(const char* s, bundle_format* out) {
+static int parse_format(const char* s, v6_bundler_format* out) {
   if (!s || strcmp(s, "esm") == 0) {
-    *out = bundle_fmt_esm;
+    *out = v6_bundler_fmt_esm;
     return 0;
   }
   if (strcmp(s, "cjs") == 0) {
-    *out = bundle_fmt_cjs;
+    *out = v6_bundler_fmt_cjs;
     return 0;
   }
   if (strcmp(s, "iife") == 0) {
-    *out = bundle_fmt_iife;
+    *out = v6_bundler_fmt_iife;
     return 0;
   }
   return -1;
@@ -65,10 +65,10 @@ int v6_cli_run_bundle(v6_cli_options* opts) {
 
   if (is_html) {
     const char* outdir = opts->bundle_outdir ? opts->bundle_outdir : "dist";
-    return bundle_process_html(entry, outdir, opts->bundle_global_name);
+    return v6_bundler_process_html(entry, outdir, opts->bundle_global_name);
   }
 
-  bundle_format fmt;
+  v6_bundler_format fmt;
   if (parse_format(opts->bundle_format, &fmt) != 0) {
     fprintf(stderr,
             "error: unknown --format \"%s\" (expected esm, cjs, or iife)\n",
@@ -81,14 +81,14 @@ int v6_cli_run_bundle(v6_cli_options* opts) {
 
   if (opts->bundle_serve) {
     int port = opts->bundle_serve_port > 0 ? opts->bundle_serve_port : 5173;
-    return bundle_devserver_run(entry, opts, outfile, port);
+    return v6_bundler_devserver_run(entry, opts, outfile, port);
   }
 
   if (opts->bundle_watch) {
-    return bundle_run_watch_loop(entry, fmt, opts->bundle_global_name, outfile,
+    return v6_bundler_run_watch_loop(entry, fmt, opts->bundle_global_name, outfile,
                                  NULL, NULL);
   }
 
-  return bundle_build_js_once(entry, fmt, opts->bundle_global_name, outfile,
+  return v6_bundler_build_js_once(entry, fmt, opts->bundle_global_name, outfile,
                               NULL, NULL);
 }

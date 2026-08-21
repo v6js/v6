@@ -1,25 +1,25 @@
-#include "v6/bundle_strbuf.h"
+#include "v6/bundler_strbuf.h"
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-void bundle_strbuf_init(bundle_strbuf* b) {
+void v6_bundler_strbuf_init(v6_bundler_strbuf* b) {
   b->cap = 4096;
   b->len = 0;
   b->data = malloc(b->cap);
   b->data[0] = '\0';
 }
 
-void bundle_strbuf_free(bundle_strbuf* b) {
+void v6_bundler_strbuf_free(v6_bundler_strbuf* b) {
   free(b->data);
   b->data = NULL;
   b->len = 0;
   b->cap = 0;
 }
 
-static void ensure_cap(bundle_strbuf* b, size_t extra) {
+static void ensure_cap(v6_bundler_strbuf* b, size_t extra) {
   if (b->len + extra + 1 <= b->cap)
     return;
   size_t new_cap = b->cap * 2;
@@ -29,18 +29,18 @@ static void ensure_cap(bundle_strbuf* b, size_t extra) {
   b->cap = new_cap;
 }
 
-void bundle_strbuf_append(bundle_strbuf* b, const char* s, size_t n) {
+void v6_bundler_strbuf_append(v6_bundler_strbuf* b, const char* s, size_t n) {
   ensure_cap(b, n);
   memcpy(b->data + b->len, s, n);
   b->len += n;
   b->data[b->len] = '\0';
 }
 
-void bundle_strbuf_append_cstr(bundle_strbuf* b, const char* s) {
-  bundle_strbuf_append(b, s, strlen(s));
+void v6_bundler_strbuf_append_cstr(v6_bundler_strbuf* b, const char* s) {
+  v6_bundler_strbuf_append(b, s, strlen(s));
 }
 
-void bundle_strbuf_append_fmt(bundle_strbuf* b, const char* fmt, ...) {
+void v6_bundler_strbuf_append_fmt(v6_bundler_strbuf* b, const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   va_list ap2;
@@ -57,7 +57,7 @@ void bundle_strbuf_append_fmt(bundle_strbuf* b, const char* fmt, ...) {
   b->len += (size_t)need;
 }
 
-char* bundle_strbuf_take(bundle_strbuf* b, size_t* out_len) {
+char* v6_bundler_strbuf_take(v6_bundler_strbuf* b, size_t* out_len) {
   char* out = b->data;
   if (out_len)
     *out_len = b->len;

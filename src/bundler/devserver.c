@@ -4,16 +4,16 @@
 #endif
 #endif
 
-#include "v6/bundle_devserver.h"
-#include "v6/bundle_assets.h"
-#include "v6/bundle_emit.h"
-#include "v6/bundle_fsutil.h"
-#include "v6/bundle_graph.h"
-#include "v6/bundle_hmr.h"
-#include "v6/bundle_strbuf.h"
-#include "v6/bundle_thread.h"
-#include "v6/bundle_watch.h"
-#include "v6/bundle_ws.h"
+#include "v6/bundler_devserver.h"
+#include "v6/bundler_assets.h"
+#include "v6/bundler_emit.h"
+#include "v6/bundler_fsutil.h"
+#include "v6/bundler_graph.h"
+#include "v6/bundler_hmr.h"
+#include "v6/bundler_strbuf.h"
+#include "v6/bundler_thread.h"
+#include "v6/bundler_watch.h"
+#include "v6/bundler_ws.h"
 #include "v6/module.h"
 
 #include <stdio.h>
@@ -37,9 +37,9 @@ typedef int v6_sock;
 #endif
 
 #ifdef _WIN32
-#define bundle_sleep_ms(ms) Sleep((DWORD)(ms))
+#define v6_bundler_sleep_ms(ms) Sleep((DWORD)(ms))
 #else
-#define bundle_sleep_ms(ms) usleep((useconds_t)(ms) * 1000)
+#define v6_bundler_sleep_ms(ms) usleep((useconds_t)(ms) * 1000)
 #endif
 
 static int v6_sockets_init(void) {
@@ -76,27 +76,27 @@ static long v6_recv_raw(v6_sock s, void* data, size_t len) {
 }
 
 typedef struct hmr_client_list {
-  bundle_mutex* mu;
+  v6_bundler_mutex* mu;
   v6_sock* socks;
   int count;
   int cap;
 } hmr_client_list;
 
 static void hmr_list_init(hmr_client_list* l) {
-  l->mu = bundle_mutex_create();
+  l->mu = v6_bundler_mutex_create();
   l->socks = NULL;
   l->count = 0;
   l->cap = 0;
 }
 
 static void hmr_list_add(hmr_client_list* l, v6_sock s) {
-  bundle_mutex_lock(l->mu);
+  v6_bundler_mutex_lock(l->mu);
   if (l->count >= l->cap) {
     l->cap = l->cap == 0 ? 8 : l->cap * 2;
     l->socks = realloc(l->socks, sizeof(v6_sock) * (size_t)l->cap);
   }
   l->socks[l->count++] = s;
-  bundle_mutex_unlock(l->mu);
+  v6_bundler_mutex_unlock(l->mu);
 }
 
 static void hmr_broadcast(hmr_client_list* l, const char* msg) {
@@ -104,11 +104,11 @@ static void hmr_broadcast(hmr_client_list* l, const char* msg) {
   size_t cap = msg_len + 8;
   unsigned char* frame = malloc(cap);
   size_t frame_len;
-  if (bundle_ws_encode_text_frame(msg, msg_len, frame, cap, &frame_len) != 0) {
+  if (v6_bundler_ws_encode_text_frame(msg, msg_len, frame, cap, &frame_len) != 0) {
     free(frame);
     return;
   }
-  bundle_mutex_lock(l->mu);
+  v6_bundler_mutex_lock(l->mu);
   int write_idx = 0;
   for (int i = 0; i < l->count; i++) {
     long rc = v6_send_raw(l->socks[i], frame, frame_len);
@@ -119,7 +119,7 @@ static void hmr_broadcast(hmr_client_list* l, const char* msg) {
     }
   }
   l->count = write_idx;
-  bundle_mutex_unlock(l->mu);
+  v6_bundler_mutex_unlock(l->mu);
   free(frame);
 }
 
@@ -238,20 +238,20 @@ static void serve_file(v6_sock s, const char* full_path) {
   const char* ctype = content_type_for(full_path);
   int is_html = strstr(ctype, "text/html") != NULL;
 
-  bundle_strbuf body;
-  bundle_strbuf_init(&body);
+  v6_bundler_strbuf body;
+  v6_bundler_strbuf_init(&body);
   if (is_html) {
     char* body_end = strstr(data, "</body>");
     if (body_end) {
-      bundle_strbuf_append(&body, data, (size_t)(body_end - data));
-      bundle_strbuf_append_cstr(&body, hmr_client_script);
-      bundle_strbuf_append_cstr(&body, body_end);
+      v6_bundler_strbuf_append(&body, data, (size_t)(body_end - data));
+      v6_bundler_strbuf_append_cstr(&body, hmr_client_script);
+      v6_bundler_strbuf_append_cstr(&body, body_end);
     } else {
-      bundle_strbuf_append(&body, data, len);
-      bundle_strbuf_append_cstr(&body, hmr_client_script);
+      v6_bundler_strbuf_append(&body, data, len);
+      v6_bundler_strbuf_append_cstr(&body, hmr_client_script);
     }
   } else {
-    bundle_strbuf_append(&body, data, len);
+    v6_bundler_strbuf_append(&body, data, len);
   }
   free(data);
 
@@ -262,7 +262,7 @@ static void serve_file(v6_sock s, const char* full_path) {
                     ctype, body.len);
   v6_send_raw(s, header, (size_t)hn);
   v6_send_raw(s, body.data, body.len);
-  bundle_strbuf_free(&body);
+  v6_bundler_strbuf_free(&body);
 }
 
 typedef struct conn_ctx {
@@ -287,7 +287,7 @@ static void handle_connection(void* arg) {
 
   if (req.is_ws_upgrade) {
     char accept_key[64];
-    bundle_ws_accept_key(req.ws_key, accept_key, sizeof(accept_key));
+    v6_bundler_ws_accept_key(req.ws_key, accept_key, sizeof(accept_key));
     char resp[512];
     int n = snprintf(resp, sizeof(resp),
                      "HTTP/1.1 101 Switching Protocols\r\nUpgrade: "
@@ -317,7 +317,7 @@ typedef struct watch_thread_ctx {
   hmr_client_list* clients;
 } watch_thread_ctx;
 
-static int collect_watch_dirs(bundle_graph* g, char*** out_dirs, int* out_count) {
+static int collect_watch_dirs(v6_bundler_graph* g, char*** out_dirs, int* out_count) {
   char** dirs = malloc(sizeof(char*) * (size_t)(g->count > 0 ? g->count : 1));
   int count = 0;
   for (int i = 0; i < g->count; i++) {
@@ -351,72 +351,72 @@ static void free_watch_dirs(char** dirs, int count) {
 static void watch_thread_fn(void* arg) {
   watch_thread_ctx* wc = (watch_thread_ctx*)arg;
   hmr_snapshot snap;
-  bundle_hmr_snapshot_init(&snap);
+  v6_bundler_hmr_snapshot_init(&snap);
 
   for (;;) {
-    bundle_graph g;
-    bundle_graph_init(&g);
-    int rc = bundle_graph_build(&g, wc->entry);
+    v6_bundler_graph g;
+    v6_bundler_graph_init(&g);
+    int rc = v6_bundler_graph_build(&g, wc->entry);
     if (rc != 0) {
       for (int i = 0; i < g.error_count; i++)
         fprintf(stderr, "error: %s\n", g.errors[i]);
-      bundle_graph_free(&g);
-      bundle_sleep_ms(500);
+      v6_bundler_graph_free(&g);
+      v6_bundler_sleep_ms(500);
       continue;
     }
 
     char dir[1024];
     path_dirname(wc->outfile, dir, sizeof(dir));
-    bundle_mkdir_p(dir);
-    bundle_process_assets(&g, dir);
+    v6_bundler_mkdir_p(dir);
+    v6_bundler_process_assets(&g, dir);
 
-    bundle_emit_options eopts;
-    eopts.format = bundle_fmt_dev;
+    v6_bundler_emit_options eopts;
+    eopts.format = v6_bundler_fmt_dev;
     eopts.global_name = wc->global_name;
     size_t out_len = 0;
-    char* output = bundle_emit(&g, &eopts, &out_len);
-    bundle_write_file(wc->outfile, output, out_len);
+    char* output = v6_bundler_emit(&g, &eopts, &out_len);
+    v6_bundler_write_file(wc->outfile, output, out_len);
     printf("bundled %d module%s -> %s (%zu bytes)\n", g.count,
           g.count == 1 ? "" : "s", wc->outfile, out_len);
     fflush(stdout);
     free(output);
 
     size_t patch_len = 0;
-    char* patch = bundle_hmr_compute_patch(&snap, &g, &patch_len);
+    char* patch = v6_bundler_hmr_compute_patch(&snap, &g, &patch_len);
     if (patch) {
       printf("hmr: pushing module update\n");
       fflush(stdout);
       hmr_broadcast(wc->clients, patch);
       free(patch);
     }
-    bundle_hmr_snapshot_capture(&snap, &g);
+    v6_bundler_hmr_snapshot_capture(&snap, &g);
 
     char** dirs = NULL;
     int dir_count = 0;
     collect_watch_dirs(&g, &dirs, &dir_count);
-    bundle_graph_free(&g);
+    v6_bundler_graph_free(&g);
 
-    bundle_watcher* w = bundle_watcher_create();
+    v6_bundler_watcher* w = v6_bundler_watcher_create();
     for (int i = 0; i < dir_count; i++)
-      bundle_watcher_add_dir(w, dirs[i]);
+      v6_bundler_watcher_add_dir(w, dirs[i]);
     free_watch_dirs(dirs, dir_count);
 
     printf("watching %d director%s for changes...\n", dir_count,
           dir_count == 1 ? "y" : "ies");
     fflush(stdout);
 
-    int changed = bundle_watcher_wait(w, -1);
-    bundle_watcher_free(w);
+    int changed = v6_bundler_watcher_wait(w, -1);
+    v6_bundler_watcher_free(w);
     if (changed < 0)
       break;
 
-    bundle_sleep_ms(50);
+    v6_bundler_sleep_ms(50);
   }
 
-  bundle_hmr_snapshot_free(&snap);
+  v6_bundler_hmr_snapshot_free(&snap);
 }
 
-int bundle_devserver_run(const char* entry, v6_cli_options* opts,
+int v6_bundler_devserver_run(const char* entry, v6_cli_options* opts,
                          const char* outfile, int port) {
   if (v6_sockets_init() != 0) {
     fprintf(stderr, "error: failed to initialize sockets\n");
@@ -425,7 +425,7 @@ int bundle_devserver_run(const char* entry, v6_cli_options* opts,
 
   char serve_dir[1024];
   path_dirname(outfile, serve_dir, sizeof(serve_dir));
-  bundle_mkdir_p(serve_dir);
+  v6_bundler_mkdir_p(serve_dir);
 
   char index_path[1200];
   snprintf(index_path, sizeof(index_path), "%s/index.html", serve_dir);
@@ -456,7 +456,7 @@ int bundle_devserver_run(const char* entry, v6_cli_options* opts,
   wc->global_name = opts->bundle_global_name;
   wc->outfile = outfile;
   wc->clients = &clients;
-  bundle_thread_start(watch_thread_fn, wc);
+  v6_bundler_thread_start(watch_thread_fn, wc);
 
   v6_sock listener = socket(AF_INET, SOCK_STREAM, 0);
   int reuse = 1;
@@ -485,6 +485,6 @@ int bundle_devserver_run(const char* entry, v6_cli_options* opts,
     c->sock = client;
     snprintf(c->serve_dir, sizeof(c->serve_dir), "%s", serve_dir);
     c->clients = &clients;
-    bundle_thread_start(handle_connection, c);
+    v6_bundler_thread_start(handle_connection, c);
   }
 }

@@ -1,4 +1,4 @@
-#include "v6/bundle_sha1.h"
+#include "v6/bundler_sha1.h"
 
 #include <string.h>
 
@@ -48,7 +48,7 @@ static void sha1_process_block(uint32_t state[5], const unsigned char block[64])
   state[4] += e;
 }
 
-void bundle_sha1_init(bundle_sha1_ctx* ctx) {
+void v6_bundler_sha1_init(v6_bundler_sha1_ctx* ctx) {
   ctx->state[0] = 0x67452301u;
   ctx->state[1] = 0xEFCDAB89u;
   ctx->state[2] = 0x98BADCFEu;
@@ -58,7 +58,7 @@ void bundle_sha1_init(bundle_sha1_ctx* ctx) {
   ctx->buffer_len = 0;
 }
 
-void bundle_sha1_update(bundle_sha1_ctx* ctx, const unsigned char* data, size_t len) {
+void v6_bundler_sha1_update(v6_bundler_sha1_ctx* ctx, const unsigned char* data, size_t len) {
   ctx->count += len;
   while (len > 0) {
     size_t take = 64 - ctx->buffer_len;
@@ -75,15 +75,15 @@ void bundle_sha1_update(bundle_sha1_ctx* ctx, const unsigned char* data, size_t 
   }
 }
 
-void bundle_sha1_final(bundle_sha1_ctx* ctx, unsigned char digest[20]) {
+void v6_bundler_sha1_final(v6_bundler_sha1_ctx* ctx, unsigned char digest[20]) {
   uint64_t bit_count = ctx->count * 8;
 
   unsigned char pad = 0x80;
-  bundle_sha1_update(ctx, &pad, 1);
+  v6_bundler_sha1_update(ctx, &pad, 1);
 
   unsigned char zero = 0;
   while (ctx->buffer_len != 56) {
-    bundle_sha1_update(ctx, &zero, 1);
+    v6_bundler_sha1_update(ctx, &zero, 1);
   }
 
   unsigned char len_bytes[8];

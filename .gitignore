@@ -76,3 +76,6 @@ __pycache__/
 # test262 runner intermediate output (test/coverage.md is the committed artifact)
 test/test262-results.json
 test/test262/**/.v6t262_*
+
+# default bundler output dir (v6 -b)
+/dist/

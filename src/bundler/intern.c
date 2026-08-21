@@ -1,11 +1,11 @@
-#include "v6/bundle_intern.h"
+#include "v6/bundler_intern.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#define bundle_intern_initial_cap 256
+#define v6_bundler_intern_initial_cap 256
 
-unsigned long long bundle_fnv1a(const char* s, size_t len) {
+unsigned long long v6_bundler_fnv1a(const char* s, size_t len) {
   unsigned long long h = 1469598103934665603ULL;
   for (size_t i = 0; i < len; i++) {
     h ^= (unsigned char)s[i];
@@ -14,21 +14,21 @@ unsigned long long bundle_fnv1a(const char* s, size_t len) {
   return h;
 }
 
-void bundle_intern_init(bundle_intern_table* t, bundle_arena* arena) {
-  t->cap = bundle_intern_initial_cap;
+void v6_bundler_intern_init(v6_bundler_intern_table* t, v6_bundler_arena* arena) {
+  t->cap = v6_bundler_intern_initial_cap;
   t->count = 0;
   t->arena = arena;
-  t->entries = calloc(t->cap, sizeof(bundle_intern_entry));
+  t->entries = calloc(t->cap, sizeof(v6_bundler_intern_entry));
 }
 
-void bundle_intern_free(bundle_intern_table* t) {
+void v6_bundler_intern_free(v6_bundler_intern_table* t) {
   free(t->entries);
   t->entries = NULL;
   t->cap = 0;
   t->count = 0;
 }
 
-static void bundle_intern_insert_raw(bundle_intern_entry* entries, size_t cap,
+static void v6_bundler_intern_insert_raw(v6_bundler_intern_entry* entries, size_t cap,
                                      const char* str, size_t len,
                                      unsigned long long hash) {
   size_t idx = (size_t)(hash & (cap - 1));
@@ -41,13 +41,13 @@ static void bundle_intern_insert_raw(bundle_intern_entry* entries, size_t cap,
   entries[idx].used = 1;
 }
 
-static void bundle_intern_grow(bundle_intern_table* t) {
+static void v6_bundler_intern_grow(v6_bundler_intern_table* t) {
   size_t new_cap = t->cap * 2;
-  bundle_intern_entry* new_entries =
-      calloc(new_cap, sizeof(bundle_intern_entry));
+  v6_bundler_intern_entry* new_entries =
+      calloc(new_cap, sizeof(v6_bundler_intern_entry));
   for (size_t i = 0; i < t->cap; i++) {
     if (t->entries[i].used) {
-      bundle_intern_insert_raw(new_entries, new_cap, t->entries[i].str,
+      v6_bundler_intern_insert_raw(new_entries, new_cap, t->entries[i].str,
                                t->entries[i].len, t->entries[i].hash);
     }
   }
@@ -56,8 +56,8 @@ static void bundle_intern_grow(bundle_intern_table* t) {
   t->cap = new_cap;
 }
 
-const char* bundle_intern(bundle_intern_table* t, const char* s, size_t len) {
-  unsigned long long hash = bundle_fnv1a(s, len);
+const char* v6_bundler_intern(v6_bundler_intern_table* t, const char* s, size_t len) {
+  unsigned long long hash = v6_bundler_fnv1a(s, len);
   size_t idx = (size_t)(hash & (t->cap - 1));
   while (t->entries[idx].used) {
     if (t->entries[idx].hash == hash && t->entries[idx].len == len &&
@@ -67,14 +67,14 @@ const char* bundle_intern(bundle_intern_table* t, const char* s, size_t len) {
     idx = (idx + 1) & (t->cap - 1);
   }
   if ((t->count + 1) * 10 > t->cap * 7) {
-    bundle_intern_grow(t);
+    v6_bundler_intern_grow(t);
   }
-  const char* owned = bundle_arena_strdup(t->arena, s, len);
-  bundle_intern_insert_raw(t->entries, t->cap, owned, len, hash);
+  const char* owned = v6_bundler_arena_strdup(t->arena, s, len);
+  v6_bundler_intern_insert_raw(t->entries, t->cap, owned, len, hash);
   t->count++;
   return owned;
 }
 
-const char* bundle_intern_cstr(bundle_intern_table* t, const char* s) {
-  return bundle_intern(t, s, strlen(s));
+const char* v6_bundler_intern_cstr(v6_bundler_intern_table* t, const char* s) {
+  return v6_bundler_intern(t, s, strlen(s));
 }
