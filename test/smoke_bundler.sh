@@ -22,10 +22,38 @@ check() {
   fi
 }
 
+check_pattern() {
+  local label="$1"
+  local pattern="$2"
+  local actual="$3"
+  if echo "$actual" | grep -qE "$pattern"; then
+    PASS=$((PASS+1))
+  else
+    FAIL=$((FAIL+1))
+    FAILED_LIST+=("$label")
+    echo "--- FAIL: $label ---"
+    echo "expected pattern: $pattern"
+    echo "actual: $actual"
+  fi
+}
+
 for dir in test/fix/bundler/*/; do
   name=$(basename "$dir")
   entry="${dir}index.js"
   [ -f "$entry" ] || continue
+
+  if [ "$name" == "assets" ]; then
+    for fmt in cjs esm iife; do
+      ext=js
+      [ "$fmt" == "esm" ] && ext=mjs
+      out="$TMP/$name.$fmt.$ext"
+      "$V6" -b "$entry" --format "$fmt" --outfile "$out" >/dev/null 2>&1
+      node_out=$(node "$out" </dev/null 2>&1 | tr -d '\r')
+      check_pattern "$name ($fmt via node, css url)" '/assets/styles\.[0-9a-f]{8}\.css' "$node_out"
+      check_pattern "$name ($fmt via node, png url)" '/assets/icon\.[0-9a-f]{8}\.png' "$node_out"
+    done
+    continue
+  fi
 
   expected=$("$V6" "$entry" </dev/null 2>&1 | tr -d '\r')
 

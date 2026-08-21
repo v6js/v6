@@ -94,7 +94,9 @@ static void emit_import_replacement(bundle_strbuf* b, bundle_module* owner,
     bundle_strbuf_append_cstr(b, "var ");
     bundle_strbuf_append(b, ib->default_name, ib->default_len);
     bundle_strbuf_append_cstr(b, " = ");
-    if (target && target->kind == bundle_mod_json) {
+    if (target && (target->kind == bundle_mod_json ||
+                   target->kind == bundle_mod_css ||
+                   target->kind == bundle_mod_asset)) {
       emit_require_call(b, n->str, n->str_len);
     } else {
       emit_member_access_expr(b, n->str, n->str_len, "default", 7);
@@ -127,6 +129,12 @@ static void emit_module_body(bundle_strbuf* b, bundle_module* m) {
     bundle_strbuf_append_cstr(b, "module.exports = (");
     bundle_strbuf_append(b, m->source, m->source_len);
     bundle_strbuf_append_cstr(b, ");\n");
+    return;
+  }
+  if (m->kind == bundle_mod_css || m->kind == bundle_mod_asset) {
+    bundle_strbuf_append_cstr(b, "module.exports = ");
+    emit_js_string(b, m->asset_url, strlen(m->asset_url));
+    bundle_strbuf_append_cstr(b, ";\n");
     return;
   }
 

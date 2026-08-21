@@ -1,4 +1,5 @@
 #include "v6/cli.h"
+#include "v6/bundle_assets.h"
 #include "v6/bundle_graph.h"
 #include "v6/bundle_emit.h"
 #include "v6/bundle_fsutil.h"
@@ -68,18 +69,14 @@ int v6_cli_run_bundle(v6_cli_options* opts) {
     return 1;
   }
 
-  int had_asset = 0;
-  for (int i = 0; i < g.count; i++) {
-    if (g.modules[i]->kind == bundle_mod_css ||
-        g.modules[i]->kind == bundle_mod_asset) {
-      fprintf(stderr,
-              "error: %s: asset imports (css/images/etc) are not yet "
-              "supported by the bundler\n",
-              g.modules[i]->abs_path);
-      had_asset = 1;
-    }
-  }
-  if (had_asset) {
+  const char* outfile =
+      opts->bundle_outfile ? opts->bundle_outfile : "dist/bundle.js";
+  char dir[1024];
+  path_dirname(outfile, dir, sizeof(dir));
+  bundle_mkdir_p(dir);
+
+  if (bundle_process_assets(&g, dir) != 0) {
+    fprintf(stderr, "error: failed to write asset files under %s/assets\n", dir);
     bundle_graph_free(&g);
     return 1;
   }
@@ -90,12 +87,6 @@ int v6_cli_run_bundle(v6_cli_options* opts) {
 
   size_t out_len = 0;
   char* output = bundle_emit(&g, &eopts, &out_len);
-
-  const char* outfile =
-      opts->bundle_outfile ? opts->bundle_outfile : "dist/bundle.js";
-  char dir[1024];
-  path_dirname(outfile, dir, sizeof(dir));
-  bundle_mkdir_p(dir);
 
   if (bundle_write_file(outfile, output, out_len) != 0) {
     fprintf(stderr, "error: cannot write %s\n", outfile);
