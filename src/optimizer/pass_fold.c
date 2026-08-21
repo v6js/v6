@@ -231,6 +231,9 @@ static int strict_eq(const_val a, const_val b) {
 
 static ast_arena* g_fold_arena;
 static int g_math_shadowed;
+static int g_number_shadowed;
+static int g_string_shadowed;
+static int g_boolean_shadowed;
 
 static int is_ascii_str(const char* s, size_t len) {
   for (size_t i = 0; i < len; i++)
@@ -926,6 +929,43 @@ static char* dup_bytes(const char* s, int len) {
   return r;
 }
 
+static int fold_global_wrapper_call(ast_node* n) {
+  ast_node* callee = n->a;
+  if (callee->kind != ast_ident)
+    return 0;
+
+  int argc = n->list.len;
+  if (argc > 0 && n->list.items[0]->kind == ast_spread)
+    return 0;
+  const_val arg;
+  int have_arg = argc > 0 && get_const(n->list.items[0], &arg);
+  if (argc > 0 && !have_arg)
+    return 0;
+
+  if (!g_number_shadowed &&
+      name_matches(callee->str, callee->str_len, "Number")) {
+    set_num(n, argc == 0 ? 0.0 : to_number(arg));
+    return 1;
+  }
+  if (!g_boolean_shadowed &&
+      name_matches(callee->str, callee->str_len, "Boolean")) {
+    set_bool(n, argc == 0 ? 0 : to_boolean(arg));
+    return 1;
+  }
+  if (!g_string_shadowed &&
+      name_matches(callee->str, callee->str_len, "String")) {
+    if (argc == 0) {
+      set_str(n, "", 0);
+      return 1;
+    }
+    size_t sl;
+    const char* s = to_string_val(g_fold_arena, arg, &sl);
+    set_str(n, s, sl);
+    return 1;
+  }
+  return 0;
+}
+
 static int find_substr(const char* s, int len, const char* needle, int nlen,
                        int from) {
   if (from < 0)
@@ -1243,12 +1283,14 @@ static void fold_expr(ast_node* n, int* changed) {
   case ast_call:
     fold_expr(n->a, changed);
     fold_list(&n->list, changed);
-    if (fold_call(n) || fold_string_call(n))
+    if (fold_call(n) || fold_string_call(n) || fold_global_wrapper_call(n))
       *changed = 1;
     break;
   case ast_new:
     fold_expr(n->a, changed);
     fold_list(&n->list, changed);
+    if (fold_global_wrapper_call(n))
+      *changed = 1;
     break;
   case ast_template:
     fold_list(&n->list, changed);
@@ -1376,6 +1418,9 @@ static void fold_stmt(ast_node* n, int* changed) {
 int v6_opt_pass_const_fold(ast_node* program, ast_arena* arena) {
   g_fold_arena = arena;
   g_math_shadowed = bound_in_stmt(program, "Math");
+  g_number_shadowed = bound_in_stmt(program, "Number");
+  g_string_shadowed = bound_in_stmt(program, "String");
+  g_boolean_shadowed = bound_in_stmt(program, "Boolean");
   int changed = 0;
   fold_stmt(program, &changed);
   return changed;
