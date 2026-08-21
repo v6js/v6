@@ -76,16 +76,17 @@ int v6_bundler_parse_size(const char* s, long long* out_bytes) {
   return 0;
 }
 
-void v6_bundler_print_bundle_summary(const v6_bundler_graph* g, const char* outfile,
-                                     size_t out_len, v6_bundler_verbosity verbosity) {
+void v6_bundler_print_bundle_summary(const v6_bundler_graph* g,
+                                     const char* outfile, size_t out_len,
+                                     v6_bundler_verbosity verbosity) {
   if (verbosity == v6_bundler_verbosity_quiet)
     return;
 
   int c = v6_color_enabled_out();
   char size_buf[32];
 
-  printf("%s%s%12s%s %s%s%s\n", v6_c_bold(c), v6_c_green(c), "Bundled", v6_c_reset(c),
-        v6_c_bold(c), outfile, v6_c_reset(c));
+  printf("%s%s%12s%s %s%s%s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
+         v6_c_reset(c), v6_c_bold(c), outfile, v6_c_reset(c));
 
   int name_width = 0;
   for (int i = 0; i < g->count; i++) {
@@ -100,29 +101,31 @@ void v6_bundler_print_bundle_summary(const v6_bundler_graph* g, const char* outf
 
   for (int i = 0; i < g->count; i++) {
     v6_bundler_format_size((double)g->modules[i]->source_len, size_buf,
-                          sizeof(size_buf));
+                           sizeof(size_buf));
     printf("             %s%-*s%s  %s%8s%s\n", v6_c_dim(c), name_width,
-          g->modules[i]->id, v6_c_reset(c), v6_c_cyan(c), size_buf, v6_c_reset(c));
+           g->modules[i]->id, v6_c_reset(c), v6_c_cyan(c), size_buf,
+           v6_c_reset(c));
 
     if (verbosity == v6_bundler_verbosity_verbose) {
       for (int j = 0; j < g->modules[i]->import_count; j++) {
         v6_bundler_import_edge* e = &g->modules[i]->imports[j];
         printf("               %s%s %s -> %s%s\n", v6_c_dim(c), "resolves",
-              e->specifier, e->target ? e->target->id : "(external)",
-              v6_c_reset(c));
+               e->specifier, e->target ? e->target->id : "(external)",
+               v6_c_reset(c));
       }
     }
   }
 
   v6_bundler_format_size((double)out_len, size_buf, sizeof(size_buf));
-  printf("%s%12s%s %s%-*s%s  %s%8s%s  %s(%d module%s)%s\n", v6_c_bold(c), "Total",
-        v6_c_reset(c), v6_c_bold(c), name_width, "", v6_c_reset(c), v6_c_bold(c),
-        size_buf, v6_c_reset(c), v6_c_dim(c), g->count, g->count == 1 ? "" : "s",
-        v6_c_reset(c));
+  printf("%s%12s%s %s%-*s%s  %s%8s%s  %s(%d module%s)%s\n", v6_c_bold(c),
+         "Total", v6_c_reset(c), v6_c_bold(c), name_width, "", v6_c_reset(c),
+         v6_c_bold(c), size_buf, v6_c_reset(c), v6_c_dim(c), g->count,
+         g->count == 1 ? "" : "s", v6_c_reset(c));
 }
 
 int v6_bundler_check_limits(const v6_bundler_graph* g, size_t out_len,
-                            const v6_bundler_limits* limits, const char* outfile) {
+                            const v6_bundler_limits* limits,
+                            const char* outfile) {
   int c = v6_color_enabled_err();
   int failed = 0;
   char size_buf[32];
@@ -130,22 +133,24 @@ int v6_bundler_check_limits(const v6_bundler_graph* g, size_t out_len,
 
   if (limits->max_size > 0 && (long long)out_len > limits->max_size) {
     v6_bundler_format_size((double)out_len, size_buf, sizeof(size_buf));
-    v6_bundler_format_size((double)limits->max_size, limit_buf, sizeof(limit_buf));
+    v6_bundler_format_size((double)limits->max_size, limit_buf,
+                           sizeof(limit_buf));
     int is_error = limits->mode == v6_bundler_limit_error;
     fprintf(stderr, "%s%s%s%s: %s exceeds the size limit (%s > %s)\n",
-           v6_c_bold(c), is_error ? v6_c_red(c) : v6_c_yellow(c),
-           is_error ? "error" : "warning", v6_c_reset(c), outfile, size_buf,
-           limit_buf);
+            v6_c_bold(c), is_error ? v6_c_red(c) : v6_c_yellow(c),
+            is_error ? "error" : "warning", v6_c_reset(c), outfile, size_buf,
+            limit_buf);
     if (is_error)
       failed = 1;
   }
 
   if (limits->max_deps > 0 && (long long)g->count > limits->max_deps) {
     int is_error = limits->mode == v6_bundler_limit_error;
-    fprintf(stderr, "%s%s%s%s: %d modules exceeds the dependency limit (%lld)\n",
-           v6_c_bold(c), is_error ? v6_c_red(c) : v6_c_yellow(c),
-           is_error ? "error" : "warning", v6_c_reset(c), g->count,
-           limits->max_deps);
+    fprintf(stderr,
+            "%s%s%s%s: %d modules exceeds the dependency limit (%lld)\n",
+            v6_c_bold(c), is_error ? v6_c_red(c) : v6_c_yellow(c),
+            is_error ? "error" : "warning", v6_c_reset(c), g->count,
+            limits->max_deps);
     if (is_error)
       failed = 1;
   }

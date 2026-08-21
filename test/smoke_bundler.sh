@@ -112,6 +112,40 @@ kill "$html_serve_pid" >/dev/null 2>&1 || true
 wait "$html_serve_pid" 2>/dev/null
 sleep 0.5
 
+chunk_dir="test/fix/bundler/html-chunking"
+chunk_out="$TMP/html-chunking-dist"
+"$V6" -b "$chunk_dir/index.html" --outdir "$chunk_out" >/dev/null 2>&1
+shared_count=$(find "$chunk_out" -maxdepth 1 -name "shared.*.js" | wc -l)
+check "html-chunking (exactly one shared chunk written)" "1" "$shared_count"
+shared_file=$(find "$chunk_out" -maxdepth 1 -name "shared.*.js")
+a_file=$(find "$chunk_out" -maxdepth 1 -name "a.*.js")
+b_file=$(find "$chunk_out" -maxdepth 1 -name "b.*.js")
+check_not_pattern "html-chunking (module ids contain no absolute path)" \
+  '[A-Za-z]:[/\\]|^/home|^/Users' "$(cat "$shared_file" "$a_file" "$b_file")"
+check_not_pattern "html-chunking (per-script output does not re-emit shared module body)" \
+  'function greet' "$(cat "$a_file" "$b_file")"
+chunk_page=$(cat "$chunk_out/index.html")
+check_pattern "html-chunking (shared chunk script tag injected before others)" \
+  'shared\.[0-9a-f]{8}\.js"></script><script src="a\.' "$chunk_page"
+shared_base=$(basename "$shared_file")
+a_base=$(basename "$a_file")
+b_base=$(basename "$b_file")
+chunk_node_out=$(cd "$chunk_out" && node -e "
+  const vm = require('vm');
+  const fs = require('fs');
+  const sandbox = {};
+  sandbox.globalThis = sandbox;
+  const logs = [];
+  sandbox.console = { log: (...a) => logs.push(a.join(' ')) };
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync('$shared_base', 'utf8'), sandbox);
+  vm.runInContext(fs.readFileSync('$a_base', 'utf8'), sandbox);
+  vm.runInContext(fs.readFileSync('$b_base', 'utf8'), sandbox);
+  console.log(logs.join('|'));
+" </dev/null 2>&1 | tr -d '\r')
+check "html-chunking (shared module executed once, both scripts see it via node)" \
+  "a: hello a|b: hello b" "$chunk_node_out"
+
 for dir in test/fix/bundler/*/; do
   name=$(basename "$dir")
   entry="${dir}index.js"

@@ -56,6 +56,9 @@ typedef struct v6_bundler_graph {
 void v6_bundler_graph_init(v6_bundler_graph* g);
 void v6_bundler_graph_free(v6_bundler_graph* g);
 int v6_bundler_graph_build(v6_bundler_graph* g, const char* entry_path);
+int v6_bundler_graph_build_with_root(v6_bundler_graph* g,
+                                     const char* entry_path,
+                                     const char* root_dir_override);
 void v6_bundler_graph_topo_order(v6_bundler_graph* g,
                                  v6_bundler_module*** out_order,
                                  int* out_count);

@@ -37,7 +37,8 @@ typedef struct watch_thread_ctx {
   v6_bundler_hmr_clients* clients;
 } watch_thread_ctx;
 
-static int collect_watch_dirs(v6_bundler_graph* g, char*** out_dirs, int* out_count) {
+static int collect_watch_dirs(v6_bundler_graph* g, char*** out_dirs,
+                              int* out_count) {
   char** dirs = malloc(sizeof(char*) * (size_t)(g->count > 0 ? g->count : 1));
   int count = 0;
   for (int i = 0; i < g->count; i++) {
@@ -76,7 +77,7 @@ static void print_rebuild_status(const v6_bundler_graph* g, size_t out_len,
   char size_buf[32];
   v6_bundler_format_size((double)out_len, size_buf, sizeof(size_buf));
   printf("%s%s%12s%s %d module%s, %s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
-        v6_c_reset(c), g->count, g->count == 1 ? "" : "s", size_buf);
+         v6_c_reset(c), g->count, g->count == 1 ? "" : "s", size_buf);
   fflush(stdout);
 }
 
@@ -119,8 +120,8 @@ static void watch_thread_fn(void* arg) {
     if (patch) {
       if (wc->verbosity != v6_bundler_verbosity_quiet) {
         int hc = v6_color_enabled_out();
-        printf("%s%s%12s%s pushing module update\n", v6_c_bold(hc), v6_c_cyan(hc),
-              "HMR", v6_c_reset(hc));
+        printf("%s%s%12s%s pushing module update\n", v6_c_bold(hc),
+               v6_c_cyan(hc), "HMR", v6_c_reset(hc));
         fflush(stdout);
       }
       v6_bundler_hmr_broadcast(wc->clients, patch);
@@ -140,7 +141,7 @@ static void watch_thread_fn(void* arg) {
 
     if (wc->verbosity != v6_bundler_verbosity_quiet) {
       printf("Watching %d director%s for changes...\n", dir_count,
-            dir_count == 1 ? "y" : "ies");
+             dir_count == 1 ? "y" : "ies");
       fflush(stdout);
     }
 
@@ -156,7 +157,7 @@ static void watch_thread_fn(void* arg) {
 }
 
 int v6_bundler_devserver_run(const char* entry, v6_cli_options* opts,
-                         const char* outfile, int port) {
+                             const char* outfile, int port) {
   char serve_dir[1024];
   path_dirname(outfile, serve_dir, sizeof(serve_dir));
   v6_bundler_mkdir_p(serve_dir);
@@ -172,9 +173,9 @@ int v6_bundler_devserver_run(const char* entry, v6_cli_options* opts,
 
     char html[512];
     snprintf(html, sizeof(html),
-            "<!doctype html>\n<html>\n<head><meta charset=\"utf-8\"></head>\n"
-            "<body>\n<script src=\"%s\"></script>\n</body>\n</html>\n",
-            base);
+             "<!doctype html>\n<html>\n<head><meta charset=\"utf-8\"></head>\n"
+             "<body>\n<script src=\"%s\"></script>\n</body>\n</html>\n",
+             base);
     FILE* f = fopen(index_path, "wb");
     if (f) {
       fwrite(html, 1, strlen(html), f);

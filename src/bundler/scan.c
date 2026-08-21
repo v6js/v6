@@ -19,7 +19,8 @@ static void push_spec(v6_bundler_arena* a, v6_bundler_specifier_list* out,
   out->len++;
 }
 
-static void walk(v6_bundler_arena* a, ast_node* n, v6_bundler_specifier_list* out);
+static void walk(v6_bundler_arena* a, ast_node* n,
+                 v6_bundler_specifier_list* out);
 
 static void walk_list(v6_bundler_arena* a, ast_list* list,
                       v6_bundler_specifier_list* out) {
@@ -27,7 +28,8 @@ static void walk_list(v6_bundler_arena* a, ast_list* list,
     walk(a, list->items[i], out);
 }
 
-static void walk(v6_bundler_arena* a, ast_node* n, v6_bundler_specifier_list* out) {
+static void walk(v6_bundler_arena* a, ast_node* n,
+                 v6_bundler_specifier_list* out) {
   if (!n)
     return;
 
@@ -65,7 +67,7 @@ static void walk(v6_bundler_arena* a, ast_node* n, v6_bundler_specifier_list* ou
 }
 
 void v6_bundler_scan_imports(v6_bundler_arena* out_arena, ast_node* program,
-                         v6_bundler_specifier_list* out) {
+                             v6_bundler_specifier_list* out) {
   out->items = NULL;
   out->len = 0;
   out->cap = 0;

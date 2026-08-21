@@ -50,7 +50,8 @@ static void emit_member_access(v6_bundler_strbuf* b, const char* base,
   }
 }
 
-static void emit_require_call(v6_bundler_strbuf* b, const char* spec, size_t len) {
+static void emit_require_call(v6_bundler_strbuf* b, const char* spec,
+                              size_t len) {
   v6_bundler_strbuf_append_cstr(b, "require(");
   emit_js_string(b, spec, len);
   v6_bundler_strbuf_append_cstr(b, ")");
@@ -70,8 +71,8 @@ static void emit_member_access_expr(v6_bundler_strbuf* b, const char* spec,
   }
 }
 
-static v6_bundler_module* find_import_target(v6_bundler_module* m, const char* spec,
-                                         size_t spec_len) {
+static v6_bundler_module*
+find_import_target(v6_bundler_module* m, const char* spec, size_t spec_len) {
   for (int i = 0; i < m->import_count; i++) {
     if (strlen(m->imports[i].specifier) == spec_len &&
         memcmp(m->imports[i].specifier, spec, spec_len) == 0)
@@ -80,8 +81,8 @@ static v6_bundler_module* find_import_target(v6_bundler_module* m, const char* s
   return NULL;
 }
 
-static void emit_import_replacement(v6_bundler_strbuf* b, v6_bundler_module* owner,
-                                    ast_node* n) {
+static void emit_import_replacement(v6_bundler_strbuf* b,
+                                    v6_bundler_module* owner, ast_node* n) {
   ast_import_binding* ib = n->import_binding;
   if (!ib || ib->is_bare) {
     emit_require_call(b, n->str, n->str_len);
@@ -168,7 +169,8 @@ static void emit_module_id(v6_bundler_strbuf* b, const v6_bundler_module* m) {
 void v6_bundler_emit_one_module(v6_bundler_strbuf* b, v6_bundler_module* m) {
   v6_bundler_strbuf_append_cstr(b, "__v6_modules[");
   emit_module_id(b, m);
-  v6_bundler_strbuf_append_cstr(b, "] = function(module, exports, require) {\n");
+  v6_bundler_strbuf_append_cstr(b,
+                                "] = function(module, exports, require) {\n");
   emit_module_body(b, m);
   v6_bundler_strbuf_append_cstr(b, "};\n");
 
@@ -222,7 +224,7 @@ static void emit_runtime_preamble(v6_bundler_strbuf* b) {
 }
 
 char* v6_bundler_emit(v6_bundler_graph* g, const v6_bundler_emit_options* opts,
-                  size_t* out_len) {
+                      size_t* out_len) {
   v6_bundler_module** order;
   int count;
   v6_bundler_graph_topo_order(g, &order, &count);
@@ -256,16 +258,32 @@ char* v6_bundler_emit(v6_bundler_graph* g, const v6_bundler_emit_options* opts,
         continue;
       if (!is_valid_ident(key, strlen(key)))
         continue;
-      v6_bundler_strbuf_append_fmt(&b, "export var %s = __v6_entry_exports.%s;\n",
-                               key, key);
+      v6_bundler_strbuf_append_fmt(
+          &b, "export var %s = __v6_entry_exports.%s;\n", key, key);
     }
   } else if (opts->format == v6_bundler_fmt_iife) {
     if (opts->global_name) {
       v6_bundler_strbuf_append_fmt(&b, "globalThis.%s = __v6_entry_exports;\n",
-                               opts->global_name);
+                                   opts->global_name);
     }
     v6_bundler_strbuf_append_cstr(&b, "})();\n");
   }
 
   return v6_bundler_strbuf_take(&b, out_len);
+}
+
+void v6_bundler_emit_runtime_preamble(v6_bundler_strbuf* b) {
+  emit_runtime_preamble(b);
+}
+
+void v6_bundler_emit_entry_require(v6_bundler_strbuf* b,
+                                   v6_bundler_module* entry,
+                                   const char* global_name) {
+  v6_bundler_strbuf_append_cstr(b, "var __v6_entry_exports = __v6_require(");
+  emit_module_id(b, entry);
+  v6_bundler_strbuf_append_cstr(b, ");\n");
+  if (global_name) {
+    v6_bundler_strbuf_append_fmt(b, "globalThis.%s = __v6_entry_exports;\n",
+                                 global_name);
+  }
 }

@@ -65,7 +65,8 @@ int v6_bundler_process_assets(v6_bundler_graph* g, const char* outdir) {
     }
 
     char stem[512], ext[64];
-    split_stem_ext(basename_of(m->abs_path), stem, sizeof(stem), ext, sizeof(ext));
+    split_stem_ext(basename_of(m->abs_path), stem, sizeof(stem), ext,
+                   sizeof(ext));
 
     char hashed_name[600];
     snprintf(hashed_name, sizeof(hashed_name), "%s.%08llx%s", stem,

@@ -6,7 +6,8 @@ static uint32_t rol32(uint32_t v, int bits) {
   return (v << bits) | (v >> (32 - bits));
 }
 
-static void sha1_process_block(uint32_t state[5], const unsigned char block[64]) {
+static void sha1_process_block(uint32_t state[5],
+                               const unsigned char block[64]) {
   uint32_t w[80];
   for (int i = 0; i < 16; i++) {
     w[i] = ((uint32_t)block[i * 4] << 24) | ((uint32_t)block[i * 4 + 1] << 16) |
@@ -58,7 +59,8 @@ void v6_bundler_sha1_init(v6_bundler_sha1_ctx* ctx) {
   ctx->buffer_len = 0;
 }
 
-void v6_bundler_sha1_update(v6_bundler_sha1_ctx* ctx, const unsigned char* data, size_t len) {
+void v6_bundler_sha1_update(v6_bundler_sha1_ctx* ctx, const unsigned char* data,
+                            size_t len) {
   ctx->count += len;
   while (len > 0) {
     size_t take = 64 - ctx->buffer_len;

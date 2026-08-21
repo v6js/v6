@@ -20,3 +20,7 @@ typedef struct v6_bundler_emit_options {
 char* v6_bundler_emit(v6_bundler_graph* g, const v6_bundler_emit_options* opts,
                       size_t* out_len);
 void v6_bundler_emit_one_module(v6_bundler_strbuf* b, v6_bundler_module* m);
+void v6_bundler_emit_runtime_preamble(v6_bundler_strbuf* b);
+void v6_bundler_emit_entry_require(v6_bundler_strbuf* b,
+                                   v6_bundler_module* entry,
+                                   const char* global_name);

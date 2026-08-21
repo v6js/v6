@@ -24,7 +24,8 @@
 #define v6_bundler_sleep_ms(ms) usleep((useconds_t)(ms) * 1000)
 #endif
 
-static int collect_watch_dirs(v6_bundler_graph* g, char*** out_dirs, int* out_count) {
+static int collect_watch_dirs(v6_bundler_graph* g, char*** out_dirs,
+                              int* out_count) {
   char** dirs = malloc(sizeof(char*) * (size_t)(g->count > 0 ? g->count : 1));
   int count = 0;
   for (int i = 0; i < g->count; i++) {
@@ -55,10 +56,11 @@ static void free_watch_dirs(char** dirs, int count) {
   free(dirs);
 }
 
-int v6_bundler_build_js_once(const char* entry, v6_bundler_format fmt, const char* global_name,
-                         const char* outfile, const v6_bundler_limits* limits,
-                         v6_bundler_verbosity verbosity, char*** out_dirs,
-                         int* out_dir_count) {
+int v6_bundler_build_js_once(const char* entry, v6_bundler_format fmt,
+                             const char* global_name, const char* outfile,
+                             const v6_bundler_limits* limits,
+                             v6_bundler_verbosity verbosity, char*** out_dirs,
+                             int* out_dir_count) {
   v6_bundler_graph g;
   v6_bundler_graph_init(&g);
   int rc = v6_bundler_graph_build(&g, entry);
@@ -74,7 +76,8 @@ int v6_bundler_build_js_once(const char* entry, v6_bundler_format fmt, const cha
   v6_bundler_mkdir_p(dir);
 
   if (v6_bundler_process_assets(&g, dir) != 0) {
-    fprintf(stderr, "error: failed to write asset files under %s/assets\n", dir);
+    fprintf(stderr, "error: failed to write asset files under %s/assets\n",
+            dir);
     v6_bundler_graph_free(&g);
     return 1;
   }
@@ -96,7 +99,8 @@ int v6_bundler_build_js_once(const char* entry, v6_bundler_format fmt, const cha
   v6_bundler_print_bundle_summary(&g, outfile, out_len, verbosity);
   fflush(stdout);
 
-  int limits_failed = limits ? v6_bundler_check_limits(&g, out_len, limits, outfile) : 0;
+  int limits_failed =
+      limits ? v6_bundler_check_limits(&g, out_len, limits, outfile) : 0;
 
   free(output);
 
@@ -107,10 +111,11 @@ int v6_bundler_build_js_once(const char* entry, v6_bundler_format fmt, const cha
   return limits_failed ? 1 : 0;
 }
 
-int v6_bundler_run_watch_loop(const char* entry, v6_bundler_format fmt, const char* global_name,
-                          const char* outfile, const v6_bundler_limits* limits,
-                          v6_bundler_verbosity verbosity,
-                          v6_bundler_rebuild_cb on_rebuild, void* cb_arg) {
+int v6_bundler_run_watch_loop(const char* entry, v6_bundler_format fmt,
+                              const char* global_name, const char* outfile,
+                              const v6_bundler_limits* limits,
+                              v6_bundler_verbosity verbosity,
+                              v6_bundler_rebuild_cb on_rebuild, void* cb_arg) {
   for (;;) {
     if (verbosity != v6_bundler_verbosity_quiet)
       v6_bundler_clear_screen();
@@ -130,7 +135,7 @@ int v6_bundler_run_watch_loop(const char* entry, v6_bundler_format fmt, const ch
 
     if (verbosity != v6_bundler_verbosity_quiet) {
       printf("Watching %d director%s for changes...\n", dir_count,
-            dir_count == 1 ? "y" : "ies");
+             dir_count == 1 ? "y" : "ies");
       fflush(stdout);
     }
 

@@ -28,7 +28,8 @@
 #define v6_bundler_sleep_ms(ms) usleep((useconds_t)(ms) * 1000)
 #endif
 
-static void add_dir_if_new(char*** dirs, int* count, int* cap, const char* dir) {
+static void add_dir_if_new(char*** dirs, int* count, int* cap,
+                           const char* dir) {
   for (int j = 0; j < *count; j++) {
     if (strcmp((*dirs)[j], dir) == 0)
       return;
@@ -43,8 +44,8 @@ static void add_dir_if_new(char*** dirs, int* count, int* cap, const char* dir) 
   (*count)++;
 }
 
-static void collect_dirs_from_graph(v6_bundler_graph* g, char*** dirs, int* count,
-                                    int* cap) {
+static void collect_dirs_from_graph(v6_bundler_graph* g, char*** dirs,
+                                    int* count, int* cap) {
   for (int i = 0; i < g->count; i++) {
     char dir[1024];
     path_dirname(g->modules[i]->abs_path, dir, sizeof(dir));
@@ -67,6 +68,9 @@ static int collect_all_watch_dirs(const char* html_path, char*** out_dirs,
   path_dirname(html_path, html_dir, sizeof(html_dir));
   add_dir_if_new(&dirs, &count, &cap, html_dir);
 
+  char root_dir[1024];
+  v6_bundler_html_resolve_root(html_path, root_dir, sizeof(root_dir));
+
   v6_bundler_html_script_ref scripts[v6_bundler_html_max_scripts];
   int script_count = 0;
   v6_bundler_html_scan_scripts(html_path, scripts, v6_bundler_html_max_scripts,
@@ -75,7 +79,8 @@ static int collect_all_watch_dirs(const char* html_path, char*** out_dirs,
   for (int i = 0; i < script_count; i++) {
     v6_bundler_graph g;
     v6_bundler_graph_init(&g);
-    if (v6_bundler_graph_build(&g, scripts[i].entry_path) == 0)
+    if (v6_bundler_graph_build_with_root(&g, scripts[i].entry_path, root_dir) ==
+        0)
       collect_dirs_from_graph(&g, &dirs, &count, &cap);
     v6_bundler_graph_free(&g);
   }
@@ -101,12 +106,13 @@ int v6_bundler_run_watch_loop_html(const char* html_path, v6_cli_options* opts,
     if (verbosity != v6_bundler_verbosity_quiet)
       v6_bundler_clear_screen();
 
-    int rc = v6_bundler_process_html(html_path, outdir, opts->bundle_global_name, 0);
+    int rc =
+        v6_bundler_process_html(html_path, outdir, opts->bundle_global_name, 0);
 
     if (verbosity != v6_bundler_verbosity_quiet && rc == 0) {
       int c = v6_color_enabled_out();
-      printf("%s%s%12s%s %s\n", v6_c_bold(c), v6_c_green(c), "Bundled", v6_c_reset(c),
-            html_path);
+      printf("%s%s%12s%s %s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
+             v6_c_reset(c), html_path);
       fflush(stdout);
     }
 
@@ -121,7 +127,7 @@ int v6_bundler_run_watch_loop_html(const char* html_path, v6_cli_options* opts,
 
     if (verbosity != v6_bundler_verbosity_quiet) {
       printf("Watching %d director%s for changes...\n", dir_count,
-            dir_count == 1 ? "y" : "ies");
+             dir_count == 1 ? "y" : "ies");
       fflush(stdout);
     }
 
@@ -154,34 +160,39 @@ static void html_watch_thread_fn(void* arg) {
 
     v6_bundler_html_script_ref scripts[v6_bundler_html_max_scripts];
     int script_count = 0;
-    v6_bundler_html_scan_scripts(wc->html_path, scripts, v6_bundler_html_max_scripts,
-                                 &script_count);
+    v6_bundler_html_scan_scripts(wc->html_path, scripts,
+                                 v6_bundler_html_max_scripts, &script_count);
 
     while (snap_count < script_count) {
       v6_bundler_hmr_snapshot_init(&snaps[snap_count]);
       snap_count++;
     }
 
-    int rc = v6_bundler_process_html(wc->html_path, wc->outdir, wc->global_name, 1);
+    int rc =
+        v6_bundler_process_html(wc->html_path, wc->outdir, wc->global_name, 1);
 
     if (wc->verbosity != v6_bundler_verbosity_quiet && rc == 0) {
       int c = v6_color_enabled_out();
       printf("%s%s%12s%s %d script%s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
-            v6_c_reset(c), script_count, script_count == 1 ? "" : "s");
+             v6_c_reset(c), script_count, script_count == 1 ? "" : "s");
       fflush(stdout);
     }
+
+    char root_dir[1024];
+    v6_bundler_html_resolve_root(wc->html_path, root_dir, sizeof(root_dir));
 
     for (int i = 0; i < script_count; i++) {
       v6_bundler_graph g;
       v6_bundler_graph_init(&g);
-      if (v6_bundler_graph_build(&g, scripts[i].entry_path) == 0) {
+      if (v6_bundler_graph_build_with_root(&g, scripts[i].entry_path,
+                                           root_dir) == 0) {
         size_t patch_len = 0;
         char* patch = v6_bundler_hmr_compute_patch(&snaps[i], &g, &patch_len);
         if (patch) {
           if (wc->verbosity != v6_bundler_verbosity_quiet) {
             int hc = v6_color_enabled_out();
-            printf("%s%s%12s%s pushing module update\n", v6_c_bold(hc), v6_c_cyan(hc),
-                  "HMR", v6_c_reset(hc));
+            printf("%s%s%12s%s pushing module update\n", v6_c_bold(hc),
+                   v6_c_cyan(hc), "HMR", v6_c_reset(hc));
             fflush(stdout);
           }
           v6_bundler_hmr_broadcast(wc->clients, patch);
@@ -203,7 +214,7 @@ static void html_watch_thread_fn(void* arg) {
 
     if (wc->verbosity != v6_bundler_verbosity_quiet) {
       printf("Watching %d director%s for changes...\n", dir_count,
-            dir_count == 1 ? "y" : "ies");
+             dir_count == 1 ? "y" : "ies");
       fflush(stdout);
     }
 

@@ -78,9 +78,9 @@ int v6_bundler_watcher_wait(v6_bundler_watcher* w, int timeout_ms) {
   DWORD bytes;
   ULONG_PTR key;
   LPOVERLAPPED ov;
-  BOOL ok = GetQueuedCompletionStatus(
-      w->iocp, &bytes, &key, &ov,
-      timeout_ms < 0 ? INFINITE : (DWORD)timeout_ms);
+  BOOL ok =
+      GetQueuedCompletionStatus(w->iocp, &bytes, &key, &ov,
+                                timeout_ms < 0 ? INFINITE : (DWORD)timeout_ms);
   if (!ov)
     return ok ? 1 : 0;
   int idx = (int)key - 1;
@@ -124,8 +124,8 @@ v6_bundler_watcher* v6_bundler_watcher_create(void) {
 
 int v6_bundler_watcher_add_dir(v6_bundler_watcher* w, const char* dir) {
   int wd = inotify_add_watch(w->inotify_fd, dir,
-                             IN_MODIFY | IN_CREATE | IN_DELETE |
-                                 IN_MOVED_TO | IN_MOVED_FROM | IN_CLOSE_WRITE);
+                             IN_MODIFY | IN_CREATE | IN_DELETE | IN_MOVED_TO |
+                                 IN_MOVED_FROM | IN_CLOSE_WRITE);
   return wd >= 0 ? 0 : -1;
 }
 

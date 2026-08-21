@@ -87,7 +87,8 @@ static int path_parts_equal(const char* a, const char* b) {
 }
 
 static const char* compute_module_id(v6_bundler_intern_table* intern,
-                                     const char* root_dir, const char* abs_path) {
+                                     const char* root_dir,
+                                     const char* abs_path) {
   char root_buf[v6_max_path];
   char target_buf[v6_max_path];
   snprintf(root_buf, sizeof(root_buf), "%s", root_dir);
@@ -100,7 +101,7 @@ static const char* compute_module_id(v6_bundler_intern_table* intern,
 
   int common = 0;
   while (common < root_count && common < target_count &&
-        path_parts_equal(root_parts[common], target_parts[common])) {
+         path_parts_equal(root_parts[common], target_parts[common])) {
     common++;
   }
 
@@ -162,7 +163,8 @@ static void push_error(v6_bundler_graph* g, const char* msg) {
   g->errors[g->error_count++] = copy;
 }
 
-static v6_bundler_module* find_module(v6_bundler_graph* g, const char* abs_path) {
+static v6_bundler_module* find_module(v6_bundler_graph* g,
+                                      const char* abs_path) {
   for (int i = 0; i < g->count; i++) {
     if (g->modules[i]->abs_path == abs_path)
       return g->modules[i];
@@ -170,8 +172,10 @@ static v6_bundler_module* find_module(v6_bundler_graph* g, const char* abs_path)
   return NULL;
 }
 
-static v6_bundler_module* add_module(v6_bundler_graph* g, const char* abs_path) {
-  v6_bundler_module* m = v6_bundler_arena_alloc(&g->arena, sizeof(v6_bundler_module));
+static v6_bundler_module* add_module(v6_bundler_graph* g,
+                                     const char* abs_path) {
+  v6_bundler_module* m =
+      v6_bundler_arena_alloc(&g->arena, sizeof(v6_bundler_module));
   memset(m, 0, sizeof(*m));
   m->abs_path = abs_path;
   m->id = compute_module_id(&g->intern, g->root_dir, abs_path);
@@ -185,12 +189,13 @@ static v6_bundler_module* add_module(v6_bundler_graph* g, const char* abs_path) 
   return m;
 }
 
-static void add_edge(v6_bundler_graph* g, v6_bundler_module* from, const char* spec,
-                     size_t spec_len, int is_require, v6_bundler_module* target) {
+static void add_edge(v6_bundler_graph* g, v6_bundler_module* from,
+                     const char* spec, size_t spec_len, int is_require,
+                     v6_bundler_module* target) {
   if (from->import_count >= from->import_cap) {
     int new_cap = from->import_cap == 0 ? 4 : from->import_cap * 2;
-    v6_bundler_import_edge* items =
-        v6_bundler_arena_alloc(&g->arena, sizeof(v6_bundler_import_edge) * new_cap);
+    v6_bundler_import_edge* items = v6_bundler_arena_alloc(
+        &g->arena, sizeof(v6_bundler_import_edge) * new_cap);
     if (from->imports)
       memcpy(items, from->imports,
              sizeof(v6_bundler_import_edge) * from->import_count);
@@ -204,7 +209,8 @@ static void add_edge(v6_bundler_graph* g, v6_bundler_module* from, const char* s
   from->import_count++;
 }
 
-static v6_bundler_module* load_module(v6_bundler_graph* g, const char* abs_path) {
+static v6_bundler_module* load_module(v6_bundler_graph* g,
+                                      const char* abs_path) {
   v6_bundler_module* existing = find_module(g, abs_path);
   if (existing)
     return existing;
@@ -265,7 +271,8 @@ static v6_bundler_module* load_module(v6_bundler_graph* g, const char* abs_path)
       add_edge(g, m, spec_buf, sl, specs.items[i].is_require, NULL);
       continue;
     }
-    const char* resolved_interned = v6_bundler_intern_cstr(&g->intern, resolved);
+    const char* resolved_interned =
+        v6_bundler_intern_cstr(&g->intern, resolved);
     v6_bundler_module* target = load_module(g, resolved_interned);
     add_edge(g, m, spec_buf, sl, specs.items[i].is_require, target);
   }
@@ -273,7 +280,9 @@ static v6_bundler_module* load_module(v6_bundler_graph* g, const char* abs_path)
   return m;
 }
 
-int v6_bundler_graph_build(v6_bundler_graph* g, const char* entry_path) {
+int v6_bundler_graph_build_with_root(v6_bundler_graph* g,
+                                     const char* entry_path,
+                                     const char* root_dir_override) {
   char cwd[v6_max_path];
   if (!v6_getcwd(cwd, sizeof(cwd))) {
     push_error(g, "cannot determine current working directory");
@@ -297,16 +306,26 @@ int v6_bundler_graph_build(v6_bundler_graph* g, const char* entry_path) {
     push_error(g, msg);
     return -1;
   }
-  char root_buf[v6_max_path];
-  path_dirname(resolved, root_buf, sizeof(root_buf));
-  g->root_dir = v6_bundler_intern_cstr(&g->intern, root_buf);
+
+  if (root_dir_override) {
+    g->root_dir = v6_bundler_intern_cstr(&g->intern, root_dir_override);
+  } else {
+    char root_buf[v6_max_path];
+    path_dirname(resolved, root_buf, sizeof(root_buf));
+    g->root_dir = v6_bundler_intern_cstr(&g->intern, root_buf);
+  }
 
   const char* entry_interned = v6_bundler_intern_cstr(&g->intern, resolved);
   g->entry = load_module(g, entry_interned);
   return g->error_count == 0 ? 0 : -1;
 }
 
-static void topo_visit(v6_bundler_module* m, v6_bundler_module** out, int* out_count) {
+int v6_bundler_graph_build(v6_bundler_graph* g, const char* entry_path) {
+  return v6_bundler_graph_build_with_root(g, entry_path, NULL);
+}
+
+static void topo_visit(v6_bundler_module* m, v6_bundler_module** out,
+                       int* out_count) {
   if (!m || m->visited)
     return;
   m->visited = 1;
@@ -317,11 +336,13 @@ static void topo_visit(v6_bundler_module* m, v6_bundler_module** out, int* out_c
   m->order_index = *out_count - 1;
 }
 
-void v6_bundler_graph_topo_order(v6_bundler_graph* g, v6_bundler_module*** out_order,
-                             int* out_count) {
+void v6_bundler_graph_topo_order(v6_bundler_graph* g,
+                                 v6_bundler_module*** out_order,
+                                 int* out_count) {
   for (int i = 0; i < g->count; i++)
     g->modules[i]->visited = 0;
-  v6_bundler_module** out = malloc(sizeof(v6_bundler_module*) * (size_t)g->count);
+  v6_bundler_module** out =
+      malloc(sizeof(v6_bundler_module*) * (size_t)g->count);
   int count = 0;
   topo_visit(g->entry, out, &count);
   for (int i = 0; i < g->count; i++)

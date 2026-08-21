@@ -94,7 +94,8 @@ void v6_bundler_hmr_broadcast(v6_bundler_hmr_clients* l, const char* msg) {
   size_t cap = msg_len + 8;
   unsigned char* frame = malloc(cap);
   size_t frame_len;
-  if (v6_bundler_ws_encode_text_frame(msg, msg_len, frame, cap, &frame_len) != 0) {
+  if (v6_bundler_ws_encode_text_frame(msg, msg_len, frame, cap, &frame_len) !=
+      0) {
     free(frame);
     return;
   }
@@ -209,7 +210,8 @@ static void parse_request(const char* buf, http_request* req) {
     while (*key == ' ')
       key++;
     int i = 0;
-    while (*key && *key != '\r' && *key != '\n' && i < (int)sizeof(req->ws_key) - 1)
+    while (*key && *key != '\r' && *key != '\n' &&
+           i < (int)sizeof(req->ws_key) - 1)
       req->ws_key[i++] = *key++;
     req->ws_key[i] = '\0';
   }
@@ -219,8 +221,8 @@ static void serve_file(v6_sock s, const char* full_path) {
   size_t len;
   char* data = read_whole_file(full_path, &len);
   if (!data) {
-    const char* resp =
-        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    const char* resp = "HTTP/1.1 404 Not Found\r\nContent-Length: "
+                       "0\r\nConnection: close\r\n\r\n";
     v6_send_raw(s, resp, strlen(resp));
     return;
   }
@@ -279,11 +281,12 @@ static void handle_connection(void* arg) {
     char accept_key[64];
     v6_bundler_ws_accept_key(req.ws_key, accept_key, sizeof(accept_key));
     char resp[512];
-    int n = snprintf(resp, sizeof(resp),
-                     "HTTP/1.1 101 Switching Protocols\r\nUpgrade: "
-                     "websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "
-                     "%s\r\n\r\n",
-                     accept_key);
+    int n =
+        snprintf(resp, sizeof(resp),
+                 "HTTP/1.1 101 Switching Protocols\r\nUpgrade: "
+                 "websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "
+                 "%s\r\n\r\n",
+                 accept_key);
     v6_send_raw(c->sock, resp, (size_t)n);
     hmr_list_add(c->clients, c->sock);
     free(c);
@@ -309,7 +312,8 @@ int v6_bundler_http_serve(const char* serve_dir, int port,
 
   v6_sock listener = socket(AF_INET, SOCK_STREAM, 0);
   int reuse = 1;
-  setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
+  setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse,
+             sizeof(reuse));
 
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
@@ -324,8 +328,8 @@ int v6_bundler_http_serve(const char* serve_dir, int port,
   listen(listener, 16);
 
   int c = v6_color_enabled_out();
-  printf("%s%s%12s%s http://localhost:%d\n", v6_c_bold(c), v6_c_green(c), "Listening @",
-        v6_c_reset(c), port);
+  printf("%s%s%12s%s http://localhost:%d\n", v6_c_bold(c), v6_c_green(c),
+         "Listening @", v6_c_reset(c), port);
   fflush(stdout);
 
   for (;;) {
