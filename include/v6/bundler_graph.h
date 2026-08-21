@@ -24,6 +24,7 @@ typedef struct v6_bundler_import_edge {
 
 struct v6_bundler_module {
   const char* abs_path;
+  const char* id;
   v6_bundler_module_kind kind;
   char* source;
   size_t source_len;
@@ -46,6 +47,7 @@ typedef struct v6_bundler_graph {
   v6_bundler_arena arena;
   v6_bundler_intern_table intern;
   v6_bundler_module* entry;
+  const char* root_dir;
   char** errors;
   int error_count;
   int error_cap;

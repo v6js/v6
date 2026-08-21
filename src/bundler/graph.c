@@ -6,6 +6,7 @@
 
 #include "v6/bundler_graph.h"
 #include "v6/bundler_scan.h"
+#include "v6/bundler_strbuf.h"
 #include "v6/module.h"
 #include "v6/parser.h"
 #include "v6/ast_parse.h"
@@ -56,6 +57,71 @@ static char* read_file_text(const char* path, size_t* out_len) {
   return buf;
 }
 
+#define v6_bundler_max_path_parts 64
+
+static int split_path_parts(char* mutable_path, char** parts) {
+  int count = 0;
+  char* p = mutable_path;
+  while (*p && count < v6_bundler_max_path_parts) {
+    while (*p == '/' || *p == '\\')
+      p++;
+    if (!*p)
+      break;
+    parts[count++] = p;
+    while (*p && *p != '/' && *p != '\\')
+      p++;
+    if (*p) {
+      *p = '\0';
+      p++;
+    }
+  }
+  return count;
+}
+
+static int path_parts_equal(const char* a, const char* b) {
+#ifdef _WIN32
+  return _stricmp(a, b) == 0;
+#else
+  return strcmp(a, b) == 0;
+#endif
+}
+
+static const char* compute_module_id(v6_bundler_intern_table* intern,
+                                     const char* root_dir, const char* abs_path) {
+  char root_buf[v6_max_path];
+  char target_buf[v6_max_path];
+  snprintf(root_buf, sizeof(root_buf), "%s", root_dir);
+  snprintf(target_buf, sizeof(target_buf), "%s", abs_path);
+
+  char* root_parts[v6_bundler_max_path_parts];
+  char* target_parts[v6_bundler_max_path_parts];
+  int root_count = split_path_parts(root_buf, root_parts);
+  int target_count = split_path_parts(target_buf, target_parts);
+
+  int common = 0;
+  while (common < root_count && common < target_count &&
+        path_parts_equal(root_parts[common], target_parts[common])) {
+    common++;
+  }
+
+  v6_bundler_strbuf out;
+  v6_bundler_strbuf_init(&out);
+  int up = root_count - common;
+  for (int i = 0; i < up; i++)
+    v6_bundler_strbuf_append_cstr(&out, "../");
+  for (int i = common; i < target_count; i++) {
+    v6_bundler_strbuf_append_cstr(&out, target_parts[i]);
+    if (i + 1 < target_count)
+      v6_bundler_strbuf_append_cstr(&out, "/");
+  }
+  if (out.len == 0)
+    v6_bundler_strbuf_append_cstr(&out, ".");
+
+  const char* id = v6_bundler_intern(intern, out.data, out.len);
+  v6_bundler_strbuf_free(&out);
+  return id;
+}
+
 void v6_bundler_graph_init(v6_bundler_graph* g) {
   v6_bundler_arena_init(&g->arena);
   v6_bundler_intern_init(&g->intern, &g->arena);
@@ -63,6 +129,7 @@ void v6_bundler_graph_init(v6_bundler_graph* g) {
   g->count = 0;
   g->cap = 0;
   g->entry = NULL;
+  g->root_dir = NULL;
   g->errors = NULL;
   g->error_count = 0;
   g->error_cap = 0;
@@ -107,6 +174,7 @@ static v6_bundler_module* add_module(v6_bundler_graph* g, const char* abs_path) 
   v6_bundler_module* m = v6_bundler_arena_alloc(&g->arena, sizeof(v6_bundler_module));
   memset(m, 0, sizeof(*m));
   m->abs_path = abs_path;
+  m->id = compute_module_id(&g->intern, g->root_dir, abs_path);
   m->kind = v6_bundler_classify_path(abs_path);
   if (g->count >= g->cap) {
     int new_cap = g->cap == 0 ? 16 : g->cap * 2;
@@ -229,6 +297,10 @@ int v6_bundler_graph_build(v6_bundler_graph* g, const char* entry_path) {
     push_error(g, msg);
     return -1;
   }
+  char root_buf[v6_max_path];
+  path_dirname(resolved, root_buf, sizeof(root_buf));
+  g->root_dir = v6_bundler_intern_cstr(&g->intern, root_buf);
+
   const char* entry_interned = v6_bundler_intern_cstr(&g->intern, resolved);
   g->entry = load_module(g, entry_interned);
   return g->error_count == 0 ? 0 : -1;

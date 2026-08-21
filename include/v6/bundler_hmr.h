@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 typedef struct hmr_snapshot_entry {
-  char* abs_path;
+  char* id;
   unsigned long long hash;
 } hmr_snapshot_entry;
 

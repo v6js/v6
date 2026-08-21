@@ -126,8 +126,8 @@ static void emit_import_replacement(v6_bundler_strbuf* b, v6_bundler_module* own
 
 static void emit_module_body(v6_bundler_strbuf* b, v6_bundler_module* m) {
   if (m->kind == v6_bundler_mod_json) {
-    v6_bundler_strbuf_append_cstr(b, "module.exports = (");
-    v6_bundler_strbuf_append(b, m->source, m->source_len);
+    v6_bundler_strbuf_append_cstr(b, "module.exports = JSON.parse(");
+    emit_js_string(b, m->source, m->source_len);
     v6_bundler_strbuf_append_cstr(b, ");\n");
     return;
   }
@@ -162,7 +162,7 @@ static void emit_module_body(v6_bundler_strbuf* b, v6_bundler_module* m) {
 }
 
 static void emit_module_id(v6_bundler_strbuf* b, const v6_bundler_module* m) {
-  emit_js_string(b, m->abs_path, strlen(m->abs_path));
+  emit_js_string(b, m->id, strlen(m->id));
 }
 
 void v6_bundler_emit_one_module(v6_bundler_strbuf* b, v6_bundler_module* m) {

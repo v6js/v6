@@ -13,7 +13,7 @@ void v6_bundler_hmr_snapshot_init(hmr_snapshot* snap) {
 
 void v6_bundler_hmr_snapshot_free(hmr_snapshot* snap) {
   for (int i = 0; i < snap->count; i++)
-    free(snap->entries[i].abs_path);
+    free(snap->entries[i].id);
   free(snap->entries);
   snap->entries = NULL;
   snap->count = 0;
@@ -28,7 +28,7 @@ static unsigned long long module_signature(v6_bundler_module* m) {
     v6_bundler_strbuf_append_cstr(&sig, m->imports[i].specifier);
     v6_bundler_strbuf_append_cstr(&sig, "\x02");
     if (m->imports[i].target)
-      v6_bundler_strbuf_append_cstr(&sig, m->imports[i].target->abs_path);
+      v6_bundler_strbuf_append_cstr(&sig, m->imports[i].target->id);
   }
   unsigned long long h = v6_bundler_fnv1a(sig.data, sig.len);
   v6_bundler_strbuf_free(&sig);
@@ -40,17 +40,17 @@ void v6_bundler_hmr_snapshot_capture(hmr_snapshot* snap, v6_bundler_graph* g) {
   snap->entries = malloc(sizeof(hmr_snapshot_entry) * (size_t)(g->count > 0 ? g->count : 1));
   snap->count = g->count;
   for (int i = 0; i < g->count; i++) {
-    size_t n = strlen(g->modules[i]->abs_path);
-    snap->entries[i].abs_path = malloc(n + 1);
-    memcpy(snap->entries[i].abs_path, g->modules[i]->abs_path, n + 1);
+    size_t n = strlen(g->modules[i]->id);
+    snap->entries[i].id = malloc(n + 1);
+    memcpy(snap->entries[i].id, g->modules[i]->id, n + 1);
     snap->entries[i].hash = module_signature(g->modules[i]);
   }
 }
 
-static int find_prev_hash(hmr_snapshot* prev, const char* abs_path,
+static int find_prev_hash(hmr_snapshot* prev, const char* id,
                           unsigned long long* out_hash) {
   for (int i = 0; i < prev->count; i++) {
-    if (strcmp(prev->entries[i].abs_path, abs_path) == 0) {
+    if (strcmp(prev->entries[i].id, id) == 0) {
       *out_hash = prev->entries[i].hash;
       return 1;
     }
@@ -68,7 +68,7 @@ char* v6_bundler_hmr_compute_patch(hmr_snapshot* prev, v6_bundler_graph* g, size
   for (int i = 0; i < g->count; i++) {
     unsigned long long prev_hash;
     unsigned long long cur_hash = module_signature(g->modules[i]);
-    if (!find_prev_hash(prev, g->modules[i]->abs_path, &prev_hash) ||
+    if (!find_prev_hash(prev, g->modules[i]->id, &prev_hash) ||
         prev_hash != cur_hash) {
       affected[i] = 1;
       any_changed = 1;
@@ -132,7 +132,7 @@ char* v6_bundler_hmr_compute_patch(hmr_snapshot* prev, v6_bundler_graph* g, size
     if (!first)
       v6_bundler_strbuf_append_cstr(&ids, ",");
     v6_bundler_strbuf_append(&ids, "\"", 1);
-    for (const char* p = m->abs_path; *p; p++) {
+    for (const char* p = m->id; *p; p++) {
       if (*p == '"' || *p == '\\')
         v6_bundler_strbuf_append(&ids, "\\", 1);
       v6_bundler_strbuf_append(&ids, p, 1);
