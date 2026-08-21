@@ -1883,8 +1883,14 @@ static ast_node* ast_parse_stmt(parser* p) {
 ast_node* ast_parse_program_from(ast_arena* arena, parser* p) {
   g_arena = arena;
   ast_node* n = ast_new_node(arena, ast_program, 1);
-  while (!check(p, tok_eof) && !p->had_error)
-    ast_list_push(arena, &n->list, ast_parse_stmt(p));
+  n->stmt_src_start = p->cur.start;
+  while (!check(p, tok_eof) && !p->had_error) {
+    const char* stmt_start = p->cur.start;
+    ast_node* stmt = ast_parse_stmt(p);
+    if (stmt)
+      stmt->stmt_src_start = stmt_start;
+    ast_list_push(arena, &n->list, stmt);
+  }
   return n;
 }
 

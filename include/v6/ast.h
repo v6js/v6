@@ -189,6 +189,7 @@ struct ast_node {
   ast_switch_case_list cases;
 
   const char* raw_src;
+  const char* stmt_src_start;
   ast_import_binding* import_binding;
 
   char* text_owned;

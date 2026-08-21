@@ -2,6 +2,7 @@
 
 #include "v6/module.h"
 #include "v6/internal.h"
+#include "v6/export_scan.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -196,13 +197,6 @@ void skip_balanced(parser* p, tok_kind open, tok_kind close) {
   p->lex.auto_regex = save_auto_regex;
 }
 
-#define v6_max_exports 128
-
-typedef struct export_binding {
-  char local_name[64];
-  char export_key[64];
-} export_binding;
-
 static void blank_range(char* src, size_t start, size_t end) {
   for (size_t i = start; i < end; i++)
     if (src[i] != '\n')
@@ -222,8 +216,7 @@ static void record_export(export_binding* bindings, int* count, tok local,
   (*count)++;
 }
 
-static void preprocess_exports(char* src, export_binding* bindings,
-                               int* count) {
+void preprocess_exports(char* src, export_binding* bindings, int* count) {
   lexer lx;
   lex_init(&lx, src);
   lx.auto_regex = 1;
