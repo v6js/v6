@@ -187,7 +187,7 @@ def restart_daemon(v6_bin_name):
     subprocess.run(["taskkill", "/F", "/IM", v6_bin_name, "/T"],
                     capture_output=True)
   else:
-    subprocess.run(["pkill", "-f", v6_bin_name], capture_output=True)
+    subprocess.run(["pkill", "-x", v6_bin_name], capture_output=True)
 
 
 def chunked(seq, size):
