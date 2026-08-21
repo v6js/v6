@@ -1,26 +1,26 @@
 # test262 coverage
 
-**Overall (language + built-ins + annexB): 21.90% (10648/48622)**
+**Overall (language + built-ins + annexB): 21.89% (10643/48622)**
 
 ## By category
 
 | Category | Pass | Total | % | Scored |
 |:---|---:|---:|---:|:---:|
 | language | 8083 | 23724 | 34.07 | yes |
-| built-ins | 2482 | 23812 | 10.42 | yes |
-| annexB | 83 | 1086 | 7.64 | yes |
+| built-ins | 2478 | 23812 | 10.41 | yes |
+| annexB | 82 | 1086 | 7.55 | yes |
 | intl402 | 0 | 3357 | 0.00 | no |
-| staging | 94 | 1483 | 6.34 | no |
+| staging | 95 | 1483 | 6.41 | no |
 
 ## By area (scored categories only)
 
 | Area | Pass | Total | % |
 |:---|---:|---:|---:|
-| annexB/built-ins | 5 | 241 | 2.07 |
+| annexB/built-ins | 4 | 241 | 1.66 |
 | annexB/language | 78 | 845 | 9.23 |
 | built-ins/AbstractModuleSource | 0 | 8 | 0.00 |
 | built-ins/AggregateError | 0 | 25 | 0.00 |
-| built-ins/Array | 125 | 3082 | 4.06 |
+| built-ins/Array | 122 | 3082 | 3.96 |
 | built-ins/ArrayBuffer | 8 | 221 | 3.62 |
 | built-ins/ArrayIteratorPrototype | 0 | 27 | 0.00 |
 | built-ins/AsyncDisposableStack | 0 | 104 | 0.00 |
@@ -33,7 +33,7 @@
 | built-ins/BigInt | 6 | 77 | 7.79 |
 | built-ins/Boolean | 14 | 51 | 27.45 |
 | built-ins/DataView | 0 | 561 | 0.00 |
-| built-ins/Date | 82 | 594 | 13.80 |
+| built-ins/Date | 83 | 594 | 13.97 |
 | built-ins/DisposableStack | 0 | 93 | 0.00 |
 | built-ins/Error | 3 | 93 | 3.23 |
 | built-ins/FinalizationRegistry | 0 | 47 | 0.00 |
@@ -42,24 +42,24 @@
 | built-ins/GeneratorPrototype | 34 | 61 | 55.74 |
 | built-ins/Infinity | 2 | 6 | 33.33 |
 | built-ins/Iterator | 0 | 654 | 0.00 |
-| built-ins/JSON | 19 | 165 | 11.52 |
-| built-ins/Map | 16 | 204 | 7.84 |
+| built-ins/JSON | 17 | 165 | 10.30 |
+| built-ins/Map | 15 | 204 | 7.35 |
 | built-ins/MapIteratorPrototype | 0 | 11 | 0.00 |
-| built-ins/Math | 100 | 327 | 30.58 |
+| built-ins/Math | 101 | 327 | 30.89 |
 | built-ins/NaN | 2 | 6 | 33.33 |
 | built-ins/NativeErrors | 18 | 94 | 19.15 |
 | built-ins/Number | 115 | 340 | 33.82 |
-| built-ins/Object | 752 | 3411 | 22.05 |
-| built-ins/Promise | 67 | 732 | 9.15 |
+| built-ins/Object | 756 | 3411 | 22.16 |
+| built-ins/Promise | 68 | 732 | 9.29 |
 | built-ins/Proxy | 0 | 311 | 0.00 |
 | built-ins/Reflect | 0 | 153 | 0.00 |
 | built-ins/RegExp | 550 | 1879 | 29.27 |
 | built-ins/RegExpStringIteratorPrototype | 0 | 17 | 0.00 |
-| built-ins/Set | 27 | 383 | 7.05 |
+| built-ins/Set | 26 | 383 | 6.79 |
 | built-ins/SetIteratorPrototype | 0 | 11 | 0.00 |
 | built-ins/ShadowRealm | 0 | 64 | 0.00 |
 | built-ins/SharedArrayBuffer | 0 | 104 | 0.00 |
-| built-ins/String | 265 | 1223 | 21.67 |
+| built-ins/String | 261 | 1223 | 21.34 |
 | built-ins/StringIteratorPrototype | 0 | 7 | 0.00 |
 | built-ins/SuppressedError | 0 | 22 | 0.00 |
 | built-ins/Symbol | 7 | 98 | 7.14 |
@@ -82,7 +82,7 @@
 | built-ins/parseFloat | 41 | 54 | 75.93 |
 | built-ins/parseInt | 43 | 55 | 78.18 |
 | built-ins/undefined | 1 | 8 | 12.50 |
-| language/arguments-object | 116 | 263 | 44.11 |
+| language/arguments-object | 117 | 263 | 44.49 |
 | language/asi | 89 | 102 | 87.25 |
 | language/block-scope | 44 | 145 | 30.34 |
 | language/comments | 30 | 52 | 57.69 |
@@ -91,7 +91,7 @@
 | language/directive-prologue | 24 | 62 | 38.71 |
 | language/eval-code | 7 | 347 | 2.02 |
 | language/export | 3 | 3 | 100.00 |
-| language/expressions | 4022 | 11102 | 36.23 |
+| language/expressions | 4021 | 11102 | 36.22 |
 | language/function-code | 72 | 217 | 33.18 |
 | language/future-reserved-words | 34 | 55 | 61.82 |
 | language/global-code | 6 | 42 | 14.29 |
@@ -166,10 +166,10 @@
 | Map | 5 | 40 | 12.50 |
 | Math.sumPrecise | 0 | 10 | 0.00 |
 | Object.fromEntries | 4 | 25 | 16.00 |
-| Object.hasOwn | 6 | 62 | 9.68 |
+| Object.hasOwn | 9 | 62 | 14.52 |
 | Object.is | 1 | 2 | 50.00 |
 | Promise | 2 | 4 | 50.00 |
-| Promise.allSettled | 20 | 102 | 19.61 |
+| Promise.allSettled | 22 | 102 | 21.57 |
 | Promise.any | 6 | 92 | 6.52 |
 | Promise.prototype.finally | 0 | 29 | 0.00 |
 | Proxy | 0 | 479 | 0.00 |
@@ -182,20 +182,20 @@
 | ShadowRealm | 0 | 64 | 0.00 |
 | SharedArrayBuffer | 0 | 467 | 0.00 |
 | String.fromCodePoint | 10 | 22 | 45.45 |
-| String.prototype.at | 2 | 11 | 18.18 |
+| String.prototype.at | 1 | 11 | 9.09 |
 | String.prototype.endsWith | 0 | 27 | 0.00 |
-| String.prototype.includes | 7 | 26 | 26.92 |
+| String.prototype.includes | 5 | 26 | 19.23 |
 | String.prototype.isWellFormed | 0 | 8 | 0.00 |
 | String.prototype.matchAll | 0 | 16 | 0.00 |
 | String.prototype.replaceAll | 0 | 41 | 0.00 |
 | String.prototype.toWellFormed | 0 | 8 | 0.00 |
 | String.prototype.trimEnd | 0 | 24 | 0.00 |
 | String.prototype.trimStart | 2 | 23 | 8.70 |
-| Symbol | 44 | 1484 | 2.96 |
+| Symbol | 43 | 1484 | 2.90 |
 | Symbol.asyncIterator | 0 | 538 | 0.00 |
 | Symbol.hasInstance | 0 | 17 | 0.00 |
 | Symbol.isConcatSpreadable | 0 | 34 | 0.00 |
-| Symbol.iterator | 170 | 1867 | 9.11 |
+| Symbol.iterator | 171 | 1867 | 9.16 |
 | Symbol.match | 5 | 88 | 5.68 |
 | Symbol.matchAll | 0 | 63 | 0.00 |
 | Symbol.prototype.description | 2 | 8 | 25.00 |
@@ -213,7 +213,7 @@
 | Uint32Array | 0 | 2 | 0.00 |
 | Uint8Array | 2 | 13 | 15.38 |
 | Uint8ClampedArray | 0 | 6 | 0.00 |
-| WeakMap | 11 | 79 | 13.92 |
+| WeakMap | 10 | 79 | 12.66 |
 | WeakRef | 0 | 37 | 0.00 |
 | WeakSet | 7 | 34 | 20.59 |
 | __getter__ | 0 | 27 | 0.00 |
@@ -226,7 +226,7 @@
 | arraybuffer-transfer | 0 | 59 | 0.00 |
 | arrow-function | 149 | 949 | 15.70 |
 | async-functions | 288 | 702 | 41.03 |
-| async-iteration | 1201 | 4971 | 24.16 |
+| async-iteration | 1202 | 4971 | 24.18 |
 | await-dictionary | 0 | 89 | 0.00 |
 | caller | 17 | 23 | 73.91 |
 | canonical-tz | 0 | 19 | 0.00 |
@@ -305,7 +305,7 @@
 | stable-typedarray-sort | 0 | 1 | 0.00 |
 | string-trimming | 2 | 54 | 3.70 |
 | super | 5 | 19 | 26.32 |
-| symbols-as-weakmap-keys | 5 | 29 | 17.24 |
+| symbols-as-weakmap-keys | 4 | 29 | 13.79 |
 | tail-call-optimization | 0 | 35 | 0.00 |
 | template | 1 | 1 | 100.00 |
 | top-level-await | 4 | 277 | 1.44 |
@@ -319,5 +319,5 @@
 | Category | Pass | Total | % |
 |:---|---:|---:|---:|
 | intl402 | 0 | 3357 | 0.00 |
-| staging | 94 | 1483 | 6.34 |
+| staging | 95 | 1483 | 6.41 |
 
