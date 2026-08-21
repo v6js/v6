@@ -1,0 +1,16 @@
+console.log(3.141592653589793);
+console.log(7);
+console.log(-1);
+console.log(5);
+console.log(4);
+console.log(5);
+console.log(3);
+console.log(-2);
+console.log(4);
+console.log(1024);
+console.log(-Infinity);
+console.log(Infinity);
+console.log(5);
+console.log(3);
+console.log(5);
+console.log(2);

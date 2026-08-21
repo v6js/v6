@@ -20,6 +20,16 @@ public final class V6Builtins {
                            null));
   }
 
+  private static V6Value fnVarReduce(java.util.function.DoubleBinaryOperator f,
+                                     double identity) {
+    return fn((thisArg, args) -> {
+      double r = identity;
+      for (V6Value a : args)
+        r = f.applyAsDouble(r, a.toNumber());
+      return new V6Value(V6Value.TAG_NUM, r, null);
+    });
+  }
+
   private static V6Value boolValue(boolean b) {
     return new V6Value(V6Value.TAG_BOOL, b ? 1 : 0, null);
   }
@@ -172,9 +182,27 @@ public final class V6Builtins {
   public static final V6Value SQRT = fn1(Math::sqrt);
   public static final V6Value CBRT = fn1(Math::cbrt);
   public static final V6Value SIGN = fn1(Math::signum);
-  public static final V6Value MAX = fn2(Math::max);
-  public static final V6Value MIN = fn2(Math::min);
+  public static final V6Value MAX =
+      fnVarReduce(Math::max, Double.NEGATIVE_INFINITY);
+  public static final V6Value MIN =
+      fnVarReduce(Math::min, Double.POSITIVE_INFINITY);
   public static final V6Value POW = fn2(Math::pow);
+  public static final V6Value HYPOT = fn((thisArg, args) -> {
+    boolean hasInf = false, hasNaN = false;
+    double sum = 0;
+    for (V6Value a : args) {
+      double v = a.toNumber();
+      if (Double.isInfinite(v))
+        hasInf = true;
+      if (Double.isNaN(v))
+        hasNaN = true;
+      sum += v * v;
+    }
+    double result = hasInf   ? Double.POSITIVE_INFINITY
+                    : hasNaN ? Double.NaN
+                             : Math.sqrt(sum);
+    return new V6Value(V6Value.TAG_NUM, result, null);
+  });
   public static final V6Value RANDOM =
       fn((thisArg, args) -> new V6Value(V6Value.TAG_NUM, Math.random(), null));
   public static final V6Value LOG = fn1(Math::log);
@@ -188,6 +216,15 @@ public final class V6Builtins {
   public static final V6Value ACOS = fn1(Math::acos);
   public static final V6Value ATAN = fn1(Math::atan);
   public static final V6Value ATAN2 = fn2(Math::atan2);
+  public static final V6Value SINH = fn1(Math::sinh);
+  public static final V6Value COSH = fn1(Math::cosh);
+  public static final V6Value TANH = fn1(Math::tanh);
+  public static final V6Value ASINH =
+      fn1(a -> Math.log(a + Math.sqrt(a * a + 1)));
+  public static final V6Value ACOSH =
+      fn1(a -> Math.log(a + Math.sqrt(a * a - 1)));
+  public static final V6Value ATANH =
+      fn1(a -> 0.5 * Math.log((1 + a) / (1 - a)));
   public static final V6Value CLZ32 = fn((thisArg, args) -> {
     long v = (long)V6Value.argAt(args, 0).toNumber();
     int x = (int)(v & 0xFFFFFFFFL);
@@ -207,6 +244,7 @@ public final class V6Builtins {
     o.set("max", MAX);
     o.set("min", MIN);
     o.set("pow", POW);
+    o.set("hypot", HYPOT);
     o.set("random", RANDOM);
     o.set("log", LOG);
     o.set("log2", LOG2);
@@ -220,6 +258,12 @@ public final class V6Builtins {
     o.set("atan", ATAN);
     o.set("atan2", ATAN2);
     o.set("clz32", CLZ32);
+    o.set("sinh", SINH);
+    o.set("cosh", COSH);
+    o.set("tanh", TANH);
+    o.set("asinh", ASINH);
+    o.set("acosh", ACOSH);
+    o.set("atanh", ATANH);
     o.set("PI", new V6Value(V6Value.TAG_NUM, Math.PI, null));
     o.set("E", new V6Value(V6Value.TAG_NUM, Math.E, null));
     o.set("LN2", new V6Value(V6Value.TAG_NUM, Math.log(2), null));

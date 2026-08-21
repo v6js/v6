@@ -230,6 +230,222 @@ static int strict_eq(const_val a, const_val b) {
 }
 
 static ast_arena* g_fold_arena;
+static int g_math_shadowed;
+
+static int is_ascii_str(const char* s, size_t len) {
+  for (size_t i = 0; i < len; i++)
+    if ((unsigned char)s[i] >= 0x80)
+      return 0;
+  return 1;
+}
+
+static int name_matches(const char* s, size_t len, const char* name) {
+  size_t nlen = strlen(name);
+  return len == nlen && memcmp(s, name, nlen) == 0;
+}
+
+static int bound_in_pattern(ast_node* pat, const char* name);
+static int bound_in_expr(ast_node* n, const char* name);
+static int bound_in_stmt(ast_node* n, const char* name);
+
+static int bound_in_pattern(ast_node* pat, const char* name) {
+  if (!pat)
+    return 0;
+  switch (pat->kind) {
+  case ast_pat_ident:
+    return name_matches(pat->str, pat->str_len, name);
+  case ast_pat_assign:
+    return bound_in_pattern(pat->a, name) || bound_in_expr(pat->b, name);
+  case ast_pat_rest:
+    return bound_in_pattern(pat->a, name);
+  case ast_pat_array:
+    for (int i = 0; i < pat->list.len; i++)
+      if (bound_in_pattern(pat->list.items[i], name))
+        return 1;
+    return 0;
+  case ast_pat_object:
+    for (int i = 0; i < pat->props.len; i++)
+      if (bound_in_pattern(pat->props.items[i].value, name))
+        return 1;
+    return 0;
+  default:
+    return 0;
+  }
+}
+
+static int bound_in_params(ast_param_list* params, const char* name) {
+  for (int i = 0; i < params->len; i++)
+    if (bound_in_pattern(params->items[i].pattern, name))
+      return 1;
+  return 0;
+}
+
+static int bound_in_expr(ast_node* n, const char* name) {
+  if (!n)
+    return 0;
+  switch (n->kind) {
+  case ast_unary:
+  case ast_spread:
+  case ast_await:
+  case ast_yield:
+  case ast_update:
+    return bound_in_expr(n->a, name);
+  case ast_binary:
+  case ast_logical:
+  case ast_assign:
+    return bound_in_expr(n->a, name) || bound_in_expr(n->b, name);
+  case ast_cond:
+    return bound_in_expr(n->a, name) || bound_in_expr(n->b, name) ||
+           bound_in_expr(n->c, name);
+  case ast_seq:
+  case ast_array_lit:
+  case ast_template:
+    for (int i = 0; i < n->list.len; i++)
+      if (bound_in_expr(n->list.items[i], name))
+        return 1;
+    return 0;
+  case ast_object_lit:
+    for (int i = 0; i < n->props.len; i++) {
+      ast_prop* p = &n->props.items[i];
+      if ((p->computed && bound_in_expr(p->key, name)) ||
+          bound_in_expr(p->value, name))
+        return 1;
+    }
+    return 0;
+  case ast_member:
+    return bound_in_expr(n->a, name) ||
+           (n->flag_a && bound_in_expr(n->b, name));
+  case ast_call:
+  case ast_new:
+    if (bound_in_expr(n->a, name))
+      return 1;
+    for (int i = 0; i < n->list.len; i++)
+      if (bound_in_expr(n->list.items[i], name))
+        return 1;
+    return 0;
+  case ast_tagged_template:
+    if (bound_in_expr(n->a, name))
+      return 1;
+    for (int i = 0; i < n->list.len; i++)
+      if (bound_in_expr(n->list.items[i], name))
+        return 1;
+    return 0;
+  case ast_func_expr:
+    if (name_matches(n->str, n->str_len, name))
+      return 1;
+    if (bound_in_params(&n->params, name))
+      return 1;
+    return n->flag_d ? bound_in_stmt(n->a, name) : bound_in_expr(n->a, name);
+  case ast_class_expr:
+    if ((n->flag_a && bound_in_expr(n->a, name)))
+      return 1;
+    for (int i = 0; i < n->members.len; i++) {
+      ast_class_member* m = &n->members.items[i];
+      if ((m->computed && bound_in_expr(m->key, name)) ||
+          (m->value && bound_in_expr(m->value, name)))
+        return 1;
+    }
+    return 0;
+  case ast_paren_pattern_assign:
+    return bound_in_pattern(n->a, name) || bound_in_expr(n->b, name);
+  default:
+    return 0;
+  }
+}
+
+static int bound_in_var_decl(ast_node* n, const char* name) {
+  for (int i = 0; i < n->list.len; i++) {
+    ast_node* d = n->list.items[i];
+    ast_node* target = d->kind == ast_pat_assign ? d->a : d;
+    if (bound_in_pattern(target, name))
+      return 1;
+    if (d->kind == ast_pat_assign && bound_in_expr(d->b, name))
+      return 1;
+  }
+  return 0;
+}
+
+static int bound_in_stmt(ast_node* n, const char* name) {
+  if (!n)
+    return 0;
+  switch (n->kind) {
+  case ast_program:
+  case ast_block:
+    for (int i = 0; i < n->list.len; i++)
+      if (bound_in_stmt(n->list.items[i], name))
+        return 1;
+    return 0;
+  case ast_expr_stmt:
+    return bound_in_expr(n->a, name);
+  case ast_var_decl:
+    return bound_in_var_decl(n, name);
+  case ast_func_decl:
+    return name_matches(n->str, n->str_len, name) ||
+           bound_in_params(&n->params, name) || bound_in_stmt(n->a, name);
+  case ast_class_decl:
+    return bound_in_expr(n, name);
+  case ast_import: {
+    ast_import_binding* b = n->import_binding;
+    if (!b)
+      return 0;
+    if (b->has_default && name_matches(b->default_name, b->default_len, name))
+      return 1;
+    if (b->has_namespace &&
+        name_matches(b->namespace_name, b->namespace_len, name))
+      return 1;
+    for (int i = 0; i < b->named_count; i++)
+      if (name_matches(b->named[i].local, b->named[i].local_len, name))
+        return 1;
+    return 0;
+  }
+  case ast_if:
+    return bound_in_expr(n->a, name) || bound_in_stmt(n->b, name) ||
+           bound_in_stmt(n->c, name);
+  case ast_while:
+    return bound_in_expr(n->a, name) || bound_in_stmt(n->b, name);
+  case ast_do_while:
+    return bound_in_stmt(n->a, name) || bound_in_expr(n->b, name);
+  case ast_for:
+    if (n->a) {
+      if (n->a->kind == ast_var_decl) {
+        if (bound_in_var_decl(n->a, name))
+          return 1;
+      } else if (bound_in_expr(n->a, name)) {
+        return 1;
+      }
+    }
+    return bound_in_expr(n->b, name) || bound_in_expr(n->c, name) ||
+           bound_in_stmt(n->d, name);
+  case ast_for_in:
+  case ast_for_of:
+    return bound_in_pattern(n->a, name) || bound_in_expr(n->b, name) ||
+           bound_in_stmt(n->c, name);
+  case ast_switch:
+    if (bound_in_expr(n->a, name))
+      return 1;
+    for (int i = 0; i < n->cases.len; i++) {
+      if (n->cases.items[i].test && bound_in_expr(n->cases.items[i].test, name))
+        return 1;
+      for (int j = 0; j < n->cases.items[i].body.len; j++)
+        if (bound_in_stmt(n->cases.items[i].body.items[j], name))
+          return 1;
+    }
+    return 0;
+  case ast_try:
+    if (bound_in_stmt(n->a, name))
+      return 1;
+    if (n->flag_a && n->b && bound_in_pattern(n->b, name))
+      return 1;
+    return bound_in_stmt(n->c, name) || bound_in_stmt(n->d, name);
+  case ast_throw:
+  case ast_return:
+    return bound_in_expr(n->a, name);
+  case ast_labeled:
+    return bound_in_stmt(n->a, name);
+  default:
+    return 0;
+  }
+}
 
 static int fold_binary(ast_node* n) {
   const_val a, b;
@@ -429,9 +645,52 @@ static int fold_cond(ast_node* n) {
   return 1;
 }
 
+static int get_member_key(ast_node* n, const char** key, size_t* key_len) {
+  if (!n->flag_a) {
+    *key = n->str;
+    *key_len = n->str_len;
+    return 1;
+  }
+  if (n->b->kind == ast_str) {
+    *key = n->b->str;
+    *key_len = n->b->str_len;
+    return 1;
+  }
+  return 0;
+}
+
+static int array_lit_has_dynamic_len(ast_node* arr) {
+  for (int i = 0; i < arr->list.len; i++) {
+    if (arr->list.items[i]->kind == ast_spread ||
+        arr->list.items[i]->kind == ast_pat_hole)
+      return 1;
+  }
+  return 0;
+}
+
+typedef struct math_const_entry {
+  const char* name;
+  double value;
+} math_const_entry;
+
+static const math_const_entry math_consts[] = {
+    {"PI", 3.141592653589793},     {"E", 2.718281828459045},
+    {"LN2", 0.6931471805599453},   {"LN10", 2.302585092994046},
+    {"LOG2E", 1.4426950408889634}, {"LOG10E", 0.4342944819032518},
+    {"SQRT2", 1.4142135623730951}, {"SQRT1_2", 0.7071067811865476},
+};
+
 static int fold_member(ast_node* n) {
   ast_node* obj = n->a;
   if (obj->kind == ast_array_lit) {
+    const char* key;
+    size_t key_len;
+    if (get_member_key(n, &key, &key_len) &&
+        name_matches(key, key_len, "length") &&
+        !array_lit_has_dynamic_len(obj)) {
+      set_num(n, (double)obj->list.len);
+      return 1;
+    }
     if (!n->flag_a)
       return 0;
     const_val idx_v;
@@ -440,16 +699,38 @@ static int fold_member(ast_node* n) {
     double idxd = idx_v.num;
     if (idxd != trunc(idxd) || idxd < 0)
       return 0;
-    for (int i = 0; i < obj->list.len; i++) {
-      if (obj->list.items[i]->kind == ast_spread ||
-          obj->list.items[i]->kind == ast_pat_hole)
-        return 0;
-    }
+    if (array_lit_has_dynamic_len(obj))
+      return 0;
     int idx = (int)idxd;
     if (idx >= obj->list.len)
       return 0;
     copy_node(n, obj->list.items[idx]);
     return 1;
+  }
+  if (obj->kind == ast_str) {
+    const char* key;
+    size_t key_len;
+    if (get_member_key(n, &key, &key_len) &&
+        name_matches(key, key_len, "length") &&
+        is_ascii_str(obj->str, obj->str_len)) {
+      set_num(n, (double)obj->str_len);
+      return 1;
+    }
+    return 0;
+  }
+  if (obj->kind == ast_ident && !g_math_shadowed &&
+      name_matches(obj->str, obj->str_len, "Math")) {
+    const char* key;
+    size_t key_len;
+    if (!get_member_key(n, &key, &key_len))
+      return 0;
+    for (size_t i = 0; i < sizeof(math_consts) / sizeof(math_consts[0]); i++) {
+      if (name_matches(key, key_len, math_consts[i].name)) {
+        set_num(n, math_consts[i].value);
+        return 1;
+      }
+    }
+    return 0;
   }
   if (obj->kind == ast_object_lit) {
     const char* key;
@@ -477,6 +758,142 @@ static int fold_member(ast_node* n) {
     if (!found || found->is_getter || found->is_setter || found->is_method)
       return 0;
     copy_node(n, found->value);
+    return 1;
+  }
+  return 0;
+}
+
+static double math_sign(double x) {
+  if (isnan(x))
+    return NAN;
+  if (x > 0)
+    return 1.0;
+  if (x < 0)
+    return -1.0;
+  return x;
+}
+
+static double math_round(double x) {
+  if (isnan(x) || isinf(x) || x == 0)
+    return x;
+  if (x > 0 && x < 0.5)
+    return 0.0;
+  if (x < 0 && x >= -0.5)
+    return -0.0;
+  return floor(x + 0.5);
+}
+
+typedef double (*math_unary_fn)(double);
+
+typedef struct math_unary_entry {
+  const char* name;
+  math_unary_fn fn;
+} math_unary_entry;
+
+/* sinh/cosh/tanh/asinh/acosh/atanh are deliberately excluded: verified by
+ * execution-diff against the JVM runtime's Math.cosh and the hand-rolled
+ * Math.asinh/acosh/atanh formulas to sometimes differ from libm in the
+ * last bit, which would make folding observably diverge from running the
+ * unfolded call. */
+static const math_unary_entry math_unary_fns[] = {
+    {"abs", fabs},    {"floor", floor},      {"ceil", ceil},
+    {"trunc", trunc}, {"round", math_round}, {"sign", math_sign},
+    {"sqrt", sqrt},   {"cbrt", cbrt},        {"exp", exp},
+    {"log", log},     {"log2", log2},        {"log10", log10},
+    {"sin", sin},     {"cos", cos},          {"tan", tan},
+    {"asin", asin},   {"acos", acos},        {"atan", atan},
+};
+
+#define v6_opt_math_call_max_args 16
+
+static int fold_call(ast_node* n) {
+  ast_node* callee = n->a;
+  if (callee->kind != ast_member || g_math_shadowed)
+    return 0;
+  ast_node* obj = callee->a;
+  if (obj->kind != ast_ident || !name_matches(obj->str, obj->str_len, "Math"))
+    return 0;
+  const char* key;
+  size_t key_len;
+  if (!get_member_key(callee, &key, &key_len))
+    return 0;
+
+  int argc = n->list.len;
+  if (argc > v6_opt_math_call_max_args)
+    return 0;
+
+  double args[v6_opt_math_call_max_args];
+  for (int i = 0; i < argc; i++) {
+    const_val v;
+    if (n->list.items[i]->kind == ast_spread ||
+        !get_const(n->list.items[i], &v))
+      return 0;
+    args[i] = to_number(v);
+  }
+
+  for (size_t i = 0; i < sizeof(math_unary_fns) / sizeof(math_unary_fns[0]);
+       i++) {
+    if (name_matches(key, key_len, math_unary_fns[i].name)) {
+      if (argc != 1)
+        return 0;
+      set_num(n, math_unary_fns[i].fn(args[0]));
+      return 1;
+    }
+  }
+  if (name_matches(key, key_len, "pow")) {
+    if (argc != 2)
+      return 0;
+    set_num(n, pow(args[0], args[1]));
+    return 1;
+  }
+  if (name_matches(key, key_len, "atan2")) {
+    if (argc != 2)
+      return 0;
+    set_num(n, atan2(args[0], args[1]));
+    return 1;
+  }
+  if (name_matches(key, key_len, "max")) {
+    double r = -HUGE_VAL;
+    for (int i = 0; i < argc; i++) {
+      if (isnan(args[i])) {
+        r = NAN;
+        break;
+      }
+      if (args[i] > r)
+        r = args[i];
+    }
+    set_num(n, r);
+    return 1;
+  }
+  if (name_matches(key, key_len, "min")) {
+    double r = HUGE_VAL;
+    for (int i = 0; i < argc; i++) {
+      if (isnan(args[i])) {
+        r = NAN;
+        break;
+      }
+      if (args[i] < r)
+        r = args[i];
+    }
+    set_num(n, r);
+    return 1;
+  }
+  if (name_matches(key, key_len, "hypot")) {
+    double sum = 0;
+    int has_nan = 0, has_inf = 0;
+    for (int i = 0; i < argc; i++) {
+      if (isinf(args[i]))
+        has_inf = 1;
+      if (isnan(args[i]))
+        has_nan = 1;
+      sum += args[i] * args[i];
+    }
+    if (has_inf)
+      set_num(n, HUGE_VAL);
+    else if (has_nan)
+      set_num(n, NAN);
+    else
+      set_num(n, sqrt(sum));
     return 1;
   }
   return 0;
@@ -575,6 +992,11 @@ static void fold_expr(ast_node* n, int* changed) {
       *changed = 1;
     break;
   case ast_call:
+    fold_expr(n->a, changed);
+    fold_list(&n->list, changed);
+    if (fold_call(n))
+      *changed = 1;
+    break;
   case ast_new:
     fold_expr(n->a, changed);
     fold_list(&n->list, changed);
@@ -704,6 +1126,7 @@ static void fold_stmt(ast_node* n, int* changed) {
 
 int v6_opt_pass_const_fold(ast_node* program, ast_arena* arena) {
   g_fold_arena = arena;
+  g_math_shadowed = bound_in_stmt(program, "Math");
   int changed = 0;
   fold_stmt(program, &changed);
   return changed;
