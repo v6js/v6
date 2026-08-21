@@ -39,6 +39,8 @@ char* v6_optimizer_run_js(const char* source, size_t source_len,
     int changed = 0;
     if (opts->const_fold)
       changed |= v6_opt_pass_const_fold(program, &arena);
+    if (opts->const_prop)
+      changed |= v6_opt_pass_const_prop(program, &arena);
     if (opts->algebraic_simplify)
       changed |= v6_opt_pass_algebraic_simplify(program, &arena);
     if (opts->dead_code)

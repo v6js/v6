@@ -161,6 +161,8 @@ void v6_cli_print_help(const char* prog_path) {
           "  -Oz                     optimize for size: -O2 passes plus "
           "whitespace removal and obfuscation\n"
           "  --opt-const-fold        fold constant expressions\n"
+          "  --opt-const-prop        propagate unique-name const literal "
+          "bindings into their uses\n"
           "  --opt-algebraic-simplify\n"
           "                          simplify algebraic identities (x+0, "
           "x*1, !!x, ...)\n"
@@ -315,6 +317,10 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
       opts->optimizer.const_fold = 1;
     } else if (strcmp(argv[i], "--opt-no-const-fold") == 0) {
       opts->optimizer.const_fold = 0;
+    } else if (strcmp(argv[i], "--opt-const-prop") == 0) {
+      opts->optimizer.const_prop = 1;
+    } else if (strcmp(argv[i], "--opt-no-const-prop") == 0) {
+      opts->optimizer.const_prop = 0;
     } else if (strcmp(argv[i], "--opt-algebraic-simplify") == 0) {
       opts->optimizer.algebraic_simplify = 1;
     } else if (strcmp(argv[i], "--opt-no-algebraic-simplify") == 0) {

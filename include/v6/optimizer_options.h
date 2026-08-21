@@ -10,6 +10,7 @@ typedef enum {
 
 typedef struct v6_optimizer_options {
   int const_fold;
+  int const_prop;
   int algebraic_simplify;
   int dead_code;
   int dead_store;

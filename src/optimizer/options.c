@@ -4,6 +4,7 @@
 
 void v6_optimizer_options_init(v6_optimizer_options* opts) {
   opts->const_fold = 0;
+  opts->const_prop = 0;
   opts->algebraic_simplify = 0;
   opts->dead_code = 0;
   opts->dead_store = 0;
@@ -26,6 +27,7 @@ void v6_optimizer_apply_profile(v6_optimizer_options* opts,
     break;
   case v6_opt_profile_o2:
     opts->const_fold = 1;
+    opts->const_prop = 1;
     opts->algebraic_simplify = 1;
     opts->dead_code = 1;
     opts->dead_store = 1;
@@ -33,6 +35,7 @@ void v6_optimizer_apply_profile(v6_optimizer_options* opts,
     break;
   case v6_opt_profile_o3:
     opts->const_fold = 1;
+    opts->const_prop = 1;
     opts->algebraic_simplify = 1;
     opts->dead_code = 1;
     opts->dead_store = 1;
@@ -43,6 +46,7 @@ void v6_optimizer_apply_profile(v6_optimizer_options* opts,
     break;
   case v6_opt_profile_oz:
     opts->const_fold = 1;
+    opts->const_prop = 1;
     opts->algebraic_simplify = 1;
     opts->dead_code = 1;
     opts->dead_store = 1;
@@ -82,8 +86,8 @@ int v6_optimizer_parse_profile(const char* s, v6_opt_profile* out) {
 }
 
 int v6_optimizer_any_js_pass_enabled(const v6_optimizer_options* opts) {
-  return opts->const_fold || opts->algebraic_simplify || opts->dead_code ||
-         opts->dead_store || opts->control_flow_simplify ||
+  return opts->const_fold || opts->const_prop || opts->algebraic_simplify ||
+         opts->dead_code || opts->dead_store || opts->control_flow_simplify ||
          opts->inline_functions || opts->common_subexpr ||
          opts->loop_invariant || opts->no_whitespace || opts->obfuscate;
 }
