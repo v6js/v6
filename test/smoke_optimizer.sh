@@ -56,6 +56,8 @@ check_js_fixture() {
 check_js_fixture print-roundtrip
 check_js_fixture const-fold --opt-const-fold
 check_js_fixture algebraic-simplify --opt-algebraic-simplify
+check_js_fixture dead-code --opt-dead-code
+check_js_fixture control-flow-simplify --opt-control-flow
 
 for dir in test/fix/optimizer/*/; do
   name=$(basename "$dir")
