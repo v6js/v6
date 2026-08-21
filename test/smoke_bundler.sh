@@ -37,6 +37,23 @@ check_pattern() {
   fi
 }
 
+html_dir="test/fix/bundler/html-entry"
+html_out="$TMP/html-entry-dist"
+"$V6" -b "$html_dir/index.html" --outdir "$html_out" >/dev/null 2>&1
+if [ -f "$html_out/index.html" ]; then
+  html_body=$(cat "$html_out/index.html")
+  check_pattern "html-entry (index.html has module script)" \
+    'src="main\.[0-9a-f]{8}\.js" type="module"' "$html_body"
+  check_pattern "html-entry (index.html has stylesheet link)" \
+    'href="assets/styles\.[0-9a-f]{8}\.css"' "$html_body"
+  js_file=$(find "$html_out" -maxdepth 1 -name "main.*.js")
+  node_html_out=$(node "$js_file" </dev/null 2>&1 | tr -d '\r')
+  check "html-entry (bundled script via node)" "2+3=5" "$node_html_out"
+else
+  FAIL=$((FAIL+1))
+  FAILED_LIST+=("html-entry (dist/index.html not written)")
+fi
+
 for dir in test/fix/bundler/*/; do
   name=$(basename "$dir")
   entry="${dir}index.js"

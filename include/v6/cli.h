@@ -32,6 +32,7 @@ typedef struct {
   int bundle_mode;
   const char* bundle_entry;
   const char* bundle_outfile;
+  const char* bundle_outdir;
   const char* bundle_format;
   const char* bundle_global_name;
   int bundle_watch;

@@ -125,6 +125,8 @@ void v6_cli_print_help(const char* prog_path) {
           "  -b [entry]              bundle [entry] (default: auto-detected)\n"
           "  --format <fmt>          esm, cjs, or iife (default: esm)\n"
           "  --outfile <path>        output file (default: dist/bundle.js)\n"
+          "  --outdir <dir>          output dir for html entries (default: "
+          "dist)\n"
           "  --name <ident>          global variable name for iife output\n"
           "  -w, --watch             rebuild on file changes\n"
           "  --serve                 serve the bundle with a dev server\n"
@@ -208,6 +210,8 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
       opts->bundle_format = argv[++i];
     } else if (strcmp(argv[i], "--outfile") == 0 && i + 1 < argc) {
       opts->bundle_outfile = argv[++i];
+    } else if (strcmp(argv[i], "--outdir") == 0 && i + 1 < argc) {
+      opts->bundle_outdir = argv[++i];
     } else if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
       opts->bundle_global_name = argv[++i];
     } else if (strcmp(argv[i], "-w") == 0 || strcmp(argv[i], "--watch") == 0) {

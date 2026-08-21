@@ -3,6 +3,7 @@
 #include "v6/bundle_graph.h"
 #include "v6/bundle_emit.h"
 #include "v6/bundle_fsutil.h"
+#include "v6/bundle_html.h"
 #include "v6/module.h"
 
 #include <stdio.h>
@@ -27,13 +28,21 @@ static int parse_format(const char* s, bundle_format* out) {
 
 static const char* pick_default_entry(void) {
   static const char* candidates[] = {
-      "index.js", "src/index.js", "index.mjs", "src/index.mjs", NULL,
+      "index.html", "index.js", "src/index.js", "index.mjs", "src/index.mjs",
+      NULL,
   };
   for (int i = 0; candidates[i]; i++) {
     if (path_is_regular_file(candidates[i]))
       return candidates[i];
   }
   return NULL;
+}
+
+static int has_suffix(const char* s, const char* suffix) {
+  size_t ls = strlen(s), lsuf = strlen(suffix);
+  if (lsuf > ls)
+    return 0;
+  return strcmp(s + ls - lsuf, suffix) == 0;
 }
 
 int v6_cli_run_bundle(v6_cli_options* opts) {
@@ -46,16 +55,21 @@ int v6_cli_run_bundle(v6_cli_options* opts) {
     return 1;
   }
 
+  if (opts->bundle_watch || opts->bundle_serve) {
+    fprintf(stderr, "error: --watch/--serve are not implemented yet\n");
+    return 1;
+  }
+
+  if (has_suffix(entry, ".html") || has_suffix(entry, ".htm")) {
+    const char* outdir = opts->bundle_outdir ? opts->bundle_outdir : "dist";
+    return bundle_process_html(entry, outdir, opts->bundle_global_name);
+  }
+
   bundle_format fmt;
   if (parse_format(opts->bundle_format, &fmt) != 0) {
     fprintf(stderr,
             "error: unknown --format \"%s\" (expected esm, cjs, or iife)\n",
             opts->bundle_format);
-    return 1;
-  }
-
-  if (opts->bundle_watch || opts->bundle_serve) {
-    fprintf(stderr, "error: --watch/--serve are not implemented yet\n");
     return 1;
   }
 
