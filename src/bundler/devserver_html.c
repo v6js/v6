@@ -114,7 +114,7 @@ int v6_bundler_run_watch_loop_html(const char* html_path, v6_cli_options* opts,
 
     if (verbosity != v6_bundler_verbosity_quiet && rc == 0) {
       int c = v6_color_enabled_out();
-      printf("%s%s%12s%s %s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
+      printf("%s%s%10s%s %s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
              v6_c_reset(c), html_path);
       fflush(stdout);
     }
@@ -177,7 +177,7 @@ static void html_watch_thread_fn(void* arg) {
 
     if (wc->verbosity != v6_bundler_verbosity_quiet && rc == 0) {
       int c = v6_color_enabled_out();
-      printf("%s%s%12s%s %d script%s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
+      printf("%s%s%10s%s %d script%s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
              v6_c_reset(c), script_count, script_count == 1 ? "" : "s");
       fflush(stdout);
     }
@@ -196,7 +196,7 @@ static void html_watch_thread_fn(void* arg) {
         if (patch) {
           if (wc->verbosity != v6_bundler_verbosity_quiet) {
             int hc = v6_color_enabled_out();
-            printf("%s%s%12s%s pushing module update\n", v6_c_bold(hc),
+            printf("%s%s%10s%s pushing module update\n", v6_c_bold(hc),
                    v6_c_cyan(hc), "HMR", v6_c_reset(hc));
             fflush(stdout);
           }

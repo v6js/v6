@@ -191,7 +191,7 @@ int v6_cli_run_bundle(v6_cli_options* opts) {
                                      extensions);
     if (rc == 0 && !opts->bundle_quiet) {
       int c = v6_color_enabled_out();
-      printf("%s%s%12s%s %s -> %s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
+      printf("%s%s%10s%s %s -> %s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
              v6_c_reset(c), entry, outdir);
     }
     return rc;

@@ -328,7 +328,7 @@ int v6_bundler_http_serve(const char* serve_dir, int port,
   listen(listener, 16);
 
   int c = v6_color_enabled_out();
-  printf("%s%s%12s%s http://localhost:%d\n", v6_c_bold(c), v6_c_green(c),
+  printf("%s%s%10s%s http://localhost:%d\n", v6_c_bold(c), v6_c_green(c),
          "Listening @", v6_c_reset(c), port);
   fflush(stdout);
 

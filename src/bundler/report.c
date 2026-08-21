@@ -85,7 +85,7 @@ void v6_bundler_print_bundle_summary(const v6_bundler_graph* g,
   int c = v6_color_enabled_out();
   char size_buf[32];
 
-  printf("%s%s%12s%s %s%s%s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
+  printf("%s%s%10s%s %s%s%s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
          v6_c_reset(c), v6_c_bold(c), outfile, v6_c_reset(c));
 
   int name_width = 0;
@@ -102,14 +102,14 @@ void v6_bundler_print_bundle_summary(const v6_bundler_graph* g,
   for (int i = 0; i < g->count; i++) {
     v6_bundler_format_size((double)g->modules[i]->source_len, size_buf,
                            sizeof(size_buf));
-    printf("             %s%-*s%s  %s%8s%s\n", v6_c_dim(c), name_width,
+    printf("           %s%-*s%s  %s%8s%s\n", v6_c_dim(c), name_width,
            g->modules[i]->id, v6_c_reset(c), v6_c_cyan(c), size_buf,
            v6_c_reset(c));
 
     if (verbosity == v6_bundler_verbosity_verbose) {
       for (int j = 0; j < g->modules[i]->import_count; j++) {
         v6_bundler_import_edge* e = &g->modules[i]->imports[j];
-        printf("               %s%s %s -> %s%s\n", v6_c_dim(c), "resolves",
+        printf("             %s%s %s -> %s%s\n", v6_c_dim(c), "resolves",
                e->specifier, e->target ? e->target->id : "(external)",
                v6_c_reset(c));
       }
@@ -117,7 +117,7 @@ void v6_bundler_print_bundle_summary(const v6_bundler_graph* g,
   }
 
   v6_bundler_format_size((double)out_len, size_buf, sizeof(size_buf));
-  printf("%s%12s%s %s%-*s%s  %s%8s%s  %s(%d module%s)%s\n", v6_c_bold(c),
+  printf("%s%10s%s %s%-*s%s  %s%8s%s  %s(%d module%s)%s\n", v6_c_bold(c),
          "Total", v6_c_reset(c), v6_c_bold(c), name_width, "", v6_c_reset(c),
          v6_c_bold(c), size_buf, v6_c_reset(c), v6_c_dim(c), g->count,
          g->count == 1 ? "" : "s", v6_c_reset(c));

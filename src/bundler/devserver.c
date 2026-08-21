@@ -77,7 +77,7 @@ static void print_rebuild_status(const v6_bundler_graph* g, size_t out_len,
   int c = v6_color_enabled_out();
   char size_buf[32];
   v6_bundler_format_size((double)out_len, size_buf, sizeof(size_buf));
-  printf("%s%s%12s%s %d module%s, %s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
+  printf("%s%s%10s%s %d module%s, %s\n", v6_c_bold(c), v6_c_green(c), "Bundled",
          v6_c_reset(c), g->count, g->count == 1 ? "" : "s", size_buf);
   fflush(stdout);
 }
@@ -125,7 +125,7 @@ static void watch_thread_fn(void* arg) {
     if (patch) {
       if (wc->verbosity != v6_bundler_verbosity_quiet) {
         int hc = v6_color_enabled_out();
-        printf("%s%s%12s%s pushing module update\n", v6_c_bold(hc),
+        printf("%s%s%10s%s pushing module update\n", v6_c_bold(hc),
                v6_c_cyan(hc), "HMR", v6_c_reset(hc));
         fflush(stdout);
       }
