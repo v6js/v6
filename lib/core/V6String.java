@@ -206,8 +206,12 @@ public final class V6String extends V6Object {
           }
           return str(self.substring(start, end));
         }));
-    set("toUpperCase", fn((thisArg, args) -> str(s(thisArg).toUpperCase())));
-    set("toLowerCase", fn((thisArg, args) -> str(s(thisArg).toLowerCase())));
+    set("toUpperCase",
+        fn((thisArg,
+            args) -> str(s(thisArg).toUpperCase(java.util.Locale.ROOT))));
+    set("toLowerCase",
+        fn((thisArg,
+            args) -> str(s(thisArg).toLowerCase(java.util.Locale.ROOT))));
     set("trim", fn((thisArg, args) -> str(s(thisArg).strip())));
     set("trimStart", fn((thisArg, args) -> str(s(thisArg).stripLeading())));
     set("trimEnd", fn((thisArg, args) -> str(s(thisArg).stripTrailing())));

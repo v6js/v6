@@ -790,11 +790,6 @@ typedef struct math_unary_entry {
   math_unary_fn fn;
 } math_unary_entry;
 
-/* sinh/cosh/tanh/asinh/acosh/atanh are deliberately excluded: verified by
- * execution-diff against the JVM runtime's Math.cosh and the hand-rolled
- * Math.asinh/acosh/atanh formulas to sometimes differ from libm in the
- * last bit, which would make folding observably diverge from running the
- * unfolded call. */
 static const math_unary_entry math_unary_fns[] = {
     {"abs", fabs},    {"floor", floor},      {"ceil", ceil},
     {"trunc", trunc}, {"round", math_round}, {"sign", math_sign},
@@ -899,6 +894,260 @@ static int fold_call(ast_node* n) {
   return 0;
 }
 
+static int32_t to_java_int(double v) {
+  if (isnan(v))
+    return 0;
+  if (v >= 2147483647.0)
+    return 2147483647;
+  if (v <= -2147483648.0)
+    return (int32_t)(-2147483648LL);
+  return (int32_t)v;
+}
+
+static int clampi(int v, int lo, int hi) {
+  if (v < lo)
+    return lo;
+  if (v > hi)
+    return hi;
+  return v;
+}
+
+static int norm_index(int idx, int len) {
+  if (idx < 0)
+    idx = idx + len > 0 ? idx + len : 0;
+  return idx > len ? len : idx;
+}
+
+static char* dup_bytes(const char* s, int len) {
+  char* r = ast_arena_alloc(g_fold_arena, (size_t)len + 1);
+  if (len > 0)
+    memcpy(r, s, (size_t)len);
+  r[len] = '\0';
+  return r;
+}
+
+static int find_substr(const char* s, int len, const char* needle, int nlen,
+                       int from) {
+  if (from < 0)
+    from = 0;
+  if (nlen > len - from)
+    return -1;
+  for (int i = from; i <= len - nlen; i++)
+    if (memcmp(s + i, needle, (size_t)nlen) == 0)
+      return i;
+  return -1;
+}
+
+static int find_substr_last(const char* s, int len, const char* needle,
+                            int nlen) {
+  for (int i = len - nlen; i >= 0; i--)
+    if (memcmp(s + i, needle, (size_t)nlen) == 0)
+      return i;
+  return -1;
+}
+
+#define v6_opt_str_call_max_args 4
+
+static int fold_string_call(ast_node* n) {
+  ast_node* callee = n->a;
+  if (callee->kind != ast_member)
+    return 0;
+  ast_node* recv = callee->a;
+  if (recv->kind != ast_str || !is_ascii_str(recv->str, recv->str_len))
+    return 0;
+  const char* key;
+  size_t key_len;
+  if (!get_member_key(callee, &key, &key_len))
+    return 0;
+
+  int argc = n->list.len;
+  if (argc > v6_opt_str_call_max_args)
+    return 0;
+  const_val args[v6_opt_str_call_max_args];
+  for (int i = 0; i < argc; i++) {
+    if (n->list.items[i]->kind == ast_spread ||
+        !get_const(n->list.items[i], &args[i]))
+      return 0;
+    if (args[i].kind == cv_str && !is_ascii_str(args[i].str, args[i].str_len))
+      return 0;
+  }
+
+  const char* s = recv->str;
+  int len = (int)recv->str_len;
+
+  if (name_matches(key, key_len, "charAt")) {
+    if (argc != 1 || args[0].kind == cv_undef)
+      return 0;
+    int i = to_java_int(to_number(args[0]));
+    if (i < 0 || i >= len) {
+      set_str(n, "", 0);
+      return 1;
+    }
+    set_str(n, dup_bytes(s + i, 1), 1);
+    return 1;
+  }
+  if (name_matches(key, key_len, "charCodeAt")) {
+    if (argc != 1 || args[0].kind == cv_undef)
+      return 0;
+    int i = to_java_int(to_number(args[0]));
+    if (i < 0 || i >= len) {
+      set_num(n, NAN);
+      return 1;
+    }
+    set_num(n, (double)(unsigned char)s[i]);
+    return 1;
+  }
+  if (name_matches(key, key_len, "toUpperCase") ||
+      name_matches(key, key_len, "toLowerCase")) {
+    if (argc != 0)
+      return 0;
+    int upper = name_matches(key, key_len, "toUpperCase");
+    char* r = ast_arena_alloc(g_fold_arena, (size_t)len + 1);
+    for (int i = 0; i < len; i++) {
+      unsigned char c = (unsigned char)s[i];
+      if (upper && c >= 'a' && c <= 'z')
+        c = (unsigned char)(c - 'a' + 'A');
+      else if (!upper && c >= 'A' && c <= 'Z')
+        c = (unsigned char)(c - 'A' + 'a');
+      r[i] = (char)c;
+    }
+    r[len] = '\0';
+    set_str(n, r, (size_t)len);
+    return 1;
+  }
+  if (name_matches(key, key_len, "slice")) {
+    if (argc > 2)
+      return 0;
+    int start = argc > 0 && args[0].kind != cv_undef
+                    ? norm_index(to_java_int(to_number(args[0])), len)
+                    : 0;
+    int end = argc > 1 && args[1].kind != cv_undef
+                  ? norm_index(to_java_int(to_number(args[1])), len)
+                  : len;
+    if (start >= end) {
+      set_str(n, "", 0);
+      return 1;
+    }
+    set_str(n, dup_bytes(s + start, end - start), (size_t)(end - start));
+    return 1;
+  }
+  if (name_matches(key, key_len, "substring")) {
+    if (argc > 2)
+      return 0;
+    int start = argc > 0 && args[0].kind != cv_undef
+                    ? clampi(to_java_int(to_number(args[0])), 0, len)
+                    : 0;
+    int end = argc > 1 && args[1].kind != cv_undef
+                  ? clampi(to_java_int(to_number(args[1])), 0, len)
+                  : len;
+    if (start > end) {
+      int t = start;
+      start = end;
+      end = t;
+    }
+    set_str(n, dup_bytes(s + start, end - start), (size_t)(end - start));
+    return 1;
+  }
+  if (name_matches(key, key_len, "repeat")) {
+    if (argc != 1 || args[0].kind == cv_undef)
+      return 0;
+    double nv = to_number(args[0]);
+    if (isnan(nv))
+      nv = 0;
+    if (nv < 0 || isinf(nv))
+      return 0;
+    int cnt = to_java_int(nv);
+    if ((long long)cnt * (long long)len > (1 << 20))
+      return 0;
+    int total = cnt * len;
+    char* r = ast_arena_alloc(g_fold_arena, (size_t)total + 1);
+    for (int i = 0; i < cnt; i++)
+      memcpy(r + i * len, s, (size_t)len);
+    r[total] = '\0';
+    set_str(n, r, (size_t)total);
+    return 1;
+  }
+  if (name_matches(key, key_len, "concat")) {
+    v6_opt_buf buf;
+    v6_opt_buf_init(&buf);
+    v6_opt_buf_append(&buf, s, (size_t)len);
+    for (int i = 0; i < argc; i++) {
+      size_t sl;
+      const char* sv = to_string_val(g_fold_arena, args[i], &sl);
+      if (!is_ascii_str(sv, sl)) {
+        v6_opt_buf_free(&buf);
+        return 0;
+      }
+      v6_opt_buf_append(&buf, sv, sl);
+    }
+    size_t total;
+    char* result = v6_opt_buf_take(&buf, &total);
+    char* copy = ast_arena_strdup(g_fold_arena, result, total);
+    free(result);
+    set_str(n, copy, total);
+    return 1;
+  }
+  if (name_matches(key, key_len, "padStart") ||
+      name_matches(key, key_len, "padEnd")) {
+    if (argc < 1 || argc > 2 || args[0].kind == cv_undef)
+      return 0;
+    int target = to_java_int(to_number(args[0]));
+    const char* pad = " ";
+    int pad_len = 1;
+    if (argc > 1) {
+      if (args[1].kind != cv_str)
+        return 0;
+      pad = args[1].str;
+      pad_len = (int)args[1].str_len;
+    }
+    if (pad_len == 0 || len >= target) {
+      set_str(n, dup_bytes(s, len), (size_t)len);
+      return 1;
+    }
+    int needed = target - len;
+    char* r = ast_arena_alloc(g_fold_arena, (size_t)target + 1);
+    int is_start = name_matches(key, key_len, "padStart");
+    if (is_start) {
+      for (int i = 0; i < needed; i++)
+        r[i] = pad[i % pad_len];
+      memcpy(r + needed, s, (size_t)len);
+    } else {
+      memcpy(r, s, (size_t)len);
+      for (int i = 0; i < needed; i++)
+        r[len + i] = pad[i % pad_len];
+    }
+    r[target] = '\0';
+    set_str(n, r, (size_t)target);
+    return 1;
+  }
+  if (argc == 1 && args[0].kind == cv_str && args[0].str_len > 0) {
+    const char* needle = args[0].str;
+    int nlen = (int)args[0].str_len;
+    if (name_matches(key, key_len, "includes")) {
+      set_bool(n, find_substr(s, len, needle, nlen, 0) >= 0);
+      return 1;
+    }
+    if (name_matches(key, key_len, "indexOf")) {
+      set_num(n, (double)find_substr(s, len, needle, nlen, 0));
+      return 1;
+    }
+    if (name_matches(key, key_len, "lastIndexOf")) {
+      set_num(n, (double)find_substr_last(s, len, needle, nlen));
+      return 1;
+    }
+    if (name_matches(key, key_len, "startsWith")) {
+      set_bool(n, len >= nlen && memcmp(s, needle, (size_t)nlen) == 0);
+      return 1;
+    }
+    if (name_matches(key, key_len, "endsWith")) {
+      set_bool(n, len >= nlen &&
+                      memcmp(s + len - nlen, needle, (size_t)nlen) == 0);
+      return 1;
+    }
+  }
+  return 0;
+}
+
 static int fold_template(ast_node* n) {
   for (int i = 0; i < n->list.len; i++) {
     const_val v;
@@ -994,7 +1243,7 @@ static void fold_expr(ast_node* n, int* changed) {
   case ast_call:
     fold_expr(n->a, changed);
     fold_list(&n->list, changed);
-    if (fold_call(n))
+    if (fold_call(n) || fold_string_call(n))
       *changed = 1;
     break;
   case ast_new:
