@@ -5,9 +5,3 @@ int v6_opt_pass_inline_functions(ast_node* program, ast_arena* arena) {
   (void)arena;
   return 0;
 }
-
-int v6_opt_pass_common_subexpr(ast_node* program, ast_arena* arena) {
-  (void)program;
-  (void)arena;
-  return 0;
-}

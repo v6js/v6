@@ -73,6 +73,7 @@ check_js_fixture global-wrapper-fold --opt-const-fold
 check_js_fixture global-wrapper-shadow-safety --opt-const-fold
 check_js_fixture array-fold --opt-const-fold
 check_js_fixture loop-invariant --opt-loop-invariant
+check_js_fixture common-subexpr --opt-common-subexpr
 
 for dir in test/fix/optimizer/*/; do
   name=$(basename "$dir")
