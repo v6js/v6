@@ -1,6 +1,8 @@
 #include "v6/optimizer_pass.h"
 #include "v6/optimizer_print.h"
 
+#include <string.h>
+
 static int is_num_literal(ast_node* n, double v) {
   return n->kind == ast_num && n->num == v;
 }
@@ -9,6 +11,12 @@ static void copy_node(ast_node* dst, ast_node* src) {
   int line = dst->line;
   *dst = *src;
   dst->line = line;
+}
+
+static void set_num(ast_node* n, double v) {
+  n->kind = ast_num;
+  n->num = v;
+  n->a = n->b = n->c = n->d = NULL;
 }
 
 static int is_pure_expr(ast_node* n) {
@@ -93,6 +101,30 @@ static int simplify_binary(ast_node* n) {
     become_unary(n, tok_plus, keep);
     return 1;
   }
+  if (n->op == tok_star_star && is_num_literal(n->b, 1.0)) {
+    copy_node(n, n->a);
+    return 1;
+  }
+  if (n->op == tok_star_star && is_num_literal(n->b, 0.0) &&
+      is_pure_expr(n->a)) {
+    set_num(n, 1.0);
+    return 1;
+  }
+  return 0;
+}
+
+static int same_ident(ast_node* a, ast_node* b) {
+  return a->kind == ast_ident && b->kind == ast_ident &&
+         a->str_len == b->str_len && memcmp(a->str, b->str, a->str_len) == 0;
+}
+
+static int simplify_logical(ast_node* n) {
+  if ((n->op == tok_pipe_pipe || n->op == tok_amp_amp ||
+       n->op == tok_question_question) &&
+      same_ident(n->a, n->b)) {
+    copy_node(n, n->a);
+    return 1;
+  }
   return 0;
 }
 
@@ -149,6 +181,8 @@ static void simplify_expr(ast_node* n, int* changed) {
   case ast_logical:
     simplify_expr(n->a, changed);
     simplify_expr(n->b, changed);
+    if (simplify_logical(n))
+      *changed = 1;
     break;
   case ast_cond:
     simplify_bool_context(&n->a, changed);
