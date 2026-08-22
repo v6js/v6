@@ -929,6 +929,32 @@ static char* dup_bytes(const char* s, int len) {
   return r;
 }
 
+static int fold_double_wrapper(ast_node* n) {
+  ast_node* callee = n->a;
+  if (callee->kind != ast_ident)
+    return 0;
+  int is_number = !g_number_shadowed &&
+                  name_matches(callee->str, callee->str_len, "Number");
+  int is_string = !g_string_shadowed &&
+                  name_matches(callee->str, callee->str_len, "String");
+  int is_boolean = !g_boolean_shadowed &&
+                   name_matches(callee->str, callee->str_len, "Boolean");
+  if (!is_number && !is_string && !is_boolean)
+    return 0;
+  if (n->list.len != 1 || n->list.items[0]->kind == ast_spread)
+    return 0;
+  ast_node* arg = n->list.items[0];
+  if (arg->kind != ast_call || arg->a->kind != ast_ident)
+    return 0;
+  if (arg->list.len != 1 || arg->list.items[0]->kind == ast_spread)
+    return 0;
+  if (arg->a->str_len != callee->str_len ||
+      memcmp(arg->a->str, callee->str, callee->str_len) != 0)
+    return 0;
+  copy_node(n, arg);
+  return 1;
+}
+
 static int fold_global_wrapper_call(ast_node* n) {
   ast_node* callee = n->a;
   if (callee->kind != ast_ident)
@@ -1402,7 +1428,7 @@ static void fold_expr(ast_node* n, int* changed) {
     fold_expr(n->a, changed);
     fold_list(&n->list, changed);
     if (fold_call(n) || fold_string_call(n) || fold_global_wrapper_call(n) ||
-        fold_array_call(n))
+        fold_array_call(n) || fold_double_wrapper(n))
       *changed = 1;
     break;
   case ast_new:
