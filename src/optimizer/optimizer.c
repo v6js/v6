@@ -72,10 +72,36 @@ char* v6_optimizer_run_js(const char* source, size_t source_len,
     }
   }
 
-  if (opts->common_subexpr)
-    v6_opt_pass_common_subexpr(program, &arena);
-  if (opts->loop_invariant)
-    v6_opt_pass_loop_invariant(program, &arena);
+  if (opts->common_subexpr || opts->loop_invariant) {
+    int any_hoist_changed = 0;
+    for (int iter = 0; iter < v6_opt_max_fixpoint_iters; iter++) {
+      int changed = 0;
+      if (opts->common_subexpr)
+        changed |= v6_opt_pass_common_subexpr(program, &arena);
+      if (opts->loop_invariant)
+        changed |= v6_opt_pass_loop_invariant(program, &arena);
+      any_hoist_changed |= changed;
+      if (!changed)
+        break;
+    }
+    if (any_hoist_changed) {
+      for (int iter = 0; iter < v6_opt_max_fixpoint_iters; iter++) {
+        int changed = 0;
+        if (opts->const_fold)
+          changed |= v6_opt_pass_const_fold(program, &arena);
+        if (opts->algebraic_simplify)
+          changed |= v6_opt_pass_algebraic_simplify(program, &arena);
+        if (opts->dead_code)
+          changed |= v6_opt_pass_dead_code(program, &arena);
+        if (opts->dead_store)
+          changed |= v6_opt_pass_dead_store(program, &arena);
+        if (opts->control_flow_simplify)
+          changed |= v6_opt_pass_control_flow_simplify(program, &arena);
+        if (!changed)
+          break;
+      }
+    }
+  }
   if (opts->obfuscate)
     v6_opt_pass_mangle(program, &arena);
 
