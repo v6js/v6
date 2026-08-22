@@ -8,6 +8,7 @@ int v6_opt_pass_algebraic_simplify(ast_node* program, ast_arena* arena);
 int v6_opt_pass_dead_code(ast_node* program, ast_arena* arena);
 int v6_opt_pass_dead_store(ast_node* program, ast_arena* arena);
 int v6_opt_pass_control_flow_simplify(ast_node* program, ast_arena* arena);
+int v6_opt_pass_branch_merge(ast_node* program, ast_arena* arena);
 int v6_opt_pass_inline_functions(ast_node* program, ast_arena* arena);
 int v6_opt_pass_common_subexpr(ast_node* program, ast_arena* arena);
 int v6_opt_pass_loop_invariant(ast_node* program, ast_arena* arena);

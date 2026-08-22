@@ -49,6 +49,8 @@ char* v6_optimizer_run_js(const char* source, size_t source_len,
       changed |= v6_opt_pass_dead_store(program, &arena);
     if (opts->control_flow_simplify)
       changed |= v6_opt_pass_control_flow_simplify(program, &arena);
+    if (opts->branch_merge)
+      changed |= v6_opt_pass_branch_merge(program, &arena);
     if (!changed)
       break;
   }
@@ -67,6 +69,8 @@ char* v6_optimizer_run_js(const char* source, size_t source_len,
         changed |= v6_opt_pass_dead_store(program, &arena);
       if (opts->control_flow_simplify)
         changed |= v6_opt_pass_control_flow_simplify(program, &arena);
+      if (opts->branch_merge)
+        changed |= v6_opt_pass_branch_merge(program, &arena);
       if (!changed)
         break;
     }
@@ -97,6 +101,8 @@ char* v6_optimizer_run_js(const char* source, size_t source_len,
           changed |= v6_opt_pass_dead_store(program, &arena);
         if (opts->control_flow_simplify)
           changed |= v6_opt_pass_control_flow_simplify(program, &arena);
+        if (opts->branch_merge)
+          changed |= v6_opt_pass_branch_merge(program, &arena);
         if (!changed)
           break;
       }

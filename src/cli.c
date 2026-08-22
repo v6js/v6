@@ -172,6 +172,8 @@ void v6_cli_print_help(const char* prog_path) {
           "never read\n"
           "  --opt-control-flow      simplify if/else and control-flow "
           "shape\n"
+          "  --opt-branch-merge      collapse if/else branches with "
+          "identical bodies\n"
           "  --opt-inline            inline trivial single-use functions "
           "(-O3 only by default)\n"
           "  --opt-common-subexpr    hoist repeated pure subexpressions "
@@ -337,6 +339,10 @@ v6_cli_action v6_cli_parse(int argc, char** argv, v6_cli_options* opts) {
       opts->optimizer.control_flow_simplify = 1;
     } else if (strcmp(argv[i], "--opt-no-control-flow") == 0) {
       opts->optimizer.control_flow_simplify = 0;
+    } else if (strcmp(argv[i], "--opt-branch-merge") == 0) {
+      opts->optimizer.branch_merge = 1;
+    } else if (strcmp(argv[i], "--opt-no-branch-merge") == 0) {
+      opts->optimizer.branch_merge = 0;
     } else if (strcmp(argv[i], "--opt-inline") == 0) {
       opts->optimizer.inline_functions = 1;
     } else if (strcmp(argv[i], "--opt-no-inline") == 0) {

@@ -15,6 +15,7 @@ typedef struct v6_optimizer_options {
   int dead_code;
   int dead_store;
   int control_flow_simplify;
+  int branch_merge;
   int inline_functions;
   int common_subexpr;
   int loop_invariant;
