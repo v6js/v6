@@ -1,6 +1,6 @@
 #include "v6/cli.h"
 
-#include "v6/optimizer_optimizer.h"
+#include "v6/optimizer.h"
 #include "v6/color.h"
 
 #include <stdio.h>

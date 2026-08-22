@@ -110,6 +110,52 @@ for dir in test/fix/optimizer/*/; do
   fi
 done
 
+check_bundler_optimize() {
+  local dir="$PWD/test/fix/optimizer/bundler-integration"
+  local v6="$PWD/$V6"
+  local work="$TMP/bundler-integration"
+  mkdir -p "$work/unopt" "$work/opt"
+
+  (cd "$work/unopt" && "$v6" -b "$dir/entry.js" --outfile bundle.js -q) \
+    >"$TMP/bi.stderr1" 2>&1
+  local rc1=$?
+  (cd "$work/opt" && "$v6" -b "$dir/entry.js" -O2 --opt-no-whitespace \
+    --opt-no-comments --outfile bundle.js -q) >"$TMP/bi.stderr2" 2>&1
+  local rc2=$?
+  if [ $rc1 -ne 0 ] || [ $rc2 -ne 0 ]; then
+    FAIL=$((FAIL+1))
+    FAILED_LIST+=("bundler-integration (bundle failed rc1=$rc1 rc2=$rc2)")
+    cat "$TMP/bi.stderr1" "$TMP/bi.stderr2"
+    return
+  fi
+
+  local unopt="$work/unopt/bundle.js"
+  local opt="$work/opt/bundle.js"
+
+  check "bundler-integration (optimized bundle folds constants)" "0" \
+    "$(grep -c 'PI \* r \* r' "$opt")"
+  check "bundler-integration (optimized bundle folds array join)" "1" \
+    "$(grep -c '"1-2-3"' "$opt")"
+
+  local unopt_run opt_run
+  unopt_run=$("$v6" "$unopt" </dev/null 2>&1 | tr -d '\r')
+  opt_run=$("$v6" "$opt" </dev/null 2>&1 | tr -d '\r')
+  check "bundler-integration (unoptimized and optimized bundles behave identically)" \
+    "$unopt_run" "$opt_run"
+
+  local css_asset
+  css_asset=$(find "$work/opt/assets" -maxdepth 1 -name 'style.*.css' 2>/dev/null | head -1)
+  if [ -z "$css_asset" ]; then
+    FAIL=$((FAIL+1))
+    FAILED_LIST+=("bundler-integration (css asset not emitted)")
+    return
+  fi
+  check "bundler-integration (css asset strips comments and whitespace)" \
+    ".foo{color:red;margin:0;}" "$(cat "$css_asset" | tr -d '\r')"
+}
+
+check_bundler_optimize
+
 echo "PASS=$PASS FAIL=$FAIL"
 if [ "$FAIL" -gt 0 ]; then
   printf '%s\n' "${FAILED_LIST[@]}"

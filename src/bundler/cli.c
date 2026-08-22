@@ -5,6 +5,7 @@
 #include "v6/bundler_ext_alias.h"
 #include "v6/bundler_ext_banner.h"
 #include "v6/bundler_ext_define.h"
+#include "v6/bundler_ext_optimize.h"
 #include "v6/bundler_ext_public.h"
 #include "v6/bundler_extension.h"
 #include "v6/bundler_html.h"
@@ -25,8 +26,10 @@
 #endif
 
 static v6_bundler_extension_set* build_extensions(v6_cli_options* opts) {
+  int optimize_enabled = v6_optimizer_any_js_pass_enabled(&opts->optimizer) ||
+                         v6_optimizer_any_css_pass_enabled(&opts->optimizer);
   int any = opts->bundle_define_count > 0 || opts->bundle_alias_count > 0 ||
-            opts->bundle_banner || opts->bundle_public_dir;
+            opts->bundle_banner || opts->bundle_public_dir || optimize_enabled;
   if (!any)
     return NULL;
 
@@ -76,6 +79,10 @@ static v6_bundler_extension_set* build_extensions(v6_cli_options* opts) {
     }
     v6_bundler_extension_set_add(set, v6_bundler_alias_extension(state));
   }
+
+  if (optimize_enabled)
+    v6_bundler_extension_set_add(
+        set, v6_bundler_optimize_extension(&opts->optimizer));
 
   if (opts->bundle_banner)
     v6_bundler_extension_set_add(

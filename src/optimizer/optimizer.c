@@ -1,4 +1,4 @@
-#include "v6/optimizer_optimizer.h"
+#include "v6/optimizer.h"
 #include "v6/optimizer_asset.h"
 #include "v6/optimizer_buf.h"
 #include "v6/optimizer_pass.h"
