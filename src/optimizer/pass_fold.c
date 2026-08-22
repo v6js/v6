@@ -1188,6 +1188,124 @@ static int fold_string_call(ast_node* n) {
   return 0;
 }
 
+#define v6_opt_array_call_max_elems 64
+
+static int fold_array_call(ast_node* n) {
+  ast_node* callee = n->a;
+  if (callee->kind != ast_member)
+    return 0;
+  ast_node* recv = callee->a;
+  if (recv->kind != ast_array_lit || array_lit_has_dynamic_len(recv))
+    return 0;
+  const char* key;
+  size_t key_len;
+  if (!get_member_key(callee, &key, &key_len))
+    return 0;
+
+  int elen = recv->list.len;
+  if (elen > v6_opt_array_call_max_elems)
+    return 0;
+  const_val elems[v6_opt_array_call_max_elems];
+  for (int i = 0; i < elen; i++)
+    if (!get_const(recv->list.items[i], &elems[i]))
+      return 0;
+
+  int argc = n->list.len;
+  if (argc > 2)
+    return 0;
+  const_val args[2];
+  for (int i = 0; i < argc; i++) {
+    if (n->list.items[i]->kind == ast_spread ||
+        !get_const(n->list.items[i], &args[i]))
+      return 0;
+  }
+
+  if (name_matches(key, key_len, "join")) {
+    if (argc > 1)
+      return 0;
+    const char* sep = ",";
+    size_t sep_len = 1;
+    if (argc == 1 && args[0].kind != cv_undef) {
+      size_t sl;
+      const char* sv = to_string_val(g_fold_arena, args[0], &sl);
+      sep = sv;
+      sep_len = sl;
+    }
+    v6_opt_buf buf;
+    v6_opt_buf_init(&buf);
+    for (int i = 0; i < elen; i++) {
+      if (i > 0)
+        v6_opt_buf_append(&buf, sep, sep_len);
+      if (elems[i].kind == cv_null || elems[i].kind == cv_undef)
+        continue;
+      size_t sl;
+      const char* sv = to_string_val(g_fold_arena, elems[i], &sl);
+      v6_opt_buf_append(&buf, sv, sl);
+    }
+    size_t total;
+    char* result = v6_opt_buf_take(&buf, &total);
+    char* copy = ast_arena_strdup(g_fold_arena, result, total);
+    free(result);
+    set_str(n, copy, total);
+    return 1;
+  }
+  if (name_matches(key, key_len, "indexOf")) {
+    if (argc != 1)
+      return 0;
+    int idx = -1;
+    for (int i = 0; i < elen; i++) {
+      if (strict_eq(elems[i], args[0])) {
+        idx = i;
+        break;
+      }
+    }
+    set_num(n, (double)idx);
+    return 1;
+  }
+  if (name_matches(key, key_len, "includes")) {
+    if (argc != 1)
+      return 0;
+    int target_is_nan = args[0].kind == cv_num && isnan(args[0].num);
+    int found = 0;
+    for (int i = 0; i < elen; i++) {
+      if (strict_eq(elems[i], args[0])) {
+        found = 1;
+        break;
+      }
+      if (target_is_nan && elems[i].kind == cv_num && isnan(elems[i].num)) {
+        found = 1;
+        break;
+      }
+    }
+    set_bool(n, found);
+    return 1;
+  }
+  if (name_matches(key, key_len, "slice")) {
+    if (argc > 0 && args[0].kind == cv_undef)
+      return 0;
+    if (argc > 1 && args[1].kind == cv_undef)
+      return 0;
+    int start =
+        argc > 0 ? norm_index(to_java_int(to_number(args[0])), elen) : 0;
+    int end =
+        argc > 1 ? norm_index(to_java_int(to_number(args[1])), elen) : elen;
+    int count = end > start ? end - start : 0;
+    ast_node** items =
+        count > 0
+            ? ast_arena_alloc(g_fold_arena, sizeof(ast_node*) * (size_t)count)
+            : NULL;
+    for (int i = 0; i < count; i++)
+      items[i] = recv->list.items[start + i];
+    n->kind = ast_array_lit;
+    n->a = n->b = n->c = n->d = NULL;
+    n->list.items = items;
+    n->list.len = count;
+    n->list.cap = count;
+    return 1;
+  }
+  return 0;
+}
+
 static int fold_template(ast_node* n) {
   for (int i = 0; i < n->list.len; i++) {
     const_val v;
@@ -1283,7 +1401,8 @@ static void fold_expr(ast_node* n, int* changed) {
   case ast_call:
     fold_expr(n->a, changed);
     fold_list(&n->list, changed);
-    if (fold_call(n) || fold_string_call(n) || fold_global_wrapper_call(n))
+    if (fold_call(n) || fold_string_call(n) || fold_global_wrapper_call(n) ||
+        fold_array_call(n))
       *changed = 1;
     break;
   case ast_new:

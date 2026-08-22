@@ -1,0 +1,16 @@
+console.log([1, 2, 3].join());
+console.log([1, 2, 3].join("-"));
+console.log([1, null, 2, undefined, 3].join(","));
+console.log([].join(","));
+console.log(["a", "b"].join());
+console.log([1, 2, 3].indexOf(2));
+console.log([1, 2, 3].indexOf(9));
+console.log([NaN].indexOf(NaN));
+console.log([1, 2, 3].includes(2));
+console.log([1, 2, 3].includes(9));
+console.log([NaN].includes(NaN));
+console.log([1, 2, 3, 4, 5].slice(1, 3));
+console.log([1, 2, 3, 4, 5].slice(-3));
+console.log([1, 2, 3, 4, 5].slice(-100, -1));
+console.log([1, 2, 3, 4, 5].slice(3, 1));
+console.log([1, 2, 3].slice());

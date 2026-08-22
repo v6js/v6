@@ -1,0 +1,16 @@
+console.log("1,2,3");
+console.log("1-2-3");
+console.log("1,,2,,3");
+console.log("");
+console.log("a,b");
+console.log(1);
+console.log(-1);
+console.log([NaN].indexOf(NaN));
+console.log(true);
+console.log(false);
+console.log([NaN].includes(NaN));
+console.log([2, 3]);
+console.log([3, 4, 5]);
+console.log([1, 2, 3, 4]);
+console.log([]);
+console.log([1, 2, 3]);

@@ -422,6 +422,19 @@ public class V6Object {
     return -1;
   }
 
+  public boolean includesSameValueZero(V6Value target) {
+    boolean targetIsNaN =
+        target.tag() == V6Value.TAG_NUM && Double.isNaN(target.num());
+    for (int i = 0; i < length; i++) {
+      V6Value v = get(Integer.toString(i));
+      if (V6Value.strictEquals(v, target))
+        return true;
+      if (targetIsNaN && v.tag() == V6Value.TAG_NUM && Double.isNaN(v.num()))
+        return true;
+    }
+    return false;
+  }
+
   public String join(String sep) {
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < length; i++) {

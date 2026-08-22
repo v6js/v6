@@ -70,6 +70,7 @@ check_js_fixture math-shadow-safety --opt-const-fold
 check_js_fixture string-fold --opt-const-fold
 check_js_fixture global-wrapper-fold --opt-const-fold
 check_js_fixture global-wrapper-shadow-safety --opt-const-fold
+check_js_fixture array-fold --opt-const-fold
 
 for dir in test/fix/optimizer/*/; do
   name=$(basename "$dir")

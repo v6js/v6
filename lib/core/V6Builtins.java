@@ -318,8 +318,8 @@ public final class V6Builtins {
                                 asObj(thisArg).indexOf(V6Value.argAt(args, 0)),
                                 null)));
     o.set("includes", fn((thisArg, args)
-                             -> boolValue(asObj(thisArg).indexOf(
-                                              V6Value.argAt(args, 0)) >= 0)));
+                             -> boolValue(asObj(thisArg).includesSameValueZero(
+                                 V6Value.argAt(args, 0)))));
     o.set("join", fn((thisArg, args) -> {
             String sep = args.length > 0 ? args[0].toString() : ",";
             return new V6Value(V6Value.TAG_STR, 0, asObj(thisArg).join(sep));
